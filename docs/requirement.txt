@@ -1,0 +1,351 @@
+1. Phạm vi người dùng và quyền truy cập
+
+Hệ thống phải xác định rõ:
+
+Có những nhóm người dùng nào?
+Mỗi nhóm người dùng được truy cập đến chức năng nào?
+Mỗi nhóm có quyền đọc/ghi/sửa/xóa dữ liệu ở mức nào?
+Có những dữ liệu nào người dùng này được phép xem hoặc thay đổi mà người dùng khác không được phép?
+
+Ví dụ:
+
+Nhóm người dùng	Quyền
+Admin	Quản lý toàn bộ dữ liệu
+Nhân viên	Thêm/sửa dữ liệu nghiệp vụ
+Người dùng	Xem và thao tác trên dữ liệu của chính mình
+
+Điểm quan trọng: đây không phải trọng tâm UI, mà là quyền truy cập ở hệ quản trị cơ sở dữ liệu / hệ thống.
+
+2. Thiết kế CSDL phải thể hiện được chức năng nghiệp vụHệ thống có bao nhiêu bảng? Mỗi bảng dùng để làm gì? Các chức năng nghiệp vụ tác động lên những bảng nào?
+
+Ví dụ giả sử làm hệ thống quản lý thư viện:
+
+User
+Book
+Category
+Borrow
+BorrowDetail
+Payment
+...
+
+Sau đó với mỗi chức năng phải chỉ ra được:
+
+Chức năng: Mượn sách
+
+→ tác động Book
+→ tác động Borrow
+→ tác động BorrowDetail
+
+Và phải giải thích:
+
+Tại sao các bảng này cần những thuộc tính đó?
+
+Ví dụ:
+
+Borrow
+---------
+borrow_id
+user_id
+borrow_date
+status
+BorrowDetail
+---------
+borrow_id
+book_id
+quantity
+return_date
+
+Như vậy không chỉ có ERD cho đẹp, mà phải chứng minh:
+
+Nghiệp vụ → bảng → thuộc tính → thao tác CSDL.
+
+3. Trọng tâm phải là DBMS, đặc biệt 4 thành phần
+
+Tập trung vào Stored Procedure, Function, Trigger, View.
+
+Tức là đồ án không nên chỉ có:
+
+React
+   ↓
+Django
+   ↓
+Database
+
+rồi mọi logic đều nằm trong application.
+
+Khai thác khả năng của hệ quản trị CSDL.
+
+3.1. View
+
+Phải có những View có ý nghĩa nghiệp vụ.
+
+Ví dụ:
+
+CREATE VIEW ...
+
+Dùng để:
+
+tổng hợp dữ liệu
+che giấu một số bảng/column
+cung cấp dữ liệu cho một nhóm người dùng
+tạo góc nhìn dữ liệu phù hợp với nghiệp vụ
+
+Ví dụ:
+
+View_DailyRevenue
+
+có thể lấy:
+
+date
+total_orders
+total_revenue
+3.2. Stored Procedure
+
+Phải có những nghiệp vụ được thực hiện bằng Stored Procedure.
+
+Ví dụ:
+
+CreateOrder(...)
+CancelOrder(...)
+BorrowBook(...)
+ReturnBook(...)
+
+Stored Procedure có thể thực hiện nhiều câu SQL trong một nghiệp vụ.
+
+Ví dụ:
+
+BorrowBook()
+
+    ↓
+kiểm tra sách còn không
+    ↓
+tạo Borrow
+    ↓
+tạo BorrowDetail
+    ↓
+cập nhật Book
+
+Đây chính là chỗ rất dễ kết hợp với Transaction.
+
+3.3. Function
+
+Function nên được sử dụng cho những logic có tính tính toán / trả về giá trị.
+
+Ví dụ:
+
+CalculateTotal(...)
+CalculateDiscount(...)
+GetUserDebt(...)
+
+Ví dụ:
+
+SELECT CalculateTotal(order_id);
+
+Thầy có thể hỏi:
+
+Tại sao cái này dùng Function mà không dùng Procedure?
+
+Phải giải thích được:
+
+Function thường trả về giá trị.
+Có thể sử dụng trong biểu thức/query tùy DBMS.
+Procedure thiên về thực hiện một quy trình nghiệp vụ.
+3.4. Trigger
+
+Đây là phần rất đáng chú ý.
+
+Trigger dùng để đảm bảo những quy tắc dữ liệu cần được thực hiện tự động khi một sự kiện xảy ra.
+
+Ví dụ:
+
+INSERT Order
+      ↓
+Trigger
+      ↓
+cập nhật inventory
+
+hoặc:
+
+UPDATE Account
+      ↓
+Trigger
+      ↓
+ghi AuditLog
+
+Ví dụ nghiệp vụ:
+
+Khi xóa một User, không cho phép xóa nếu User vẫn còn dữ liệu liên quan.
+
+Hoặc:
+
+Khi trạng thái đơn hàng chuyển sang Completed, tự động ghi lịch sử.
+
+4. Transaction
+
+Đây là phần thầy nhấn mạnh rất rõ:
+
+Tức là hệ thống của không được chỉ có những câu SQL đơn lẻ.
+
+Phải có những nghiệp vụ gồm nhiều thao tác CSDL nhưng được xem như một đơn vị công việc.
+
+Ví dụ:
+
+Thanh toán đơn hàng
+
+BEGIN TRANSACTION
+
+1. Tạo Payment
+2. Cập nhật Order
+3. Cập nhật Account
+4. Ghi TransactionHistory
+
+COMMIT
+
+Nếu bước 3 lỗi:
+
+ROLLBACK
+
+→ toàn bộ giao tác quay về trạng thái trước đó.
+
+5. Phải chứng minh ACID
+
+4 tính chất của giao tác
+
+Tính chất	Phải chứng minh
+Atomicity	Hoặc thực hiện toàn bộ, hoặc không thực hiện gì
+Consistency	CSDL luôn chuyển từ trạng thái hợp lệ → hợp lệ
+Isolation	Các transaction đồng thời không gây ra kết quả sai do can thiệp lẫn nhau
+Durability	COMMIT rồi thì dữ liệu vẫn tồn tại dù hệ thống gặp sự cố
+
+Điểm quan trọng:
+
+Có demo thực tế.
+
+Ví dụ Atomicity:
+
+Transaction
+
+INSERT A
+INSERT B
+UPDATE C   ← lỗi
+
+ROLLBACK
+
+→ A không tồn tại
+→ B không tồn tại
+→ C không thay đổi
+
+Như vậy mới thực sự chứng minh được ACID.
+
+6. Concurrency / Isolation
+
+Demo trực tiếp:
+
+Lost Update
+Dirty Read
+Non-repeatable Read
+Phantom Read
+
+Phải tạo tình huống hai người dùng / hai transaction cùng thao tác trên CSDL.
+
+
+8. Deadlock
+
+“Ở góc độ người dùng, tìm ra tình huống deadlock.”
+
+Tức là phải tạo được một scenario mà hai transaction chờ nhau.
+
+Ví dụ:
+
+Transaction A                 Transaction B
+
+LOCK Row 1                    LOCK Row 2
+     ↓                             ↓
+UPDATE Row 1                  UPDATE Row 2
+     ↓                             ↓
+muốn Row 2                    muốn Row 1
+     ↓                             ↓
+WAIT                          WAIT
+     ↑_____________________________↑
+
+A đang giữ Row 1 và chờ Row 2.
+
+B đang giữ Row 2 và chờ Row 1.
+
+→ Không bên nào đi tiếp được.
+
+DBMS phát hiện deadlock và thường chọn một transaction làm deadlock victim, rollback nó để phá vòng chờ.
+
+Đây là một demo rất tốt để chứng minh bạn hiểu concurrency control của DBMS.
+
+9. "Ở góc độ người dùng" nghĩa là gì?
+
+Không chỉ trình bày kiểu:
+
+Transaction T1 thực hiện UPDATE X, Transaction T2 thực hiện UPDATE X...
+
+mà muốn biến nó thành tình huống nghiệp vụ mà người dùng thực sự gặp phải.
+
+Ví dụ Lost Update:
+
+Không nên chỉ demo:
+T1: UPDATE Product SET quantity = ...
+T2: UPDATE Product SET quantity = ...
+Nên đặt thành:
+Nhân viên A và nhân viên B cùng chỉnh sửa
+số lượng sản phẩm trong kho.
+
+A thấy: 100 sản phẩm
+B thấy: 100 sản phẩm
+
+A nhập: 80
+B nhập: 90
+
+→ kết quả cuối cùng chỉ còn 90
+→ cập nhật của A bị mất.
+
+Sau đó mới chỉ ra:
+
+T1
+T2
+lock
+isolation level
+schedule
+...
+
+Tức là:
+
+Người dùng nhìn thấy vấn đề → truy ngược xuống transaction → DBMS xử lý.
+
+10. Câu "tập trung vào HỆ QUẢN TRỊ, chứ không phải UI/UX hay AI/ML"
+
+Đây là một chỉ dẫn rất rõ về trọng tâm của đồ án.
+
+Không đánh giá cao việc các bạn dành phần lớn thời gian cho:
+
+UI đẹp
+animation
+responsive
+UX
+AI recommendation
+machine learning
+chatbot
+
+Mà trọng tâm phải là:
+
+                    DATABASE / DBMS
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+   Data Model       SQL Programming   Transactions
+        │                │                │
+   Tables/Keys      ┌────┼────┐       ACID
+   Constraints      │    │    │       Isolation
+                    │    │    │       Concurrency
+                  View Function        Deadlock
+                    │
+              Stored Procedure
+                    │
+                 Trigger
+
+UI chỉ đóng vai trò phương tiện để người dùng tương tác và minh họa hệ thống.
