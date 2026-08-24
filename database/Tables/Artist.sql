@@ -1,0 +1,6 @@
+CREATE TABLE Artist (
+    ArtistID INT IDENTITY(1,1) NOT NULL,
+    ArtistName NVARCHAR(255) NOT NULL,
+    ArtistDescription NVARCHAR(500),
+    CONSTRAINT PK_Artist PRIMARY KEY CLUSTERED (ArtistID)
+);
