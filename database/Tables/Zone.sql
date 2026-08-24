@@ -1,0 +1,10 @@
+CREATE TABLE Zone (
+    ZoneID INT IDENTITY(1,1) NOT NULL,
+    VenueID INT NOT NULL,
+    ZoneCode VARCHAR(64) NOT NULL,
+    ZoneName NVARCHAR(255),
+    ZoneDescription NVARCHAR(500),
+    CONSTRAINT PK_Zone PRIMARY KEY CLUSTERED (ZoneID),
+    CONSTRAINT FK_Zone_Venue FOREIGN KEY (VenueID) REFERENCES Venue(VenueID),
+    CONSTRAINT UQ_Zone_Venue_ZoneCode UNIQUE (VenueID, ZoneCode)
+);
