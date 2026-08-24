@@ -1,0 +1,3670 @@
+1.	Xác định domain dự án: Concert Ticketing System
+2.	Xác định DBMS: Microsoft SQL Server
+3.	Cài đặt SQL Server và SQL Server Management Studio (SSMS)
+4.	Kết nối SSMS với SQL Server
+5.	Hệ thống mô hình hóa lĩnh vực nghiệp vụ nào trong thế giới thực?
+→ Hệ thống mô hình hóa lĩnh vực nghiệp vụ tổ chức và phân phối vé cho các sự kiện âm nhạc (concert), bao gồm quản lý Venue, Concert, ticket inventory, quá trình đặt vé và thanh toán của Customer, phát hành và xác thực Ticket, cũng như các nghiệp vụ vận hành liên quan (báo cáo, audit, quản lý truy cập công bằng khi nhu cầu vượt khả năng xử lý).
+6.	Mục tiêu nghiệp vụ của hệ thống là gì?
+→ Hệ thống tồn tại để hỗ trợ việc tổ chức, phân phối và bán vé cho các sự kiện concert; quản lý thông tin liên quan đến sự kiện, vé, khách hàng và giao dịch với khách hàng; đồng thời đảm bảo tính toàn vẹn dữ liệu (không bán trùng chỗ) và khả năng xử lý công bằng khi nhu cầu mua vé vượt khả năng phục vụ tức thời của hệ thống.
+ID	Business Objective	Mục tiêu
+BO1	Quản lý Concert	Cho phép Organizer và Admin quản lý thông tin và vòng đời của Concert.
+BO2	Quản lý Venue & Seat	Quản lý cấu trúc Venue, Zone và Seat để phục vụ việc tổ chức Concert và phân bổ ticket inventory.
+BO3	Quản lý Ticket Inventory	Cho phép Organizer cấu hình và quản lý ticket inventory riêng cho từng Concert.
+BO4	Hỗ trợ Ticket Booking	Cho phép Customer lựa chọn và đặt/giữ Seat (một hoặc nhiều Seat trong một Booking) trong một khoảng thời gian xác định trước khi hoàn tất thanh toán.
+BO5	Xử lý Ticket Purchase & Payment	Hỗ trợ quá trình đặt mua vé, ghi nhận Payment và phát hành Ticket sau khi giao dịch được xác nhận thành công.
+BO6	Quản lý Ticket Lifecycle	Quản lý vòng đời của Ticket từ khi phát hành đến khi sử dụng, hủy hoặc hoàn tiền theo chính sách áp dụng.
+BO7	Quản lý Access & Authorization	Kiểm soát quyền thực hiện nghiệp vụ và quyền truy cập dữ liệu của Admin, Organizer và Customer theo vai trò và phạm vi được cấp.
+BO8	Ticket Validation & Admission Control	Hỗ trợ xác thực Ticket và kiểm soát việc sử dụng Ticket khi Customer vào Concert.
+BO9	Reporting & Operational Monitoring	Cung cấp thông tin tổng hợp về hoạt động bán vé, doanh thu, inventory và tình trạng sử dụng Ticket.
+BO10	Audit & Transaction Traceability	Duy trì lịch sử cần thiết của các giao dịch và thay đổi nghiệp vụ để hỗ trợ truy vết và kiểm tra.
+BO11	Fair High-Demand Access	Đảm bảo Customer được tiếp cận và xử lý trong điều kiện mở bán có nhu cầu cao theo cơ chế công bằng đã xác định, đồng thời bảo đảm ticket inventory được phân phối theo đúng quy tắc nghiệp vụ.
+BO12	Quản lý Waitlist	Cho phép Customer đăng ký tham gia danh sách chờ khi ticket inventory của Concert đã hết hoặc tạm thời không còn khả dụng, và hỗ trợ xử lý cơ hội mua vé khi inventory được giải phóng theo chính sách waitlist.
+BO13	Quản lý Promotion & Discount	Cho phép Organizer và Admin tạo, cấu hình và áp dụng chương trình Promotion cho Booking trong phạm vi Concert được chỉ định, bao gồm điều kiện áp dụng, thời gian hiệu lực và giá trị Discount.
+
+7.	Giả định về hệ thống và nghiệp vụ thực tế
+ID	Assumption	Rationale / Scope Implication
+A1	Hệ thống sử dụng mô hình reserved seating: Customer lựa chọn và mua các Seat cụ thể; mô hình General Admission thuần túy không thuộc phạm vi hiện tại.	Xác định mô hình ticketing và yêu cầu quản lý inventory theo từng Seat.
+A2	Một Venue có thể được sử dụng để tổ chức nhiều Concert tại các thời điểm khác nhau.	Venue là tài nguyên vật lý dùng chung cho nhiều Concert trong các thời điểm khác nhau.
+A3	Một Venue có cấu trúc vật lý gồm các Zone và Seat; mỗi Seat thuộc về một Venue.	Xác định mô hình vật lý Venue → Zone → Seat.
+A4	Một Concert được tổ chức tại một Venue và sử dụng các Seat thuộc Venue đó.	Xác định phạm vi Venue và Seat được sử dụng bởi từng Concert.
+A5	Trạng thái và khả năng bán của một Seat được quản lý theo từng Concert, không phải trực tiếp trên Seat vật lý.	Phân biệt Seat với inventory theo Concert, dẫn đến mô hình Seat và EventSeat.
+A6	Hệ thống hỗ trợ nhiều Organizer; mỗi Concert thuộc về một Organizer.	Xác định mô hình sở hữu Concert và phạm vi quản lý của Organizer.
+A7	Hệ thống có bốn nhóm actor con người tương tác trực tiếp với các nghiệp vụ: Admin, Organizer, Customer và Check-in Staff; ngoài ra, hệ thống thực hiện một số tiến trình tự động được kích hoạt theo thời gian hoặc điều kiện nghiệp vụ được xác định trước.	Xác định đầy đủ các actor chính và các loại tương tác nghiệp vụ cần được hệ thống hỗ trợ, bao gồm hoạt động quản trị, tổ chức, mua vé, check-in và các tiến trình tự động.
+A8	Customer phải có một User Account hợp lệ để thực hiện các nghiệp vụ đặt và mua vé.	Xác định định danh Customer và mối liên hệ giữa Customer với các giao dịch.
+A9	Hệ thống hỗ trợ Temporary Hold trước khi Customer hoàn tất thanh toán.	Cơ chế giữ chỗ tạm thời nằm trong phạm vi nghiệp vụ.
+A10	Temporary Hold có một thời hạn xác định; việc tự động giải phóng Seat khi hold hết hạn thuộc phạm vi hệ thống.	Xác định lifecycle của Temporary Hold và inventory reservation.
+A11	Mỗi Concert có thể có ticket inventory, ticket category và pricing configuration riêng; không giả định toàn bộ Seat của Venue đều được bán cho mọi Concert.	Cho phép mỗi Concert có cấu hình bán vé riêng.
+A12	Hệ thống phát hành electronic Ticket sau khi giao dịch mua vé được xác nhận thành công; Ticket được sử dụng để xác thực quyền vào Concert.	Xác định ticket issuance và admission control thuộc phạm vi hệ thống.
+A13	Ticket sử dụng một mã định danh duy nhất và có thể được biểu diễn dưới dạng QR code để phục vụ quá trình xác thực tại cổng.	Xác định cơ chế nhận diện và validation của Ticket ở mức domain; không quy định cách triển khai QR.
+A14	Hệ thống hỗ trợ cancellation và refund đối với các giao dịch đủ điều kiện theo chính sách áp dụng.	Đưa các hoạt động sau giao dịch vào phạm vi hệ thống.
+A15	Hệ thống lưu giữ lịch sử nghiệp vụ và giao dịch cần thiết để phục vụ operational reporting và audit.	Yêu cầu bảo toàn transaction history trong phạm vi dữ liệu của hệ thống.
+A16	Hệ thống cung cấp các báo cáo vận hành cơ bản, bao gồm doanh thu, số vé bán và tình trạng sử dụng vé theo Concert.	Xác định reporting là một phần của system scope.
+A17	Hệ thống hỗ trợ Waitlist cho Concert khi ticket inventory không còn khả dụng để Customer đặt vé.	Đưa Waitlist vào phạm vi nghiệp vụ và xác định cơ chế xử lý Waitlist khi ticket inventory được giải phóng.
+A18	Payment processing boundary: hệ thống quản lý Payment/Refund records và trạng thái giao dịch ở mức nghiệp vụ; việc xử lý dòng tiền thực tế qua ngân hàng hoặc external payment gateway nằm ngoài phạm vi hiện tại.	Xác định rõ ranh giới tích hợp thanh toán, tránh mở rộng scope sang payment infrastructure.
+A19	Monetary scope: tất cả giao dịch trong hệ thống sử dụng VND; multi-currency và foreign-exchange processing nằm ngoài phạm vi.	Xác định đơn vị tiền tệ của các monetary values trong hệ thống.
+A20	Tax and fee scope: hệ thống sử dụng giá bán cuối cùng được cấu hình cho giao dịch; tính toán và quyết toán thuế/phí theo hệ thống tài chính bên ngoài nằm ngoài phạm vi, trừ khi được đặc tả riêng.	Xác định ranh giới financial calculation của hệ thống.
+A21	External integration scope: các dịch vụ bên ngoài như payment gateway, email/SMS provider, identity provider và external notification services không thuộc phạm vi triển khai của hệ thống hiện tại, trừ khi được đặc tả riêng.	Làm rõ ranh giới giữa hệ thống và external systems.
+A22	Deployment scope: hệ thống trong phạm vi đồ án được xem xét dưới mô hình single application instance và single SQL Server instance; high availability, horizontal scaling, replication và multi-region deployment nằm ngoài phạm vi hiện tại.	Xác định rõ giới hạn về deployment và infrastructure, tránh suy diễn yêu cầu HA/scalability không có trong phạm vi đồ án.
+A23	Promotion scope: hệ thống hỗ trợ cơ chế Promotion & Discount cho Booking; Organizer hoặc Admin có quyền tạo và cấu hình Promotion; điều kiện áp dụng, thời gian hiệu lực và giá trị Discount của Promotion nằm trong phạm vi hệ thống và phải được xác định đầy đủ trước khi áp dụng vào giao dịch.	Xác định Promotion & Discount là một phần của system scope, cung cấp cơ sở nghiệp vụ cho BO13, BP13 và các BR/FR liên quan.
+
+8.	Hệ thống phải hỗ trợ những nghiệp vụ nào để đạt được các mục tiêu nghiệp vụ đó?
+Danh sách nghiệp vụ (Business Processes):
+ID	Business Process	Primary Actor	Trigger	Preconditions	Main Activities	Postconditions / Outcome	Related BO
+BP1	Quản lý Concert	Organizer, Admin	Organizer/Admin tạo mới hoặc yêu cầu thay đổi một Concert	Actor đã được xác thực và có quyền quản lý Concert	Tạo Concert; cập nhật thông tin Concert; xác định Artist, thời gian bắt đầu/kết thúc và Venue; công bố Concert; hủy Concert	Thông tin và trạng thái của Concert được cập nhật theo kết quả nghiệp vụ	BO1
+BP2	Quản lý Venue & Seat	Admin	Admin tạo hoặc thay đổi cấu trúc Venue	Admin có quyền quản lý Venue	Tạo/cập nhật Venue; khai báo Zone; tạo/cập nhật Seat; xác định cấu trúc và định danh Seat; cập nhật sơ đồ Seat	Cấu trúc vật lý của Venue được lưu trữ và sẵn sàng được sử dụng cho Concert	BO2
+BP3	Cấu hình Ticket Inventory cho Concert	Organizer, Admin	Concert được chuẩn bị để mở bán	Concert đã được xác định Venue và có cấu hình Seat hợp lệ	Xác định các Zone/Seat được đưa vào bán; cấu hình ticket category; xác định giá bán; xác định thời gian mở/đóng bán; đưa inventory vào trạng thái sẵn sàng bán	Ticket inventory của Concert được cấu hình và có thể được mở bán	BO3
+BP4	Mở bán vé cho Concert	Organizer, Admin	Đến thời điểm mở bán hoặc actor chủ động mở bán	Ticket inventory đã được cấu hình đầy đủ; Concert ở trạng thái cho phép mở bán	Chuyển Concert/inventory sang trạng thái bán; cho phép Customer truy cập và lựa chọn các EventSeat có thể bán	Các Ticket Inventory được công khai và sẵn sàng cho Customer thực hiện Booking	BO3, BO4
+BP5	Đặt vé & Temporary Hold	Customer	Customer lựa chọn một hoặc nhiều Seat để mua	Customer đã xác thực; Concert đang mở bán; Seat thuộc inventory của Concert và đang có thể được giữ; Customer chưa vượt giới hạn đặt vé	Kiểm tra Seat availability; tạo Booking; giữ các EventSeat được chọn trong thời hạn xác định; xác định thời điểm hết hạn hold	Booking được tạo ở trạng thái phù hợp; các EventSeat được giữ và không khả dụng cho Customer khác trong thời gian hold	BO4
+BP6	Thanh toán & Xác nhận Purchase	Customer	Customer yêu cầu thanh toán cho Booking đang có hiệu lực	Booking còn hiệu lực và các EventSeat vẫn được giữ; Payment Request hợp lệ	Tạo/ghi nhận Payment; xử lý kết quả thanh toán; xác nhận Booking khi thanh toán thành công; thực hiện phát hành Ticket	Payment được ghi nhận; Booking chuyển sang trạng thái đã thanh toán/xác nhận; Ticket được phát hành nếu giao dịch thành công	BO5, BO6
+BP7	Giải phóng Seat khi Temporary Hold hết hạn	System	Thời hạn hold của Booking kết thúc mà chưa có thanh toán thành công	Booking đang ở trạng thái hold và thời hạn đã hết	Xác định các Booking đã hết hạn; chuyển Booking sang trạng thái hết hạn; giải phóng các EventSeat tương ứng	EventSeat trở lại trạng thái có thể bán; Booking hết hạn không còn giữ inventory	BO4, BO3
+BP8	Hủy Booking/Ticket & Refund	Customer, Organizer, Admin	Actor yêu cầu hủy hoặc Concert bị hủy	Booking/Ticket thuộc trường hợp được phép hủy theo chính sách	Kiểm tra điều kiện hủy; cập nhật trạng thái Booking/Ticket; giải phóng inventory khi áp dụng; tạo và ghi nhận Refund	Hủy được ghi nhận; Refund được xử lý hoặc ghi nhận theo chính sách; inventory được cập nhật tương ứng	BO6, BO5
+BP9	Check-in & Ticket Validation	Check-in Staff, Admin	Customer xuất trình Ticket tại cổng	Ticket tồn tại, thuộc Concert tương ứng và chưa ở trạng thái đã sử dụng/không hợp lệ	Đọc ticket_code/QR; xác thực Ticket; kiểm tra trạng thái; ghi nhận Check-in; cập nhật trạng thái sử dụng Ticket	Ticket được xác thực và ghi nhận là đã sử dụng nếu hợp lệ; Ticket không hợp lệ hoặc đã sử dụng bị từ chối	BO8, BO6
+BP10	Quản lý Waitlist	Customer, System	Customer yêu cầu tham gia Waitlist khi ticket inventory của Concert không còn khả dụng	Concert cho phép Waitlist và Customer đủ điều kiện đăng ký	Đăng ký Customer vào Waitlist theo Concert; duy trì vị trí Waitlist; khi EventSeat đủ điều kiện được giải phóng, xác định Customer tiếp theo theo Waitlist policy; cấp cơ hội Booking có thời hạn	Customer đủ điều kiện được cấp cơ hội Booking; Waitlist được cập nhật theo kết quả xử lý	BO12, BO4
+BP11	Quản lý Fair Access / Virtual Queue khi mở bán cao điểm	Customer, System	Nhu cầu truy cập trong giai đoạn mở bán vượt admission capacity được cấu hình hoặc Concert được đánh dấu high-demand	Concert đang trong giai đoạn mở bán và fair-access control được áp dụng	Ghi nhận Customer vào Virtual Queue; xác định thứ tự admission theo fair-access policy; cấp quyền truy cập Booking Flow theo admission capacity; kiểm soát tốc độ Customer được đưa vào Booking Flow	Customer được admission theo fair-access policy; số Customer đồng thời trong Booking Flow được duy trì trong capacity được cấu hình	BO11, BO4
+BP12	Quản lý User & Authorization	Admin	Admin tạo, cập nhật, khóa hoặc phân quyền User	Admin đã được xác thực và có quyền quản trị	Tạo User; cập nhật User; khóa/mở khóa User Account; gán hoặc thay đổi Role; quản lý quyền truy cập	User và quyền truy cập được cập nhật theo chính sách hệ thống	BO7
+BP13	Quản lý Promotion & Discount	Organizer, Admin	Actor tạo hoặc áp dụng một chương trình khuyến mãi	Actor có quyền cấu hình Promotion	Tạo/cập nhật Promotion; xác định điều kiện áp dụng; xác thực Discount Code; tính giá trị giảm khi Booking	Promotion hợp lệ được áp dụng vào giao dịch theo điều kiện đã cấu hình	BO13
+BP14	Reporting & Operational Monitoring	Organizer, Admin	Actor yêu cầu báo cáo hoặc hệ thống đến kỳ tổng hợp dữ liệu	Actor có quyền truy cập dữ liệu tương ứng	Tổng hợp dữ liệu Booking, Payment, Ticket, Check-in và inventory; tính toán các chỉ số; lọc theo Concert, Organizer hoặc thời gian	Báo cáo về doanh thu, ticket sales, inventory và ticket usage được cung cấp	BO9, BO10
+BP15	Audit & Transaction Traceability	Admin	Một nghiệp vụ cần được truy vết hoặc kiểm tra	Dữ liệu và sự kiện nghiệp vụ thuộc phạm vi audit được ghi nhận	Ghi nhận các thay đổi và sự kiện nghiệp vụ cần audit; tra cứu lịch sử; đối chiếu giao dịch và trạng thái	Có thể truy vết các giao dịch và thay đổi nghiệp vụ trong phạm vi hệ thống	BO10
+9.	Ai tương tác với hệ thống, họ đóng vai trò gì, và họ tham gia vào những nghiệp vụ nào?
+Hệ thống có 04 actor con người. Các xử lý tự động do hệ thống thực hiện được ghi nhận là System-Initiated Processes, không xem System là một external human actor. Trong bảng BP, Primary Actor = "System" chỉ xuất hiện cho BP7 — tiến trình hoàn toàn tự động không có human actor; BP7 được ghi nhận bổ sung trong SIP1. Trong bảng FR, Actor = "System" chỉ nghĩa vụ thực thi thuộc về hệ thống, không phải human-initiated.
+ID	Actor / Role	Type	Role / Responsibility	Business Processes
+ACT1	Admin	Human	Quản trị và vận hành hệ thống ở cấp toàn cục; quản lý Concert, Venue, Zone, Seat và User; quản lý quyền truy cập; giám sát hoạt động; thực hiện hoặc giám sát các nghiệp vụ được phân quyền; truy cập báo cáo và audit trong phạm vi toàn hệ thống.	BP1, BP2, BP3, BP4, BP8, BP9, BP12, BP13, BP14, BP15
+ACT2	Organizer	Human	Quản lý các Concert thuộc phạm vi sở hữu; cấu hình ticket inventory, ticket category, pricing và Promotion; thực hiện các nghiệp vụ liên quan đến bán vé; xử lý cancellation/refund trong phạm vi được cấp; theo dõi báo cáo của các Concert thuộc mình.	BP1, BP3, BP4, BP8, BP13, BP14
+ACT3	Customer	Human	Người dùng cuối của hệ thống; tìm kiếm và lựa chọn Concert; thực hiện Booking và temporary hold; thanh toán và mua vé; hủy Booking/Ticket hoặc yêu cầu Refund theo chính sách; tham gia Waitlist; tham gia Virtual Queue khi áp dụng.	BP5, BP6, BP8, BP10, BP11
+ACT4	Check-in Staff	Human	Nhân sự vận hành tại điểm vào Concert; thực hiện Ticket Validation và ghi nhận Check-in; chỉ được truy cập các chức năng và dữ liệu cần thiết cho nghiệp vụ admission control.	BP9
+Các nghiệp vụ sau được hệ thống tự động thực hiện, không cần một human actor chủ động kích hoạt:
+ID	System-Initiated Process	Trigger	Business Processes
+SIP1	Temporary Hold Expiration Processing	Thời hạn Temporary Hold kết thúc mà Booking chưa được thanh toán thành công.	BP7
+SIP2	Waitlist Allocation Processing	EventSeat đủ điều kiện được giải phóng và có Customer đủ điều kiện trong Waitlist.	BP10
+SIP3	Fair-Access / Virtual Queue Processing	Nhu cầu truy cập trong giai đoạn mở bán vượt admission capacity hoặc Concert được áp dụng high-demand access control.	BP11
+Actor Responsibility Boundary
+Actor	Quyền / phạm vi chính
+Admin	Toàn hệ thống, trong phạm vi quyền quản trị được cấp
+Organizer	Các Concert thuộc phạm vi sở hữu/quản lý
+Customer	Dữ liệu và giao dịch thuộc chính Customer đó
+Check-in Staff	Ticket Validation và Check-in trong phạm vi Concert/địa điểm được phân công
+
+10.	Trong quá trình thực hiện nghiệp vụ, những quy tắc nào bắt buộc phải luôn đúng/tuân thủ?
+ID	Business Rule	Type	BP / Entity liên quan
+BR01	Mỗi Concert thuộc đúng một Organizer.	Structural / Definitional	BP1 / Concert, Organizer
+BR02	Mỗi Concert được tổ chức tại đúng một Venue.	Structural / Definitional	BP1 / Concert, Venue
+BR03	Thời điểm kết thúc của một Concert phải sau thời điểm bắt đầu của Concert đó.	Structural / Definitional	BP1 / Concert
+BR04	Mỗi Zone thuộc đúng một Venue; mỗi Seat thuộc đúng một Zone.	Structural / Definitional	BP2 / Venue, Zone, Seat
+BR05	Mỗi Seat là một vị trí vật lý duy nhất trong một Venue và phải có định danh duy nhất trong phạm vi Venue đó.	Structural / Definitional	BP2 / Seat
+BR06	Một EventSeat thuộc đúng một Concert và tham chiếu đến đúng một Seat vật lý.	Structural / Definitional	BP3 / EventSeat, Concert, Seat
+BR07	Seat được tham chiếu bởi một EventSeat phải thuộc chính Venue mà Concert đó sử dụng.	Structural / Definitional	BP3 / EventSeat, Seat, Concert, Venue
+BR08	Không phải mọi Seat của một Venue đều phải được đưa vào ticket inventory của mọi Concert.	Structural / Definitional	BP3 / Venue, Concert, EventSeat
+BR09	Một EventSeat tại một thời điểm chỉ có một trạng thái thuộc tập trạng thái được hệ thống định nghĩa cho ticket inventory.	Structural / Definitional	BP3–BP8 / EventSeat
+BR10	Một Concert chỉ được mở bán khi ticket inventory và các thông tin cần thiết để xác lập giao dịch bán vé đã được xác định đầy đủ.	Behavioral	BP3–BP4 / Concert, EventSeat
+BR11	Một Booking thuộc đúng một Customer và đúng một Concert.	Structural / Definitional	BP5 / Booking, Customer, Concert
+BR12	Một Booking có thể bao gồm nhiều Seat, nhưng mọi Seat trong cùng Booking phải thuộc cùng Concert.	Structural / Definitional	BP5 / Booking, EventSeat
+BR13	Một EventSeat không được đồng thời được phân bổ cho nhiều Booking đang có hiệu lực của cùng Concert.	Definitional / Integrity	BP5–BP8 / EventSeat, Booking
+BR14	Customer chỉ được giữ một EventSeat khi EventSeat đó đang ở trạng thái cho phép giữ tại thời điểm yêu cầu.	Behavioral	BP5 / Customer, EventSeat
+BR15	Khi một Booking yêu cầu nhiều Seat, toàn bộ yêu cầu giữ Seat phải được xử lý như một đơn vị nghiệp vụ: hoặc toàn bộ Seat được giữ thành công, hoặc không Seat nào được giữ thành công.	Behavioral	BP5 / Booking, EventSeat
+BR16	Temporary Hold của Booking phải có thời điểm bắt đầu và thời điểm hết hạn xác định.	Structural / Definitional	BP5 / Booking
+BR17	Trong thời gian Temporary Hold còn hiệu lực, các EventSeat thuộc Booking đó không được Customer khác giữ hoặc mua thành công.	Behavioral	BP5 / Booking, EventSeat
+BR18	Một Booking đã hết thời hạn Temporary Hold mà chưa được xác nhận thanh toán không còn quyền giữ các EventSeat thuộc Booking đó.	Behavioral	BP7 / Booking, EventSeat
+BR19	Khi Temporary Hold hết hạn mà chưa có Payment thành công, các EventSeat thuộc Booking phải được giải phóng theo trạng thái inventory được quy định.	Behavioral	BP7 / Booking, EventSeat
+BR20	Customer không được vượt quá purchase limit được áp dụng cho một Concert.	Behavioral	BP5–BP6 / Customer, Concert, Booking
+BR21	Purchase limit của một Concert có thể được xác định riêng cho Concert đó và được áp dụng cho tổng số vé thuộc Customer theo policy của Concert.	Structural / Definitional	BP3, BP5 / Concert
+BR22	Chỉ Booking còn hiệu lực và đủ điều kiện mới được phép chuyển sang trạng thái đã thanh toán/xác nhận.	Behavioral	BP6 / Booking
+BR23	Booking chỉ được xem là Confirmed khi Payment tương ứng đã được xác nhận thành công.	Behavioral	BP6 / Booking, Payment
+BR24	Payment thất bại, bị từ chối hoặc không được xác nhận thành công không làm phát sinh trạng thái Confirmed cho Booking.	Behavioral	BP6 / Payment, Booking
+BR25	Ticket chỉ được phát hành cho Booking đã ở trạng thái Confirmed.	Behavioral	BP6 / Ticket, Booking
+BR26	Mỗi Ticket tương ứng với đúng một vé được xác nhận trong một Booking và thuộc đúng một Concert.	Structural / Definitional	BP6 / Ticket, Booking, Concert
+BR27	Mỗi Ticket có một ticket_code duy nhất trong toàn hệ thống.	Structural / Definitional	BP6, BP9 / Ticket
+BR28	Ticket chỉ được check-in khi còn hiệu lực và chưa được sử dụng để admission trước đó.	Behavioral	BP9 / Ticket
+BR29	Một Ticket chỉ có thể được check-in thành công một lần.	Definitional / Integrity	BP9 / Ticket, CheckIn
+BR30	Sau khi check-in thành công, Ticket không còn đủ điều kiện để được sử dụng cho một lần admission tiếp theo của cùng Concert.	Behavioral	BP9 / Ticket
+BR31	Booking hoặc Ticket chỉ được hủy khi thỏa mãn cancellation policy áp dụng cho giao dịch hoặc Concert tương ứng.	Behavioral	BP8 / Booking, Ticket
+BR32	Refund chỉ áp dụng cho một Payment đã được xác nhận và thuộc trường hợp đủ điều kiện hoàn tiền theo refund policy.	Behavioral	BP8 / Payment, Refund
+BR33	Khi Booking/Ticket bị hủy và EventSeat đủ điều kiện được đưa trở lại inventory, việc giải phóng EventSeat phải tuân theo cancellation/refund policy áp dụng.	Behavioral	BP8 / Booking, Ticket, EventSeat
+BR34	Khi Concert bị hủy, các Booking, Ticket và Payment bị ảnh hưởng phải được xử lý theo cancellation/refund policy của Concert.	Behavioral	BP1, BP8 / Concert, Booking, Ticket, Payment
+BR35	Promotion chỉ được áp dụng khi Booking thỏa mãn tất cả điều kiện áp dụng của Promotion tại thời điểm áp dụng; mỗi Promotion bao gồm giá trị Discount và điều kiện kích hoạt (bao gồm Discount Code nếu có).	Behavioral	BP13 / Promotion, Booking
+BR36	Promotion chỉ có hiệu lực trong khoảng thời gian và phạm vi được xác định cho Promotion đó.	Structural / Definitional	BP13 / Promotion
+BR36a	Đối với mỗi Booking, một Promotion hợp lệ chỉ được ghi nhận tối đa một Promotion Application. Hệ thống không được tạo nhiều Promotion Application độc lập cho cùng một cặp Booking và Promotion.
+BR36b	Số lượng Ticket/EventSeat đủ điều kiện và phạm vi áp dụng của Promotion trong một Booking phải tuân theo các điều kiện và giới hạn được cấu hình của Promotion. Một Promotion có thể được áp dụng cho một hoặc nhiều Ticket/EventSeat trong cùng một Booking khi các Ticket/EventSeat đó đáp ứng các điều kiện áp dụng của Promotion.
+BR37	Organizer chỉ được thực hiện các nghiệp vụ trên Concert thuộc phạm vi sở hữu hoặc quản lý được cấp quyền.	Behavioral / Authorization	BP1, BP3, BP4, BP8, BP13, BP14
+BR38	Customer chỉ được thực hiện các nghiệp vụ giao dịch trên dữ liệu thuộc chính Customer đó, ngoại trừ dữ liệu được công khai để phục vụ việc tìm kiếm và lựa chọn Concert.	Behavioral / Authorization	BP5, BP6, BP8, BP10, BP11
+BR39	Check-in Staff chỉ được thực hiện các nghiệp vụ Ticket Validation và Check-in trong phạm vi Concert được phân công.	Behavioral / Authorization	BP9
+BR40	Customer chỉ được tham gia Waitlist của một Concert khi Waitlist của Concert đó đang được mở và Customer đủ điều kiện đăng ký theo policy áp dụng.	Behavioral	BP10 / Customer, Waitlist
+BR41	Một Customer không được có nhiều Waitlist entry đang hoạt động đồng thời cho cùng một Concert, trừ khi policy của Concert cho phép.	Structural / Definitional	BP10 / Customer, WaitlistEntry
+BR42	Khi EventSeat đủ điều kiện được giải phóng và có Waitlist đang hoạt động, cơ hội Booking được phân bổ theo allocation policy của Waitlist.	Behavioral	BP10 / EventSeat, WaitlistEntry
+BR43	Nếu Waitlist sử dụng FIFO, Customer có thời điểm đăng ký sớm hơn được xử lý trước Customer đăng ký muộn hơn.	Behavioral / Policy	BP10 / WaitlistEntry
+BR44	Cơ hội Booking được cấp cho Customer từ Waitlist chỉ có hiệu lực trong khoảng thời gian được quy định; khi hết hạn, cơ hội đó được xem là không còn hiệu lực.	Behavioral	BP10 / WaitlistEntry, Booking
+BR45	Khi Fair Access / Virtual Queue được áp dụng cho một Concert, quyền admission vào Booking Flow phải được phân bổ theo fair-access policy đã xác định.	Behavioral / Policy	BP11 / Customer, Concert, QueueEntry
+BR46	Fair Access policy không được cho phép Customer bỏ qua cơ chế admission đã áp dụng chỉ bằng cách gửi request với tốc độ cao hơn.	Behavioral / Policy	BP11 / Customer, QueueEntry
+BR47	Khi Concert áp dụng capacity limit cho Booking Flow, số Customer được admission đồng thời không được vượt giới hạn nghiệp vụ đã cấu hình.	Behavioral	BP11 / Concert, QueueEntry
+BR48	Việc admission qua Virtual Queue không tự tạo quyền sở hữu đối với EventSeat; quyền đối với EventSeat chỉ phát sinh từ một Booking hợp lệ.	Definitional / Integrity	BP11, BP5 / QueueEntry, EventSeat, Booking
+BR49	Các trạng thái của Concert, Booking, Payment, Ticket và EventSeat chỉ được chuyển đổi theo các state transition được phép của vòng đời tương ứng.	Definitional / Integrity	BP1, BP3–BP9, BP10, BP11
+BR50	Một Concert, Booking, Payment, Ticket hoặc EventSeat đã phát sinh dữ liệu lịch sử không được bị xóa theo cách làm mất các facts nghiệp vụ cần được duy trì.	Definitional / Integrity	BP1, BP6, BP8, BP14, BP15
+BR51	Các dữ liệu nghiệp vụ được dùng làm căn cứ cho reporting và audit phải phản ánh các trạng thái và giao dịch đã được xác nhận theo business rules tương ứng.	Definitional / Integrity	BP14–BP15 / Booking, Payment, Ticket, EventSeat
+BR52	Admin có toàn quyền tạo, cập nhật, khóa/mở khóa User Account và gán, thay đổi hoặc thu hồi Role trong phạm vi quản trị hệ thống; các thao tác này được thực hiện theo chính sách quản trị được xác định.	Behavioral / Authorization	BP12 / User, Role
+BR53	Thời lượng Temporary Hold được xác định theo cấu hình riêng của Concert hoặc cấu hình toàn cục của hệ thống tại thời điểm Booking được tạo; giá trị thời lượng này không thay đổi trong suốt thời gian hold có hiệu lực.	Structural / Definitional	BP5 / Booking
+BR54	Một Concert chỉ được công bố khi đã xác định đầy đủ Organizer (BR01), Venue (BR02), thời gian bắt đầu và thời gian kết thúc hợp lệ (BR03), và tên Artist biểu diễn.	Behavioral	BP1 / Concert
+Phân loại sử dụng trong tài liệu
+Type	Ý nghĩa trong tài liệu
+Structural / Definitional	Xác định điều gì phải luôn đúng về cấu trúc, quan hệ hoặc trạng thái của các business concepts.
+Behavioral	Quy định một actor hoặc business activity phải hoặc không được thực hiện điều gì trong một điều kiện xác định.
+Behavioral / Policy	Quy tắc hành vi phụ thuộc vào một policy nghiệp vụ, chẳng hạn purchase limit, FIFO waitlist hoặc fair-access policy.
+Behavioral / Authorization	Quy tắc về ai được phép thực hiện hành vi nào trên phạm vi dữ liệu nào.
+Definitional / Integrity	Invariant mà trạng thái nghiệp vụ không được vi phạm, đặc biệt đối với inventory, Booking, Ticket và transaction lifecycle.
+
+10.1.	Định nghĩa trạng thái hợp lệ của các entity nghiệp vụ chính (cơ sở cho BR09, BR49)
+Bảng dưới đây xác định tập trạng thái được hệ thống định nghĩa (BR09) và các state transition được phép (BR49) cho từng entity nghiệp vụ chính.
+Trạng thái Concert
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Draft	Đang soạn thảo; chưa đủ điều kiện công bố theo BR54.	Published
+Published	Đã công bố; ticket inventory chưa sẵn sàng để mở bán.	OnSale, Cancelled
+OnSale	Đang bán vé; Customer có thể thực hiện Booking theo BR10.	SaleClosed, Cancelled
+SaleClosed	Đã kết thúc bán vé; Concert chưa diễn ra.	Completed, Cancelled
+Completed	Concert đã diễn ra thành công.	(terminal)
+Cancelled	Concert bị hủy; áp dụng BR34.	(terminal)
+Trạng thái EventSeat
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Available	Có thể được giữ bởi Customer theo BR14; hoặc được Admin đánh dấu không dùng theo BR08.	OnHold, OnHoldForWaitlist, Unavailable
+OnHold	Đang Temporary Hold thuộc Booking đang hiệu lực theo BR16–BR17.	Available (hold hết hạn theo BR19), Booked (Payment Confirmed theo BR23)
+OnHoldForWaitlist	Đang được tạm giữ cho cơ hội Booking từ Waitlist theo BR42–BR44, có thời hạn xác định.	Available (cơ hội hết hạn), OnHold (khách waitlist tạo Booking và Payment)
+Booked	Đã xác nhận; gắn với Booking Confirmed theo BR23.	Available (sau cancellation theo BR33)
+Unavailable	Không đưa vào ticket inventory của Concert này theo BR08.	(không áp dụng)
+Trạng thái Booking
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Pending	Temporary Hold đang hiệu lực; chờ thanh toán theo BR16.	Confirmed, Expired, Cancelled
+Confirmed	Payment được xác nhận thành công theo BR23.	Cancelled
+Expired	Temporary Hold hết hạn mà chưa có Payment thành công theo BR18.	(terminal)
+Cancelled	Bị hủy theo cancellation policy (BR31).	(terminal)
+Trạng thái Payment
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Pending	Đang chờ kết quả xử lý thanh toán theo BR22.	Confirmed, Failed
+Confirmed	Giao dịch thanh toán được xác nhận thành công theo BR23.	Refunded
+Failed	Giao dịch thất bại hoặc bị từ chối theo BR24.	(terminal)
+Refunded	Đã hoàn tiền theo refund policy (BR32).	(terminal)
+Trạng thái Ticket
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Issued	Đã phát hành; chưa được sử dụng để admission (BR25, BR27).	Used, Cancelled
+Used	Đã check-in thành công; không thể dùng lại theo BR29–BR30.	(terminal)
+Cancelled	Đã hủy theo cancellation policy (BR31, BR33).	(terminal)
+Trạng thái Refund
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Pending	Đã tạo yêu cầu hoàn tiền; chờ xử lý theo refund policy (BR32).	Confirmed, Failed, Cancelled
+Confirmed	Hoàn tiền đã được ghi nhận hoàn tất theo BR32.	(terminal)
+Failed	Việc hoàn tiền thất bại hoặc bị từ chối.	(terminal)
+Cancelled	Yêu cầu hoàn tiền bị hủy trước khi xử lý hoàn tất.	(terminal)
+
+Trạng thái Waitlist
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Open	Đang nhận đăng ký từ Customer theo BR40.	Closed
+Closed	Đã dừng nhận đăng ký.	(terminal)
+
+Trạng thái Waitlist Entry
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Active	Đang chờ cơ hội theo BR41.	Granted, Expired
+Granted	Đã được cấp cơ hội Booking có thời hạn theo BR44.	Fulfilled, Expired
+Expired	Cơ hội đã hết hạn.	(terminal)
+Fulfilled	Đã dùng cơ hội tạo Booking.	(terminal)
+
+Trạng thái Queue
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Open	Đang nhận Customer vào Virtual Queue theo BR45.	Closed
+Closed	Đã dừng admission qua Queue.	(terminal)
+
+Trạng thái Queue Entry
+Trạng thái	Ý nghĩa nghiệp vụ	Chuyển đổi hợp lệ sang
+Waiting	Đang chờ admission theo BR45–BR47.	Admitted, Expired
+Admitted	Đã được đưa vào Booking Flow theo BR47.	Exited
+Exited	Đã rời Queue hoặc mất quyền admission.	(terminal)
+Expired	Quyền admission đã hết hạn.	(terminal)
+
+11.	Hệ thống phải cung cấp chức năng/hành vi nào để thực hiện nghiệp vụ và tuân thủ rule?
+ID	Functional Requirement	Actor	Business Process	Business Rule liên quan
+FR01	Hệ thống phải cho phép Actor có quyền tạo mới Concert và nhập các thông tin bắt buộc của Concert.	Admin, Organizer	BP1	BR01–BR03
+FR02	Hệ thống phải cho phép Actor có quyền cập nhật thông tin Concert trong phạm vi quyền được cấp.	Admin, Organizer	BP1	BR01–BR03, BR37
+FR03	Hệ thống phải cho phép Actor có quyền xác định Artist, thời gian bắt đầu, thời gian kết thúc và Venue của Concert.	Admin, Organizer	BP1	BR01–BR03
+FR04	Hệ thống phải cho phép Actor có quyền công bố Concert khi Concert đáp ứng các điều kiện cần thiết để được công bố.	Admin, Organizer	BP1	BR54, BR49
+FR05	Hệ thống phải cho phép Actor có quyền hủy Concert theo cancellation policy áp dụng.	Admin, Organizer	BP1	BR34
+FR06	Hệ thống phải duy trì và hiển thị trạng thái hiện tại của Concert.	Admin, Organizer, Customer	BP1, BP4	BR49
+FR07	Hệ thống phải cho phép Admin tạo mới và cập nhật thông tin Venue.	Admin	BP2	BR04
+FR08	Hệ thống phải cho phép Admin tạo, cập nhật và quản lý các Zone thuộc Venue.	Admin	BP2	BR04
+FR09	Hệ thống phải cho phép Admin tạo, cập nhật và quản lý các Seat thuộc từng Zone.	Admin	BP2	BR04–BR05
+FR10	Hệ thống phải cho phép Admin xác định định danh của từng Seat trong phạm vi Venue.	Admin	BP2	BR05
+FR11	Hệ thống phải cho phép Actor có quyền cấu hình ticket inventory cho một Concert bằng cách xác định các Seat được đưa vào bán.	Admin, Organizer	BP3	BR06–BR08
+FR12	Hệ thống phải cho phép Actor có quyền cấu hình ticket category cho ticket inventory của Concert.	Admin, Organizer	BP3	BR10
+FR13	Hệ thống phải cho phép Actor có quyền xác định giá bán áp dụng cho ticket inventory của Concert.	Admin, Organizer	BP3	BR10
+FR14	Hệ thống phải cho phép Actor có quyền cấu hình thời gian mở và kết thúc bán vé của Concert.	Admin, Organizer	BP3	BR10
+FR15	Hệ thống phải hiển thị cho Customer các Concert đang ở trạng thái cho phép truy cập và các ticket inventory có thể bán tương ứng.	Customer	BP4	BR09–BR10
+FR16	Hệ thống phải cho phép Actor có quyền mở bán, tạm dừng hoặc kết thúc việc bán vé của Concert theo trạng thái và policy áp dụng.	Admin, Organizer	BP4	BR10, BR49
+FR17	Hệ thống phải cho phép Customer lựa chọn một hoặc nhiều EventSeat đang có thể được giữ để tạo Booking.	Customer	BP5	BR11–BR14
+FR18	Hệ thống phải kiểm tra trạng thái và khả năng giữ của từng EventSeat trước khi tạo Booking.	System	BP5	BR13–BR14
+FR19	Hệ thống phải kiểm tra purchase limit áp dụng cho Customer đối với Concert trước khi xác nhận yêu cầu Booking.	System	BP5	BR20–BR21
+FR20	Hệ thống phải tạo Booking chứa các EventSeat được Customer yêu cầu khi tất cả các điều kiện của Booking được thỏa mãn.	System	BP5	BR11–BR15
+FR21	Hệ thống phải xử lý yêu cầu giữ nhiều EventSeat như một đơn vị nghiệp vụ và không tạo Booking thành công nếu không thể giữ toàn bộ các EventSeat được yêu cầu.	System	BP5	BR15
+FR22	Hệ thống phải đặt các EventSeat của Booking hợp lệ vào trạng thái Temporary Hold và ghi nhận thời điểm bắt đầu cùng thời điểm hết hạn của Hold.	System	BP5	BR16–BR17
+FR23	Hệ thống phải hiển thị thời hạn còn lại của Temporary Hold cho Customer trong phạm vi giao diện hỗ trợ Booking.	Customer	BP5	BR16
+FR24	Hệ thống phải cho phép Customer yêu cầu thanh toán đối với Booking còn hiệu lực và đủ điều kiện thanh toán.	Customer	BP6	BR22
+FR25	Hệ thống phải tạo và lưu Payment Record tương ứng với Booking khi Customer thực hiện yêu cầu thanh toán.	System	BP6	BR23–BR24
+FR26	Hệ thống phải cập nhật trạng thái Payment theo kết quả xử lý thanh toán được ghi nhận.	System	BP6	BR23–BR24
+FR27	Hệ thống phải chuyển Booking sang trạng thái Confirmed chỉ khi Payment tương ứng được xác nhận thành công.	System	BP6	BR23
+FR28	Hệ thống không được xác nhận Booking khi Payment tương ứng thất bại, bị từ chối hoặc không được xác nhận thành công.	System	BP6	BR24
+FR29	Hệ thống phải phát hành Ticket cho Booking đã được Confirmed.	System	BP6	BR25–BR27
+FR30	Hệ thống phải tạo mã ticket_code duy nhất cho mỗi Ticket được phát hành.	System	BP6	BR26–BR27
+FR31	Hệ thống phải cung cấp thông tin cần thiết để biểu diễn Ticket dưới dạng QR code hoặc định danh tương đương phục vụ Ticket Validation.	System	BP6, BP9	BR27
+FR32	Hệ thống phải tự động xác định các Temporary Hold đã hết hạn và xử lý Booking tương ứng theo trạng thái hết hạn.	System	BP7	BR18–BR19
+FR33	Hệ thống phải giải phóng các EventSeat thuộc Booking đã hết hạn Temporary Hold và đưa chúng về trạng thái inventory phù hợp.	System	BP7	BR18–BR19
+FR34	Hệ thống phải ngăn Customer sử dụng Booking đã hết hạn Temporary Hold để tiếp tục hoàn tất giao dịch.	System	BP7	BR18
+FR35	Hệ thống phải cho phép Actor có quyền yêu cầu hủy Booking hoặc Ticket thuộc trường hợp được phép theo cancellation policy.	Customer, Organizer, Admin	BP8	BR31
+FR36	Hệ thống phải kiểm tra điều kiện hủy trước khi thực hiện cancellation.	System	BP8	BR31
+FR37	Hệ thống phải cập nhật trạng thái Booking hoặc Ticket sau khi cancellation được xác nhận.	System	BP8	BR31, BR33
+FR38	Hệ thống phải cho phép tạo Refund Record đối với Payment đủ điều kiện hoàn tiền.	System	BP8	BR32
+FR39	Hệ thống phải cập nhật trạng thái Refund theo kết quả xử lý refund được ghi nhận.	System	BP8	BR32
+FR40	Hệ thống phải xử lý EventSeat liên quan đến Booking/Ticket bị hủy theo cancellation/refund policy được áp dụng.	System	BP8	BR33–BR34
+FR41	Hệ thống phải cho phép Check-in Staff nhập hoặc quét ticket_code/QR representation của Ticket.	Check-in Staff	BP9	BR27–BR28
+FR42	Hệ thống phải xác thực Ticket được trình tại cổng dựa trên Ticket record, Concert tương ứng và trạng thái hiện tại của Ticket.	System, Check-in Staff	BP9	BR28–BR30
+FR43	Hệ thống phải từ chối Check-in đối với Ticket không tồn tại, không hợp lệ, đã bị hủy, không thuộc Concert tương ứng hoặc đã được sử dụng.	System	BP9	BR28–BR30
+FR44	Hệ thống phải ghi nhận Check-in thành công của Ticket cùng các thông tin cần thiết để truy vết sự kiện Check-in.	System	BP9	BR29–BR30
+FR45	Hệ thống phải cập nhật trạng thái Ticket sau khi Check-in thành công để Ticket không thể được sử dụng cho một lần admission tiếp theo.	System	BP9	BR29–BR30
+FR46	Hệ thống phải cho phép Admin tạo, cập nhật, khóa hoặc mở khóa User Account trong phạm vi quyền quản trị.	Admin	BP12	BR52
+FR47	Hệ thống phải cho phép Admin gán, thay đổi hoặc thu hồi Role của User theo chính sách authorization.	Admin	BP12	BR52
+FR48	Hệ thống phải kiểm tra quyền của Actor trước khi cho phép Actor thực hiện một chức năng bị giới hạn quyền truy cập.	System	BP1–BP15	BR37–BR39, BR52
+FR49	Hệ thống phải giới hạn dữ liệu Concert mà Organizer có thể truy cập hoặc thay đổi theo phạm vi sở hữu/quản lý được cấp quyền.	System	BP1, BP3, BP4, BP8, BP13, BP14	BR37
+FR50	Hệ thống phải giới hạn Customer trong việc truy cập và thao tác trên dữ liệu giao dịch thuộc Customer đó.	System	BP5, BP6, BP8, BP10, BP11	BR38
+FR51	Hệ thống phải giới hạn Check-in Staff trong các chức năng và dữ liệu cần thiết cho Ticket Validation và Check-in trong phạm vi được phân công.	System	BP9	BR39
+FR52	Hệ thống phải cho phép Actor có quyền tạo và cấu hình Promotion, bao gồm điều kiện áp dụng và thời gian hiệu lực.	Admin, Organizer	BP13	BR35–BR36
+FR53	Hệ thống phải kiểm tra điều kiện và thời gian hiệu lực của Promotion khi Customer áp dụng Promotion vào Booking.	System	BP13	BR35–BR36
+FR53b	Hệ thống phải xác thực Discount Code được Customer nhập, bao gồm kiểm tra tính hợp lệ và phạm vi áp dụng của Code đối với Promotion và Booking tương ứng.	System	BP13	BR35–BR36, BR36b
+FR54	Hệ thống phải tính toán giá trị giảm và giá trị thanh toán cuối cùng của Booking theo Promotion hợp lệ và các pricing rules được áp dụng.	System	BP13	BR35, BR36b
+FR55	Hệ thống phải cho phép Actor có quyền truy vấn các báo cáo về doanh thu, số vé bán, inventory và tình trạng sử dụng Ticket theo phạm vi dữ liệu được cấp quyền.	Admin, Organizer	BP14	BR37, BR51
+FR56	Hệ thống phải cho phép Actor có quyền lọc hoặc phân nhóm dữ liệu báo cáo theo các tiêu chí được hệ thống hỗ trợ, tối thiểu Concert và khoảng thời gian.	Admin, Organizer	BP14	BR51
+FR57	Hệ thống phải cung cấp dữ liệu báo cáo dựa trên các giao dịch và trạng thái nghiệp vụ đã được xác nhận theo các Business Rules tương ứng.	System	BP14	BR51
+FR58	Hệ thống phải ghi nhận các sự kiện nghiệp vụ và thay đổi dữ liệu thuộc phạm vi audit đã xác định.	System	BP15	BR50–BR51
+FR59	Hệ thống phải cho phép Admin tra cứu các audit records trong phạm vi quyền được cấp.	Admin	BP15	BR50–BR51
+FR60	Hệ thống phải cho phép Customer đăng ký Waitlist cho Concert khi Waitlist đang được mở và Customer đủ điều kiện.	Customer	BP10	BR40–BR41
+FR61	Hệ thống phải duy trì vị trí hoặc thông tin cần thiết để xác định thứ tự xử lý của Customer trong Waitlist theo allocation policy.	System	BP10	BR42–BR43
+FR62	Khi EventSeat đủ điều kiện được giải phóng, hệ thống phải xác định Customer tiếp theo đủ điều kiện theo allocation policy và cấp cơ hội Booking tương ứng.	System	BP10	BR42–BR44
+FR63	Hệ thống phải áp dụng thời hạn đối với cơ hội Booking được cấp cho Customer từ Waitlist và xử lý cơ hội hết hạn theo Waitlist policy.	System	BP10	BR44
+FR64	Hệ thống phải cho phép Customer tham gia Virtual Queue khi Fair Access được bật cho Concert.	Customer	BP11	BR45–BR46
+FR65	Hệ thống phải ghi nhận thông tin cần thiết để xác định vị trí hoặc thứ tự admission của Customer trong Virtual Queue theo Fair Access policy.	System	BP11	BR45–BR46
+FR66	Hệ thống phải cấp quyền truy cập Booking Flow cho Customer theo Fair Access policy và admission capacity được áp dụng.	System	BP11	BR45–BR47
+FR67	Hệ thống phải duy trì trạng thái của Customer trong Virtual Queue và cập nhật trạng thái khi Customer được admission, rời Virtual Queue hoặc không còn đủ điều kiện.	System	BP11	BR45–BR48
+FR68	Hệ thống phải duy trì trạng thái nhất quán của Concert, EventSeat, Booking, Payment, Ticket, Refund, WaitlistEntry và QueueEntry theo các trạng thái được định nghĩa trong vòng đời tương ứng.	System	BP1–BP15	BR49
+FR69	Hệ thống phải cung cấp khả năng truy xuất lịch sử cần thiết để xác định các thay đổi nghiệp vụ thuộc phạm vi audit.	Admin	BP15	BR50
+FR70	Hệ thống phải duy trì các liên kết dữ liệu cần thiết giữa Concert, Venue, Zone, Seat, EventSeat, Booking, Payment, Ticket, Refund, Waitlist và CheckIn để hỗ trợ các nghiệp vụ được xác định.	System	BP1–BP15	BR04–BR07, BR11–BR12, BR26, BR32–BR34, BR40–BR48
+
+12. Data Requirements
+Hệ thống phải lưu trữ, quản lý và duy trì những dữ liệu nào để thực hiện các nghiệp vụ, đáp ứng các yêu cầu chức năng và bảo đảm các business rules đã xác định?
+12.1. Mục đích
+
+Hệ thống Bán vé Concert phải lưu trữ, quản lý, duy trì và liên kết các dữ liệu nghiệp vụ cần thiết để:
+
+thực hiện tất cả các Quy trình nghiệp vụ (Business Processes) đã được xác định;
+đáp ứng tất cả các Yêu cầu chức năng (Functional Requirements) đã được xác định;
+thực thi tất cả các Quy tắc nghiệp vụ (Business Rules) đã được xác định;
+duy trì trạng thái hiện tại của các thực thể nghiệp vụ trong suốt vòng đời của chúng;
+duy trì lịch sử giao dịch và vận hành cần thiết cho việc báo cáo, kiểm toán và truy xuất nguồn gốc.
+
+Các Yêu cầu Dữ liệu xác định những dữ liệu nghiệp vụ phải tồn tại trong hệ thống và những thông tin cần được duy trì cho từng khái niệm nghiệp vụ. Phần này xác định các yêu cầu dữ liệu ở mức khái niệm (conceptual level) và mức logic (logical level). Các chi tiết triển khai vật lý như kiểu dữ liệu SQL Server, chỉ mục, phân vùng, cấu trúc lưu trữ và các đối tượng CSDL phụ thuộc vào triển khai sẽ được quy định ở các phần thiết kế CSDL tiếp theo.
+
+Phạm vi này được suy ra từ Mục tiêu nghiệp vụ, Các giả định, Quy trình nghiệp vụ, Tác nhân, Quy tắc nghiệp vụ, Định nghĩa trạng thái và Yêu cầu chức năng đã được xác lập trước đó cho hệ thống.
+
+12.2. Phạm vi Dữ liệu
+
+Hệ thống phải duy trì các miền dữ liệu nghiệp vụ sau:
+
+Miền dữ liệu	Các khái niệm nghiệp vụ
+Định danh và Phân quyền (Identity and Authorization)	Tài khoản người dùng, Vai trò, Phân công Người dùng–Vai trò
+Tổ chức (Organization)	Ban tổ chức
+Concert	Concert, Nghệ sĩ
+Cấu trúc địa điểm (Venue Structure)	Địa điểm, Khu vực, Ghế
+Kho vé (Ticket Inventory)	EventSeat, Hạng vé, Cấu hình giá, Cấu hình bán vé
+Đặt vé (Booking)	Booking, Phân bổ Booking–EventSeat, Giữ chỗ tạm thời
+Thanh toán (Payment)	Thanh toán
+Hoàn tiền (Refund)	Hoàn tiền
+Vé (Ticket)	Vé
+Kiểm soát vào cửa (Admission)	Check-in
+Danh sách chờ (Waitlist)	Danh sách chờ, Mục tham gia danh sách chờ
+Truy cập công bằng (Fair Access)	Hàng đợi, Mục tham gia hàng đợi
+Khuyến mãi (Promotion)	Chương trình khuyến mãi, Mã giảm giá, Áp dụng khuyến mãi cho Booking
+Báo cáo (Reporting)	Dữ liệu giao dịch và vận hành cần thiết cho báo cáo
+Kiểm toán (Audit)	Bản ghi kiểm toán
+
+Ghi chú: "Cấu hình giá" và "Cấu hình bán vé" là các khái niệm logic nghiệp vụ. Trong mô hình dữ liệu thực tế, "Cấu hình giá" (giá bán) được chuẩn hóa thành thuộc tính của EventSeat, còn "Cấu hình bán vé" (thời gian mở bán, giới hạn mua) được chuẩn hóa thành thuộc tính của Concert.
+
+Hệ thống phải duy trì các miền dữ liệu này dưới dạng dữ liệu nghiệp vụ lâu dài (persistent business data). Dữ liệu báo cáo phải được suy ra từ các bản ghi giao dịch và vận hành được định nghĩa trong phần này, thay vì duy trì một biểu diễn độc lập và có khả năng mâu thuẫn với cùng một sự kiện nghiệp vụ.
+
+Điều này phù hợp với yêu cầu rằng báo cáo phải phản ánh các giao dịch đã được xác nhận và trạng thái nghiệp vụ thực tế.
+
+12.3. Dữ liệu Định danh và Phân quyền
+12.3.1. Tài khoản Người dùng (User Account)
+
+Hệ thống phải duy trì một bản ghi Tài khoản Người dùng cho mỗi người dùng đã được xác thực trong hệ thống.
+
+Dữ liệu của Tài khoản Người dùng phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+User ID	Định danh duy nhất của Tài khoản Người dùng
+Username hoặc định danh đăng nhập	Định danh được sử dụng để nhận diện tài khoản trong quá trình xác thực
+Trạng thái tài khoản	Trạng thái hiện tại của tài khoản, bao gồm các trạng thái hoạt động và bị khóa/vô hiệu hóa
+Thời điểm tạo	Thời điểm Tài khoản Người dùng được tạo
+Thời điểm cập nhật	Thời điểm Tài khoản Người dùng được sửa đổi lần cuối
+Email	Địa chỉ email của người dùng (nullable; phục vụ thông báo và liên hệ)
+Display Name	Tên hiển thị của người dùng (nullable)
+Password Hash	Băm mật khẩu phục vụ xác thực nội bộ; NULL khi xác thực qua Identity Provider bên ngoài (A21)
+
+Tài khoản Người dùng phải được liên kết với các phân công Vai trò (Role assignments) để xác định quyền hạn của người dùng.
+
+Dữ liệu Tài khoản Người dùng phải hỗ trợ:
+
+tạo người dùng;
+cập nhật người dùng;
+khóa và mở khóa tài khoản;
+kiểm tra quyền hạn;
+xác định tác nhân thực hiện các hành động cần được kiểm toán.
+
+Các yêu cầu này được suy ra từ BP12, BR52, FR46–FR48 và mô hình phân quyền của các tác nhân.
+
+12.3.2. Vai trò (Role)
+
+Hệ thống phải duy trì một định nghĩa Vai trò cho mỗi vai trò phân quyền được hệ thống hỗ trợ.
+
+Dữ liệu của Vai trò phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Role ID	Định danh duy nhất của Vai trò
+Tên vai trò	Tên nghiệp vụ duy nhất của Vai trò
+Mô tả vai trò	Mô tả trách nhiệm và phạm vi quyền hạn của Vai trò
+Trạng thái vai trò	Cho biết Vai trò có đang được phép phân công hay không
+
+Các vai trò người dùng được xác định gồm:
+
+Admin — Quản trị viên
+Organizer — Ban tổ chức
+Customer — Khách hàng
+Check-in Staff — Nhân viên kiểm soát vào cửa
+
+Lịch sử gán/thu hồi Role: bảng User–Role Assignment giữ trạng thái hiện tại với PK (User ID, Role ID); lịch sử gán/thu hồi được bảo toàn trong Audit Record (§12.17) — theo chuẩn RBAC (S20) và resolution D8.
+
+Đây là bốn nhóm tác nhân con người được xác định rõ trong đặc tả hệ thống.
+
+Hệ thống phải duy trì Phân công Người dùng–Vai trò (User–Role Assignment) để một Tài khoản Người dùng có thể được liên kết với Vai trò hiện tại của mình.
+
+Dữ liệu của Phân công Người dùng–Vai trò phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+User ID	Tài khoản Người dùng được phân công
+Role ID	Vai trò được phân công
+Assigned timestamp	Thời điểm phân công được thực hiện
+Assignment status	Trạng thái phân công hiện tại (VD: Active, Revoked) nhằm hỗ trợ việc thu hồi quyền theo BR52
+
+12.4. Dữ liệu Ban tổ chức (Organizer)
+
+Organizer đại diện cho bên chịu trách nhiệm quản lý các Concert.
+
+Vì đặc tả hiện tại xác định Organizer là một tác nhân con người, đồng thời yêu cầu quản lý User/Role, hệ thống phải biểu diễn Organizer dưới dạng Tài khoản Người dùng được gán vai trò Organizer, thay vì duy trì một danh tính cá nhân độc lập thứ hai cho cùng một tác nhân.
+
+Do đó, bản ghi Concert phải tham chiếu đến Tài khoản Người dùng đại diện cho Organizer của Concert đó.
+
+Hệ thống phải duy trì:
+
+Thành phần dữ liệu	Định nghĩa
+Organizer User ID	Định danh Tài khoản Người dùng đang đóng vai trò Organizer
+Phạm vi sở hữu của Organizer	Tập hợp các Concert mà Organizer có quyền sở hữu hoặc quản lý
+
+Bất biến sau phải được đảm bảo:
+
+Mỗi Concert phải tham chiếu đến chính xác một Tài khoản Người dùng đóng vai trò Organizer.
+
+Điều này trực tiếp triển khai BR01 và FR49.
+
+12.5. Dữ liệu Concert
+12.5.1. Concert
+
+Thực thể Concert phải lưu trữ thông tin nhận diện, lịch trình, quyền sở hữu, địa điểm, công bố, bán vé và vòng đời của từng Concert.
+
+Mỗi Concert phải chứa:
+
+Thành phần dữ liệu	Định nghĩa
+Concert ID	Định danh duy nhất của Concert
+Organizer User ID	Tài khoản Người dùng đại diện cho Organizer chịu trách nhiệm về Concert
+Artist ID	Nghệ sĩ biểu diễn tại Concert
+Venue ID	Địa điểm tổ chức Concert
+Tên Concert	Tên được hiển thị và sử dụng để nhận diện Concert
+Thời điểm bắt đầu	Ngày và giờ dự kiến bắt đầu
+Thời điểm kết thúc	Ngày và giờ dự kiến kết thúc
+Trạng thái Concert	Trạng thái hiện tại trong vòng đời
+Thời điểm bắt đầu bán vé	Thời điểm vé bắt đầu được bán
+Thời điểm kết thúc bán vé	Thời điểm việc bán vé kết thúc
+Giới hạn mua	Số vé tối đa mà một Customer được phép mua cho Concert theo chính sách
+Thời lượng giữ chỗ tạm thời	Khoảng thời gian áp dụng cho một Temporary Hold mới của Concert
+Bật Fair Access	Cho biết Concert có áp dụng Fair Access / Virtual Queue hay không
+Bật Waitlist	Cho biết Concert có chấp nhận đăng ký Waitlist hay không
+Sales Paused (Tạm dừng bán vé)	Cờ tạm dừng bán; khi bật, hệ thống từ chối tạo Booking mới nhưng không làm thay đổi trạng thái Concert (đáp ứng FR16)
+Chính sách hủy (Cancellation Policy)	Cho phép hủy (Allow/Disallow) và thời điểm cut-off để hủy hợp lệ
+Chính sách hoàn tiền (Refund Policy)	Loại hoàn: NoRefund / FullRefund / PartialRefund; kèm Refund Percentage và Refund Deadline (thời điểm cuối được phép hoàn)
+
+Trạng thái Concert phải thuộc một trong các trạng thái:
+
+Draft — Bản nháp
+Published — Đã công bố
+OnSale — Đang bán vé
+SaleClosed — Đã đóng bán vé
+Completed — Đã hoàn thành
+Cancelled — Đã hủy
+
+Trạng thái chỉ được chuyển đổi theo mô hình chuyển trạng thái đã được định nghĩa trong đặc tả.
+
+Các điều kiện toàn vẹn sau phải được đảm bảo:
+
+End datetime > Start datetime.
+Mỗi Concert tham chiếu chính xác một Organizer.
+Mỗi Concert tham chiếu chính xác một Venue.
+Concert không được chuyển sang Published nếu Artist, Venue, thời điểm bắt đầu và thời điểm kết thúc bắt buộc chưa tồn tại hoặc chưa hợp lệ.
+Concert không được chuyển sang OnSale nếu kho vé và các thông tin cần thiết cho việc bán vé chưa được cấu hình.
+Concert bật Sales Paused chỉ làm từ chối tạo Booking mới trong thời gian tạm dừng; trạng thái Concert không đổi (FR16).
+Chuyển đổi theo thời gian (nếu bật tự động): hệ thống chuyển Published → OnSale đúng thời điểm Sale Start Datetime và OnSale → SaleClosed đúng thời điểm Sale End Datetime; nếu vận hành thủ công, actor có quyền thực hiện cùng chuyển đổi; mọi chuyển đổi phải tuân BR49.
+
+Các điều kiện này triển khai BR01–BR03, BR10 và BR54.
+
+12.6. Dữ liệu Nghệ sĩ (Artist)
+12.6.1. Artist
+
+Artist được mô hình hóa thành một khái niệm nghiệp vụ riêng vì đặc tả Concert yêu cầu xác định Nghệ sĩ biểu diễn tại Concert, trong khi các hệ thống bán vé bên ngoài cũng thường mô hình hóa người biểu diễn/đối tượng thu hút riêng biệt với sự kiện.
+
+Dữ liệu của Artist phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Artist ID	Định danh duy nhất của Artist
+Tên Artist	Tên chính thức hoặc tên hiển thị của Artist
+Mô tả Artist	Mô tả về Artist được hệ thống duy trì
+
+Một Concert phải tham chiếu đến Artist biểu diễn tại Concert đó.
+
+Đặc tả nghiệp vụ hiện tại xác định một Artist cho mỗi Concert thông qua BR54; do đó phiên bản này của Yêu cầu Dữ liệu mô hình hóa một tham chiếu Artist cho mỗi Concert.
+
+12.7. Dữ liệu Cấu trúc Địa điểm
+12.7.1. Venue
+
+Thực thể Venue đại diện cho một địa điểm vật lý được sử dụng để tổ chức Concert.
+
+Dữ liệu Venue phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Venue ID	Định danh duy nhất của Venue
+Tên Venue	Tên của địa điểm
+Địa chỉ	Địa chỉ vật lý của Venue
+Trạng thái Venue	Trạng thái hoạt động hiện tại của Venue
+Thời điểm tạo	Thời điểm Venue được tạo
+Thời điểm cập nhật	Thời điểm Venue được sửa đổi lần cuối
+
+Một Venue có thể được sử dụng cho nhiều Concert tại các thời điểm khác nhau. Điều này được xác định rõ trong A2.
+
+12.7.2. Zone
+
+Thực thể Zone đại diện cho một khu vực vật lý thuộc một Venue.
+
+Dữ liệu Zone phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Zone ID	Định danh duy nhất của Zone
+Venue ID	Venue mà Zone thuộc về
+Zone code	Mã nghiệp vụ của Zone trong phạm vi Venue
+Tên Zone	Tên hiển thị của Zone
+Mô tả Zone	Mô tả về Zone
+
+Các điều kiện sau phải được đảm bảo:
+
+Mỗi Zone thuộc chính xác một Venue.
+Một Zone không được thuộc về hai Venue khác nhau.
+Zone Code là định danh duy nhất của Zone trong phạm vi Venue; ràng buộc UNIQUE (Venue ID, Zone Code) phải được bảo toàn (tương tự BR05 cho Seat Code).
+
+Điều này triển khai BR04.
+
+12.7.3. Seat
+
+Thực thể Seat đại diện cho một vị trí ghế vật lý trong Venue.
+
+Dữ liệu Seat phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Seat ID	Định danh duy nhất của ghế vật lý
+Zone ID	Zone chứa Seat
+Seat code	Định danh của Seat trong Zone
+Seat label	Nhãn hiển thị dễ đọc của Seat
+
+Các điều kiện sau phải được đảm bảo:
+
+Mỗi Seat thuộc chính xác một Zone.
+Mỗi Seat xác định một vị trí vật lý.
+Seat phải có định danh duy nhất trong phạm vi Venue; ràng buộc này phải được triển khai bằng UNIQUE (Venue ID, Seat Code) theo BR05.
+Seat không được lưu trạng thái bán vé của Seat cho một Concert cụ thể.
+
+Sự phân biệt này là cần thiết theo A3, A5, BR04 và BR05.
+
+12.8. Dữ liệu Kho vé
+12.8.1. EventSeat
+
+EventSeat đại diện cho việc một Seat vật lý tham gia vào kho vé của một Concert cụ thể.
+
+Do đó, EventSeat là thực thể kết nối Seat vật lý với trạng thái kho vé dành riêng cho một Concert.
+
+Dữ liệu EventSeat phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+EventSeat ID	Định danh duy nhất của đơn vị kho vé dành riêng cho Concert
+Concert ID	Concert mà đơn vị kho vé thuộc về
+Seat ID	Seat vật lý được đại diện
+Ticket Category ID	Hạng vé được gán cho đơn vị kho vé
+Sale Price	Giá bán của đơn vị kho vé
+Inventory Status	Trạng thái hiện tại của kho vé
+Thời điểm thêm	Thời điểm Seat được thêm vào kho vé của Concert
+Unavailability Reason	Lý do nghiệp vụ khi EventSeat ở trạng thái Unavailable; bắt buộc khi Inventory Status = Unavailable
+
+Inventory Status phải thuộc một trong các trạng thái:
+
+Available — Có sẵn
+OnHold — Đang được giữ chỗ tạm thời bởi Customer theo BR14–BR19
+OnHoldForWaitlist — Đang được tạm giữ cho cơ hội Booking từ Waitlist theo BR42–BR44, có thời hạn xác định
+Booked — Đã đặt
+Unavailable — Không khả dụng
+
+Các điều kiện sau phải được đảm bảo:
+
+Mỗi EventSeat thuộc chính xác một Concert.
+Mỗi EventSeat tham chiếu chính xác một Seat vật lý.
+Seat được tham chiếu phải thuộc Venue được Concert sử dụng.
+Một Seat vật lý không được có nhiều hơn một EventSeat trong cùng một Concert.
+Không bắt buộc mọi Seat trong Venue đều phải có EventSeat cho mọi Concert.
+Một EventSeat không được phân bổ đồng thời cho nhiều Booking đang hoạt động.
+EventSeat chỉ được chuyển sang trạng thái OnHold khi trạng thái hiện tại là Available.
+EventSeat ở trạng thái OnHold phải tiếp tục không khả dụng đối với các Customer khác trong thời gian Temporary Hold tương ứng còn hiệu lực.
+EventSeat phải trở về Available khi Temporary Hold hết hạn mà không có thanh toán thành công.
+EventSeat phải chuyển sang Booked khi Booking liên quan chuyển sang Confirmed.
+EventSeat ở trạng thái Booked phải trở về trạng thái kho vé thích hợp khi việc hủy hoàn tất theo chính sách áp dụng.
+EventSeat ở trạng thái Unavailable phải có Unavailable Reason được ghi nhận (bắt buộc, theo §12.8.1 và BR09).
+
+Các yêu cầu này triển khai BR06–BR19 và BR33.
+
+Trạng thái Unavailable được thiết lập bởi Organizer/Admin cho một EventSeat đã tồn tại trong kho vé của Concert (ví dụ: ghế hỏng, giữ chỗ đặc biệt) và phải kèm lý do nghiệp vụ. Seat chưa từng được đưa vào kho vé của Concert thì không có bản ghi EventSeat tương ứng (theo BR08); do đó Unavailable không mâu thuẫn với việc không phải mọi Seat đều phải có EventSeat.
+
+12.8.2. Ticket Category
+
+Ticket Category xác định hạng mà một vé được bán.
+
+Dữ liệu Ticket Category phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Ticket Category ID	Định danh duy nhất của Ticket Category
+Concert ID	Concert mà hạng vé được cấu hình
+Tên hạng vé	Tên của hạng vé
+Mô tả hạng vé	Mô tả của hạng vé
+Trạng thái hạng vé	Cho biết hạng vé có đang hoạt động để bán hay không
+
+Ticket Category phải được liên kết với cấu hình kho vé dành riêng cho Concert.
+
+Điều này ngăn một Ticket Category dùng chung ở cấp toàn hệ thống vô tình quyết định cấu hình kho vé của mọi Concert, phù hợp với A11.
+
+12.9. Dữ liệu Booking
+12.9.1. Booking
+
+Thực thể Booking đại diện cho yêu cầu giao dịch của một Customer nhằm giữ một hoặc nhiều EventSeat cho một Concert.
+
+Dữ liệu Booking phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Booking ID	Định danh duy nhất của Booking
+Customer User ID	Tài khoản Người dùng đại diện cho Customer sở hữu Booking
+Concert ID	Concert mà Booking được tạo cho
+Booking status	Trạng thái vòng đời hiện tại
+Hold start datetime	Thời điểm Temporary Hold bắt đầu
+Hold expiry datetime	Thời điểm Temporary Hold hết hạn
+Subtotal amount	Tổng giá trị trước khi giảm giá
+Final amount	Số tiền cuối cùng phải thanh toán sau giảm giá
+Created timestamp	Thời điểm Booking được tạo
+Confirmed timestamp	Thời điểm Booking chuyển sang Confirmed
+Cancelled timestamp	Thời điểm Booking chuyển sang Cancelled
+Expired timestamp	Thời điểm Booking chuyển sang Expired
+
+Booking status phải thuộc một trong các trạng thái:
+
+Pending — Đang chờ
+Confirmed — Đã xác nhận
+Expired — Đã hết hạn
+Cancelled — Đã hủy
+
+Các điều kiện sau phải được đảm bảo:
+
+Mỗi Booking thuộc chính xác một Customer.
+Mỗi Booking thuộc chính xác một Concert.
+Mỗi Booking chứa một hoặc nhiều EventSeat.
+Mọi EventSeat trong cùng một Booking phải thuộc cùng Concert được Booking tham chiếu.
+Booking ở trạng thái Pending đại diện cho một Temporary Hold đang hoạt động.
+Booking Pending phải lưu cả Hold start datetime và Hold expiry datetime.
+Hold expiry datetime phải sau Hold start datetime.
+Booking chỉ được chuyển sang Confirmed sau khi Payment liên quan chuyển sang Confirmed.
+Booking có Temporary Hold hết hạn mà không có thanh toán thành công phải chuyển sang Expired.
+Booking Expired không được sử dụng để hoàn tất thanh toán hoặc nhận lại kho vé đã được giữ.
+Customer không được vượt quá giới hạn mua được quy định cho Concert.
+Giới hạn mua được tính trên tổng số EventSeat thuộc các Booking của Customer ở trạng thái Pending + Confirmed cho Concert đó; Booking Expired/Cancelled không được tính (theo BR20–BR21).
+
+Các yêu cầu này triển khai BR11–BR23.
+
+12.9.2. Phân bổ Booking–EventSeat
+
+Vì một Booking có thể chứa nhiều EventSeat, hệ thống phải duy trì một bản ghi phân bổ riêng giữa Booking và EventSeat.
+
+Dữ liệu phân bổ phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Booking ID	Booking chứa EventSeat
+EventSeat ID	EventSeat được phân bổ cho Booking
+Allocation timestamp	Thời điểm EventSeat được phân bổ
+Release timestamp	Thời điểm EventSeat được giải phóng khỏi Booking
+Allocation status	Trạng thái hiện tại của mối liên kết giữa Booking và EventSeat
+Price Snapshot	Giá bán của EventSeat (Sale Price) tại thời điểm phân bổ vào Booking (VND), giữ nguyên cho lịch sử giao dịch
+
+Bản ghi phân bổ phải bảo toàn thông tin về EventSeat đã được đưa vào Booking và hỗ trợ quá trình chuyển từ Temporary Hold → mua thành công/Confirmed hoặc giải phóng EventSeat.
+
+Dữ liệu này cần thiết để triển khai BR12, BR13, BR15, BR17–BR19 và FR20–FR22.
+
+12.10. Dữ liệu Thanh toán
+12.10.1. Payment
+
+Thực thể Payment đại diện cho bản ghi nghiệp vụ của hệ thống về một giao dịch thanh toán liên quan đến một Booking.
+
+Dữ liệu Payment phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Payment ID	Định danh duy nhất của Payment
+Booking ID	Booking được thanh toán
+Payment status	Trạng thái vòng đời hiện tại của Payment
+Amount	Số tiền thanh toán được hệ thống ghi nhận
+Currency	Loại tiền tệ của giao dịch; hệ thống sử dụng VND
+Payment reference	Mã tham chiếu giao dịch nghiệp vụ dùng để truy xuất
+Payment request timestamp	Thời điểm yêu cầu thanh toán
+Confirmation timestamp	Thời điểm Payment chuyển sang Confirmed
+Failure timestamp	Thời điểm Payment chuyển sang Failed
+Provider reference	Mã tham chiếu bên ngoài do hệ thống tích hợp xử lý thanh toán trả về, khi thông tin này thuộc kết quả giao dịch được ghi nhận
+
+Payment status phải thuộc một trong các trạng thái:
+
+Pending — Đang chờ
+Confirmed — Đã xác nhận
+Failed — Thất bại
+Refunded — Đã hoàn tiền
+
+Payment không đại diện cho cơ sở hạ tầng ngân hàng hoặc cổng thanh toán. Hệ thống chỉ duy trì bản ghi thanh toán nghiệp vụ và trạng thái giao dịch được định nghĩa trong A18.
+
+Các điều kiện sau phải được đảm bảo:
+
+Booking Confirmed phải có Payment tương ứng ở trạng thái Confirmed.
+Payment thất bại hoặc bị từ chối không được tạo ra Booking Confirmed.
+Payment chỉ được chuyển sang Refunded sau khi việc xử lý hoàn tiền được ghi nhận.
+UNIQUE (Booking ID, Payment Reference) — mỗi yêu cầu thanh toán (kể cả các lần thử lại/retry) phải mang một Payment Reference riêng; không được tạo hai Payment trùng cặp (Booking ID, Payment Reference) nhằm bảo đảm idempotency khi xử lý lặp lại yêu cầu (chuẩn xử lý thanh toán, tham chiếu Stripe idempotency).
+Mỗi Booking chỉ có tối đa một Payment ở trạng thái Confirmed (vì theo §12.20, Payment.Amount của mỗi Payment Confirmed bằng Booking.Final Amount; có hai Payment Confirmed nghĩa là thu hai lần cùng một giá trị — bất hợp lệ).
+
+Các yêu cầu này triển khai BR22–BR24 và vòng đời Payment.
+
+12.11. Dữ liệu Hoàn tiền
+12.11.1. Refund
+
+Thực thể Refund đại diện cho bản ghi nghiệp vụ về một khoản hoàn tiền liên quan đến một Payment đã được xác nhận.
+
+Dữ liệu Refund phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Refund ID	Định danh duy nhất của Refund
+Payment ID	Payment được hoàn tiền
+Refund status	Trạng thái hiện tại của Refund
+Refund amount	Số tiền được hoàn
+Refund reason	Lý do nghiệp vụ của việc hoàn tiền
+Refund request timestamp	Thời điểm yêu cầu hoàn tiền
+Refund confirmation timestamp	Thời điểm việc hoàn tiền được ghi nhận là hoàn tất
+Refund reference	Mã tham chiếu nghiệp vụ dùng để truy xuất giao dịch hoàn tiền
+
+Refund phải tham chiếu đến một Payment có trạng thái Confirmed trước khi việc hoàn tiền được bắt đầu.
+
+Việc hoàn tiền phải tuân theo chính sách hủy/hoàn tiền liên quan đến Booking hoặc Concert. Điều này triển khai BR31–BR34.
+
+12.12. Dữ liệu Vé
+12.12.1. Ticket
+
+Thực thể Ticket đại diện cho một quyền được vào cửa được phát hành từ một giao dịch mua vé đã được xác nhận.
+
+Dữ liệu Ticket phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Ticket ID	Định danh duy nhất của Ticket
+Booking ID	Booking Confirmed đã tạo ra Ticket
+EventSeat ID	EventSeat được Ticket đại diện
+Concert ID	Concert mà Ticket có hiệu lực
+Ticket code	Mã vé duy nhất toàn cục được sử dụng để xác thực
+Ticket status	Trạng thái vòng đời hiện tại
+Issued timestamp	Thời điểm Ticket được phát hành
+Used timestamp	Thời điểm Ticket được sử dụng để check-in thành công
+Cancelled timestamp	Thời điểm Ticket bị hủy
+
+Ticket status phải thuộc một trong các trạng thái:
+
+Issued — Đã phát hành
+Used — Đã sử dụng
+Cancelled — Đã hủy
+
+Các điều kiện sau phải được đảm bảo:
+
+Mỗi Ticket thuộc chính xác một Booking Confirmed.
+Mỗi Ticket đại diện cho chính xác một vé/ghế đã được xác nhận.
+Mỗi Ticket thuộc chính xác một Concert.
+Mỗi Ticket có chính xác một Ticket Code duy nhất trên toàn hệ thống.
+Ticket chỉ được phát hành sau khi Booking chuyển sang Confirmed.
+Khi Booking chuyển sang Confirmed, hệ thống phát hành đúng một Ticket cho mỗi Booking–EventSeat Allocation đang hiệu lực của Booking; do đó số Ticket của một Booking phải bằng số Allocation đang hiệu lực của Booking đó (ép bằng transaction/SP tại thời điểm xác nhận).
+Ticket chỉ được phép check-in khi trạng thái là Issued.
+Một Ticket chỉ được check-in thành công đúng một lần.
+Ticket Used không được phép sử dụng để vào cửa lần nữa.
+Ticket Cancelled không được phép sử dụng để vào cửa.
+Một EventSeat chỉ có tối đa một Ticket đang hiệu lực (Ticket status = Issued) tại một thời điểm; sau khi Ticket đó kết thúc (Used/Cancelled), EventSeat mới được phép phát hành Ticket mới (theo §12.8.1; ép bằng filtered index/trigger ở giai đoạn §20–23).
+
+Các yêu cầu này triển khai BR25–BR30.
+
+12.13. Dữ liệu Check-in
+12.13.1. Check-in
+
+Thực thể Check-in đại diện cho một sự kiện vào cửa thành công của một Ticket.
+
+Dữ liệu Check-in phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Check-in ID	Định danh duy nhất của bản ghi Check-in
+Ticket ID	Ticket được check-in
+Concert ID	Concert mà việc vào cửa diễn ra
+Check-in Staff User ID	Tài khoản Người dùng đại diện cho nhân viên thực hiện việc kiểm soát vào cửa
+Check-in timestamp	Thời điểm việc vào cửa được ghi nhận
+Validation result	Kết quả của thao tác xác thực Ticket
+Validation information	Thông tin cần thiết để truy xuất sự kiện xác thực
+
+Một Check-in thành công phải làm thay đổi trạng thái Ticket tương ứng từ Issued → Used.
+
+Hệ thống phải từ chối Check-in khi:
+
+Ticket không tồn tại;
+Ticket không hợp lệ;
+Ticket đã bị hủy;
+Ticket thuộc một Concert khác;
+Ticket đã được sử dụng.
+
+Các điều kiện này triển khai BR28–BR30 và FR41–FR45.
+
+Check-in chỉ ghi nhận các sự kiện vào cửa thành công (BR28–BR30); trường Validation result / Validation information của Check-in ghi nhận kết quả xác thực của lần vào cửa được chấp nhận. Các lần xác thực thất bại (Ticket không tồn tại, không hợp lệ, đã bị hủy, thuộc Concert khác, đã được sử dụng) phải được ghi nhận trong Audit Record / attempt log theo FR58 và BP15 để phục vụ kiểm toán và phát hiện gian lận; các lần thất bại không được lưu trong bảng Check-in.
+Lần xác thực thất bại được ghi bằng Audit Record với EventType = ADMISSION_ATTEMPT kèm lý do từ chối; không tạo bảng "attempt log" riêng (theo resolution D6).
+
+Mỗi Ticket chỉ được có tối đa một Check-in thành công; ràng buộc này được triển khai bằng UNIQUE (Ticket ID) trên bảng Check-in (theo BR29 và DR-18).
+
+12.13.2. Phân công nhân viên kiểm soát vào cửa (Check-in Staff Assignment)
+
+Để thực hiện BR39 và FR51 (Check-in Staff chỉ được thực hiện Ticket Validation và Check-in trong phạm vi Concert được phân công), hệ thống duy trì bản ghi phân công: User ID (nhân viên), Concert ID (Concert được phân công), Assigned Timestamp. Đây là mô hình vai trò theo phạm vi tổ chức (org-scoped RBAC theo chuẩn quốc tế — Auth0, S20); quyền truy cập được giữ tối thiểu (least privilege).
+
+12.14. Dữ liệu Danh sách chờ
+12.14.1. Waitlist
+
+Waitlist đại diện cho cơ chế chờ được áp dụng cho một Concert.
+
+Dữ liệu Waitlist phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Waitlist ID	Định danh duy nhất của Waitlist
+Concert ID	Concert mà Waitlist hoạt động cho
+Waitlist status	Trạng thái vận hành hiện tại của Waitlist
+Open timestamp	Thời điểm Customer bắt đầu có thể đăng ký
+Close timestamp	Thời điểm việc đăng ký dừng lại
+Allocation policy	Quy tắc dùng để lựa chọn Customer tiếp theo
+
+Allocation policy phải thuộc tập giá trị: FIFO (First-In-First-Out) — Customer có Joined timestamp sớm hơn được xử lý trước theo BR43. Các policy khác nằm ngoài phạm vi hiện tại.
+
+Cờ Concert.Bật Waitlist là cấu hình bật/tắt khả năng; khi Waitlist đã tồn tại cho Concert, Waitlist status là nguồn sự thật duy nhất cho vận hành (Open/Closed). Waitlist chỉ được mở khi Bật Waitlist = bật; nếu Bật Waitlist = tắt thì Waitlist phải ở trạng thái Closed.
+12.14.2. Waitlist Entry
+
+Waitlist Entry đại diện cho việc một Customer tham gia Waitlist của một Concert.
+
+Dữ liệu Waitlist Entry phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Waitlist Entry ID	Định danh duy nhất
+Waitlist ID	Waitlist mà Customer tham gia
+Customer User ID	Tài khoản Người dùng đại diện cho Customer
+Joined timestamp	Thời điểm Customer tham gia
+Queue position	Vị trí được sử dụng bởi chính sách phân bổ
+Entry status	Trạng thái hiện tại của Waitlist Entry
+Opportunity granted timestamp	Thời điểm Customer được cấp cơ hội Booking
+Opportunity expiry timestamp	Thời điểm cơ hội Booking hết hạn
+Resulting Booking ID	Booking được tạo từ cơ hội đã được cấp
+
+Các điều kiện sau phải được đảm bảo:
+
+Một Customer có thể có một Waitlist Entry đang hoạt động cho một Concert.
+Mặc định: mỗi Customer chỉ có một Waitlist Entry đang hoạt động cho một Concert; nếu một Concert bật chính sách cho phép nhiều Entry thì ràng buộc phải được ép bởi tầng nghiệp vụ (SP/trigger đọc policy của Concert), không dùng UNIQUE toàn cục (theo BR41).
+Quy tắc duy nhất của Entry đang hoạt động chỉ được nới lỏng khi chính sách của Concert cho phép nhiều Entry đang hoạt động.
+Khi kho vé được giải phóng và tồn tại các Waitlist Entry đủ điều kiện, hệ thống phải lựa chọn Customer tiếp theo theo chính sách phân bổ đã cấu hình.
+Khi chính sách phân bổ là FIFO, Customer có Joined timestamp sớm hơn phải có mức ưu tiên xử lý cao hơn.
+Cơ hội Booking được cấp phải có thời điểm hết hạn xác định.
+Cơ hội đã hết hạn không còn cấp cho Customer quyền tạo Booking tương ứng.
+
+Các yêu cầu này triển khai BR40–BR44 và FR60–FR63.
+
+12.15. Dữ liệu Fair Access và Virtual Queue
+12.15.1. Queue
+
+Queue đại diện cho Virtual Queue được vận hành cho một Concert khi Fair Access được bật.
+
+Dữ liệu Queue phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Queue ID	Định danh duy nhất của Virtual Queue
+Concert ID	Concert được Queue kiểm soát
+Queue status	Trạng thái vận hành của Queue
+Admission capacity	Số Customer tối đa được phép đồng thời truy cập Booking Flow
+Fair Access policy	Chính sách xác định thứ tự được phép truy cập
+
+Fair Access policy phải thuộc tập giá trị: First-Come-First-Served (FIFO) — Customer đến trước được ưu tiên admission; Randomized (lottery) — thứ tự admission được xác định ngẫu nhiên để hạn chế lợi dụng tốc độ request. Mọi policy phải tuân thủ BR46: không cho phép Customer bỏ qua cơ chế admission chỉ bằng cách tăng tốc độ request.
+
+Cờ Concert.Bật Fair Access là cấu hình bật/tắt khả năng; khi Queue đã tồn tại cho Concert, Queue status là nguồn sự thật duy nhất cho vận hành (Open/Closed). Queue chỉ được mở khi Bật Fair Access = bật; nếu Bật Fair Access = tắt thì Queue phải ở trạng thái Closed.
+12.15.2. Queue Entry
+
+Queue Entry đại diện cho việc một Customer tham gia Virtual Queue.
+
+Dữ liệu Queue Entry phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Queue Entry ID	Định danh duy nhất
+Queue ID	Virtual Queue mà Customer tham gia
+Customer User ID	Tài khoản Người dùng đại diện cho Customer
+Joined timestamp	Thời điểm Customer tham gia Queue
+Admission position	Vị trí được sử dụng bởi chính sách Fair Access
+Queue status	Trạng thái hiện tại của Customer trong Queue
+Admission timestamp	Thời điểm Customer được đưa vào Booking Flow
+Exit timestamp	Thời điểm Customer rời Queue hoặc mất quyền đủ điều kiện
+Admission expiry timestamp	Thời điểm quyền truy cập được cấp hết hạn
+
+Hệ thống phải đảm bảo:
+
+Thứ tự được phép truy cập phải tuân theo chính sách Fair Access.
+Không được vượt quá Admission capacity.
+Customer không được đạt được ưu tiên không công bằng chỉ bằng cách gửi request với tần suất cao hơn.
+Việc được đưa vào Queue không tạo ra quyền sở hữu EventSeat.
+Quyền đối với EventSeat chỉ phát sinh từ một Booking hợp lệ.
+
+Các yêu cầu này triển khai BR45–BR48 và FR64–FR67.
+
+12.16. Dữ liệu Khuyến mãi và Giảm giá
+12.16.1. Promotion
+
+Thực thể Promotion đại diện cho một chương trình giảm giá được cấu hình.
+
+Dữ liệu Promotion phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Promotion ID	Định danh duy nhất
+Concert ID	Concert mà Promotion áp dụng
+Tên Promotion	Tên của chương trình khuyến mãi
+Mô tả Promotion	Mô tả chương trình khuyến mãi
+Discount type	Loại phép tính giảm giá được Promotion sử dụng
+Discount value	Giá trị giảm giá được cấu hình
+Start datetime	Thời điểm bắt đầu hiệu lực
+End datetime	Thời điểm kết thúc hiệu lực
+Promotion status	Trạng thái hiện tại
+Usage limit	Số lần áp dụng tối đa khi giới hạn này thuộc chính sách Promotion
+Code required flag	Cho biết có yêu cầu Discount Code hay không
+
+Discount type phải thuộc một trong các giá trị: Percentage — Discount value là phần trăm (%) được giảm trên giá trị đủ điều kiện; Fixed Amount — Discount value là số tiền cố định (VND) được trừ trên giá trị đủ điều kiện.
+
+Các điều kiện sau phải được đảm bảo:
+
+Promotion chỉ áp dụng trong phạm vi Concert đã cấu hình.
+Promotion chỉ có hiệu lực trong khoảng từ Start datetime đến End datetime.
+Booking phải đáp ứng tất cả điều kiện của Promotion trước khi giảm giá được áp dụng.
+Việc tính giảm giá phải sử dụng Discount type và Discount value đã cấu hình.
+Promotion không được áp dụng ngoài khoảng thời gian hiệu lực.
+Promotion phải duy trì các điều kiện và giới hạn cần thiết để xác định phạm vi và số lượng Ticket/EventSeat đủ điều kiện được áp dụng Promotion trong một Booking, nếu chính sách Promotion có quy định giới hạn này.
+
+Các yêu cầu này triển khai BR35–BR36 và FR52–FR54.
+
+12.16.2. Discount Code
+
+Khi Promotion sử dụng Discount Code, hệ thống phải duy trì một bản ghi Discount Code.
+
+Dữ liệu Discount Code phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Discount Code ID	Định danh duy nhất
+Promotion ID	Promotion mà Code đại diện
+Code value	Mã do Customer nhập
+Code status	Trạng thái hiện tại của Code
+Valid-from datetime	Thời điểm bắt đầu hiệu lực
+Valid-to datetime	Thời điểm kết thúc hiệu lực
+
+Hệ thống phải xác thực Code được gửi dựa trên Promotion tương ứng và Booking trước khi áp dụng giảm giá.
+Code Value phải duy nhất trong phạm vi Promotion sở hữu nó: UNIQUE (Promotion ID, Code Value) — phù hợp mô hình mã khuyến mãi dùng chung; so với chuẩn Stripe (code unique trong phạm vi active code của một khách hàng — S16), hệ thống này dùng phạm vi Promotion.
+
+Điều này triển khai FR53b.
+
+12.16.3. Áp dụng Booking–Promotion
+
+Hệ thống phải ghi nhận Promotion thực tế đã được áp dụng cho một Booking.
+
+Bản ghi áp dụng phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Booking ID	Booking nhận được giảm giá
+Promotion ID	Promotion được áp dụng
+Discount Code ID	Discount Code được sử dụng, nếu có
+Discount amount	Số tiền giảm giá thực tế áp dụng cho Booking
+Applied timestamp	Thời điểm Promotion được áp dụng
+
+Giá trị giảm giá thực tế đã áp dụng phải được bảo toàn như dữ liệu giao dịch để các giá trị lịch sử của Booking không thay đổi chỉ vì cấu hình Promotion được sửa đổi sau đó.
+Mỗi cặp Booking và Promotion chỉ được có tối đa một bản ghi Booking–Promotion Application. Giá trị Discount Amount của bản ghi phải là tổng giá trị giảm giá thực tế được Promotion áp dụng cho Booking đó theo điều kiện và giới hạn của Promotion.
+
+12.17. Dữ liệu Kiểm toán
+12.17.1. Audit Record
+
+Hệ thống phải duy trì một Audit Record cho mọi sự kiện nghiệp vụ và thay đổi dữ liệu thuộc phạm vi cần kiểm toán đã được xác định.
+
+Audit Record phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Audit ID	Định danh duy nhất
+Actor User ID	Tài khoản Người dùng thực hiện hành động
+Event type	Loại sự kiện cần kiểm toán
+Entity type	Loại đối tượng nghiệp vụ bị tác động
+Entity ID	Định danh của đối tượng nghiệp vụ bị tác động
+Action	Thao tác được thực hiện
+Event timestamp	Thời điểm sự kiện xảy ra
+Previous value	Giá trị trước thay đổi, khi áp dụng
+New value	Giá trị sau thay đổi, khi áp dụng
+Transaction reference	Tham chiếu liên kết sự kiện kiểm toán với giao dịch liên quan
+
+Dữ liệu Audit phải hỗ trợ:
+
+truy xuất ai đã thực hiện hành động;
+xác định đối tượng nghiệp vụ bị tác động;
+xác định thao tác đã xảy ra;
+xác định thời điểm xảy ra;
+tái dựng thay đổi liên quan đối với các cập nhật cần kiểm toán.
+
+Audit Record phải được lưu giữ đối với các sự kiện lịch sử thuộc phạm vi kiểm toán.
+
+Điều này trực tiếp triển khai BP15, BR50–BR51, FR58–FR59 và FR69.
+Các sự kiện do tiến trình hệ thống (SIP1–SIP3) thực hiện được ghi Audit với Actor User ID = tài khoản dự trữ "System" (tạo sẵn khi triển khai); Actor User ID không được NULL.
+
+12.18. Hệ thống và Cấu hình toàn cục (System Configuration)
+
+Hệ thống phải duy trì các cấu hình dùng chung hoặc các hằng số mặc định để chi phối nghiệp vụ nếu không có cấu hình riêng ở cấp Concert.
+
+Dữ liệu Cấu hình toàn cục phải bao gồm:
+
+Thành phần dữ liệu	Định nghĩa
+Configuration ID	Định danh duy nhất của tham số cấu hình
+Configuration key	Tên hoặc khóa dùng để tra cứu (Ví dụ: Default_Temporary_Hold_Duration)
+Configuration value	Giá trị cấu hình
+
+Các cấu hình này đảm bảo hệ thống có giá trị mặc định cho Thời lượng Temporary Hold theo yêu cầu của BR53.
+Ngoài ra, khai báo khóa mặc định toàn cục cho nghiệp vụ chờ: `Waitlist_Opportunity_Duration` (độ dài cơ hội Booking từ Waitlist) và `Queue_Admission_Validity` (thời hạn hiệu lực của quyền admission qua Queue); giá trị có thể được ghi đè bởi cấu hình riêng của Concert (theo resolution D4).
+
+12.19. Dữ liệu Lịch sử và Dữ liệu Thời gian
+
+Hệ thống phải bảo toàn các thông tin về thời gian sau vì các giá trị này trực tiếp quyết định tính hợp lệ và vòng đời của nghiệp vụ:
+
+Lĩnh vực nghiệp vụ	Dữ liệu thời gian
+Concert	Start datetime, End datetime
+Bán vé	Sale start datetime, Sale end datetime
+Booking	Created timestamp, Hold start datetime, Hold expiry datetime
+Payment	Thời điểm yêu cầu, xác nhận và thất bại
+Refund	Thời điểm yêu cầu và xác nhận
+Ticket	Thời điểm phát hành, sử dụng và hủy
+Check-in	Check-in timestamp
+Waitlist	Joined timestamp, Opportunity granted timestamp, Opportunity expiry timestamp
+Virtual Queue	Joined timestamp, Admission timestamp, Exit timestamp, Admission expiry timestamp
+Promotion	Start datetime, End datetime
+Audit	Event timestamp
+
+Thời lượng Temporary Hold phải được xác định từ cấu hình riêng của Concert hoặc cấu hình hệ thống toàn cục có hiệu lực tại thời điểm Booking được tạo. Hold expiry datetime được tính ra phải được cố định cho Booking đó trong thời gian Hold đang hoạt động.
+
+12.20. Dữ liệu Tiền tệ
+
+Hệ thống phải lưu trữ toàn bộ giá trị tiền tệ giao dịch bằng VND.
+
+Các khái niệm tiền tệ sau phải được biểu diễn:
+
+EventSeat Sale Price;
+Booking Subtotal Amount;
+Promotion Discount Amount;
+Booking Final Amount;
+Payment Amount;
+Refund Amount.
+
+Mọi giá trị tiền tệ được lưu trữ cho một giao dịch phải bảo toàn đúng giá trị đã thực sự được sử dụng cho giao dịch đó.
+
+Các thay đổi sau này đối với cấu hình giá hoặc Promotion không được làm thay đổi hồi tố các giá trị lịch sử của Booking, Payment hoặc Refund.
+
+Điều này được yêu cầu bởi phạm vi tiền tệ được định nghĩa trong A19 và các yêu cầu về Promotion và Payment.
+
+Các bất biến tiền tệ liên thực thể sau phải được đảm bảo:
+
+- Payment.Amount của một Payment Confirmed phải bằng Booking.Final Amount của Booking tương ứng tại thời điểm xác nhận thanh toán.
+- Booking.Subtotal Amount phải bằng tổng EventSeat.Sale Price của các EventSeat trong Booking, theo giá snapshot tại thời điểm tạo Booking.
+- Booking.Final Amount phải bằng Booking.Subtotal Amount trừ đi tổng Discount Amount của các bản ghi Booking–Promotion Application thuộc Booking; Final Amount phải ≥ 0.
+- Tổng tích luỹ các Refund Amount của tất cả Refund thuộc một Payment không được vượt quá Payment.Amount; không được tạo Refund mới khi Payment đã được hoàn tiền toàn bộ.
+
+12.21. Các Yêu cầu Toàn vẹn Dữ liệu Liên thực thể
+
+Các bất biến liên thực thể sau phải được thực thi bởi mô hình dữ liệu:
+
+ID	Yêu cầu toàn vẹn dữ liệu
+DR-01	Mỗi Concert phải tham chiếu chính xác một Tài khoản Người dùng đóng vai trò Organizer.
+DR-02	Mỗi Concert phải tham chiếu chính xác một Venue.
+DR-03	Mỗi Concert phải tham chiếu chính xác một Artist.
+DR-04	Mỗi Zone phải tham chiếu chính xác một Venue.
+DR-05	Mỗi Seat phải tham chiếu chính xác một Zone.
+DR-06	Mỗi EventSeat phải tham chiếu chính xác một Concert và một Seat.
+DR-07	Seat được EventSeat tham chiếu phải thuộc Venue được Concert tương ứng tham chiếu.
+DR-08	Một Seat không được xuất hiện nhiều hơn một lần trong kho EventSeat của cùng một Concert.
+DR-09	Mỗi Booking phải tham chiếu chính xác một Customer và một Concert.
+DR-10	Mỗi phân bổ Booking–EventSeat phải tham chiếu một EventSeat thuộc Concert của Booking.
+DR-11	Một EventSeat không được phân bổ cho hai Booking đang hoạt động cùng một thời điểm.
+DR-12	Mỗi Booking Confirmed phải có Payment tương ứng ở trạng thái Confirmed.
+DR-13	Booking không được chuyển sang Confirmed khi Payment của nó ở trạng thái Failed.
+DR-14	Mỗi Ticket được phát hành phải tham chiếu một Booking Confirmed.
+DR-15	Mỗi Ticket phải tham chiếu chính xác một EventSeat.
+DR-16	Mỗi Ticket phải có Ticket Code duy nhất trên toàn hệ thống.
+DR-17	Mỗi Check-in thành công phải tham chiếu một Ticket hợp lệ.
+DR-18	Một Ticket không được có nhiều hơn một Check-in thành công.
+DR-19	Mỗi Refund phải tham chiếu một Payment Confirmed.
+DR-20	Mỗi Waitlist Entry đang hoạt động phải tham chiếu một Customer và một Concert (Concert được tham chiếu gián tiếp qua Waitlist → Concert vì quan hệ 1:1, theo §17.14).
+DR-21	Mỗi Queue Entry phải tham chiếu một Customer và một Concert.
+DR-22	Việc được Admission vào Queue không tạo ra quan hệ sở hữu EventSeat.
+DR-23	Mỗi Promotion application được ghi nhận cho Booking phải tham chiếu đến Promotion thực sự được sử dụng cho giao dịch đó.
+DR-24	Các giá trị giao dịch lịch sử phải giữ nguyên sau các thay đổi cấu hình tiếp theo.
+DR-25	Audit Record phải lưu giữ danh tính, thời gian, thao tác và đối tượng nghiệp vụ bị tác động cần thiết cho việc truy xuất nguồn gốc.
+
+Các bất biến này cụ thể hóa các quy tắc về cấu trúc, hành vi, phân quyền và toàn vẹn được quy định trong BR01–BR54.
+
+12.22. Yêu cầu về Vòng đời và Bảo toàn Dữ liệu
+
+Hệ thống không được xóa vật lý một bản ghi nghiệp vụ nếu việc xóa đó làm mất các sự kiện nghiệp vụ cần thiết cho hệ thống.
+
+Do đó, các bản ghi nghiệp vụ sau phải được giữ lại sau khi vòng đời vận hành của chúng hoàn tất:
+
+các Concert đã hoàn thành hoặc bị hủy;
+các Booking Expired hoặc Cancelled;
+các Payment Confirmed, Failed hoặc Refunded;
+các Refund;
+các Ticket Issued, Used hoặc Cancelled;
+các Check-in;
+các Waitlist Entry đã hoàn tất;
+các Queue Entry đã hoàn tất;
+các bản ghi giao dịch về Promotion đã được áp dụng;
+các Audit Record.
+
+Các thay đổi trạng thái vận hành phải được biểu diễn bằng chuyển đổi trạng thái (state transition) thay vì xóa sự kiện nghiệp vụ ban đầu.
+
+Điều này trực tiếp triển khai BR49–BR51.
+
+12.23. Truy xuất Nguồn gốc Dữ liệu–Quy trình
+
+Mô hình dữ liệu phải cung cấp toàn bộ dữ liệu cần thiết cho mười lăm Quy trình nghiệp vụ đã được xác định:
+
+Quy trình nghiệp vụ	Dữ liệu yêu cầu
+BP1 – Quản lý Concert	User, Organizer, Artist, Concert, Venue
+BP2 – Quản lý Venue & Seat	Venue, Zone, Seat
+BP3 – Cấu hình kho vé	Concert, Venue, Seat, EventSeat, Ticket Category
+BP4 – Bán vé	Concert, EventSeat, Ticket Category
+BP5 – Booking & Temporary Hold	Customer User, Booking, EventSeat, Hold data
+BP6 – Thanh toán & Xác nhận mua	Booking, Payment, EventSeat, Ticket
+BP7 – Hết hạn Hold	Booking, EventSeat, Hold expiry data
+BP8 – Hủy & Hoàn tiền	Booking, Ticket, Payment, Refund, EventSeat
+BP9 – Check-in & Xác thực	Ticket, Concert, Check-in, Check-in Staff
+BP10 – Waitlist	Waitlist, Waitlist Entry, Customer, EventSeat, Booking
+BP11 – Fair Access / Virtual Queue	Queue, Queue Entry, Customer, Concert, Admission Capacity
+BP12 – Người dùng & Phân quyền	User, Role, User–Role Assignment
+BP13 – Promotion & Discount	Promotion, Discount Code, Booking
+BP14 – Báo cáo & Giám sát vận hành	Concert, Booking, Payment, Ticket, Check-in, EventSeat
+BP15 – Kiểm toán & Truy xuất giao dịch	Audit Record và các bản ghi nghiệp vụ được tham chiếu
+
+Mapping này được suy ra trực tiếp từ đặc tả Quy trình nghiệp vụ.
+
+12.24. Tiêu chí Hoàn thành Yêu cầu Dữ liệu
+
+Các Yêu cầu Dữ liệu được xem là hoàn chỉnh khi mô hình dữ liệu ở bước tiếp theo có biểu diễn xác định cho mọi khái niệm nghiệp vụ và mọi thành phần dữ liệu lâu dài cần thiết để hỗ trợ chuỗi sau:
+
+Định danh và Phân quyền
+
+User → Role → Authorized Actor
+
+Người dùng → Vai trò → Tác nhân được phân quyền
+
+Concert và Venue
+
+Organizer → Concert → Venue → Zone → Seat
+
+Organizer → Concert → Venue → Zone → Seat
+
+Kho vé dành riêng cho Concert
+
+Concert + Seat → EventSeat → Ticket Category + Sale Price + Inventory Status
+
+Concert + Seat → EventSeat → Hạng vé + Giá bán + Trạng thái kho vé
+
+Giao dịch mua
+
+Customer → Booking → Booking–EventSeat → Payment → Ticket
+
+Customer → Booking → Phân bổ Booking–EventSeat → Payment → Ticket
+
+Vào cửa
+
+Ticket → Check-in
+
+Ticket → Check-in
+
+Xử lý sau giao dịch
+
+Booking/Ticket → Cancellation → Refund
+
+Booking/Ticket → Hủy → Hoàn tiền
+
+Truy cập trì hoãn
+
+Customer → Waitlist Entry → Booking Opportunity → Booking
+
+Customer → Waitlist Entry → Cơ hội Booking → Booking
+
+Truy cập khi nhu cầu cao
+
+Customer → Queue Entry → Admission → Booking
+
+Customer → Queue Entry → Kiểm soát vào cửa → Booking
+
+Khuyến mãi
+
+Promotion → Discount Code → Booking Application → Final Booking Amount
+
+Promotion → Discount Code → Áp dụng cho Booking → Giá trị Booking cuối cùng
+
+Truy xuất nguồn gốc
+
+User → Audit Record → Business Object / Transaction
+
+User → Audit Record → Đối tượng nghiệp vụ / Giao dịch
+
+Mọi Business Rule được định nghĩa trong đặc tả hệ thống phải có khả năng truy xuất đến một hoặc nhiều thành phần dữ liệu, quan hệ, trạng thái, ràng buộc hoặc bản ghi giao dịch trong mô hình dữ liệu cuối cùng.
+
+Thiết kế quan hệ sau đó phải chuyển các Yêu cầu Dữ liệu ở mức khái niệm và logic này thành các quan hệ (relations) trong SQL Server, đồng thời thực thi các ràng buộc về toàn vẹn thực thể và toàn vẹn tham chiếu thông qua khóa và các ràng buộc.
+
+SQL Server sử dụng khóa chính (Primary Key) để đảm bảo toàn vẹn thực thể và khóa ngoại (Foreign Key) để thực thi các quan hệ giữa những bảng có liên quan.
+
+12.25. Ranh giới của Yêu cầu Dữ liệu
+
+Các dữ liệu sau đây nằm ngoài phạm vi của hệ thống:
+
+Dữ liệu tài khoản ngân hàng và cơ sở hạ tầng ngân hàng được các tổ chức tài chính bên ngoài sử dụng.
+Cơ sở hạ tầng xử lý thanh toán nội bộ của các cổng thanh toán bên ngoài.
+Cơ sở hạ tầng của các nhà cung cấp dịch vụ định danh bên ngoài.
+Cơ sở hạ tầng nội bộ của các nhà cung cấp dịch vụ email/SMS và dịch vụ thông báo bên ngoài.
+Dữ liệu xử lý đa tiền tệ và tỷ giá hối đoái.
+Dữ liệu kế toán thuế và quyết toán tài chính bên ngoài.
+Metadata về cơ sở hạ tầng high availability, replication và multi-region.
+
+Hệ thống chỉ lưu trữ các bản ghi nghiệp vụ và trạng thái giao dịch cần thiết tại các ranh giới tích hợp đã được xác định.
+
+Phạm vi này tuân theo A18–A22.
+
+13. Entity Identification
+Những business concept nào cần được mô hình hóa như các thực thể (Entity) độc lập trong hệ thống?
+
+#	Thực thể dữ liệu	Mục đích
+1	User Account	Xác định người dùng hệ thống
+2	Role	Xác định các vai trò phân quyền
+3	User–Role Assignment	Liên kết User với Role
+4	Artist	Xác định nghệ sĩ biểu diễn của Concert
+5	Concert	Đại diện cho sự kiện Concert và vòng đời của nó
+6	Venue	Đại diện cho địa điểm tổ chức Concert
+7	Zone	Đại diện cho một khu vực vật lý của Venue
+8	Seat	Đại diện cho một vị trí ghế vật lý
+9	EventSeat	Đại diện cho kho vé của một Seat trong một Concert cụ thể
+10	Ticket Category	Phân loại kho vé của một Concert
+11	Booking	Đại diện cho giao dịch đặt/mua vé của Customer
+12	Booking–EventSeat Allocation	Đại diện cho các EventSeat được giữ/phân bổ cho Booking
+13	Payment	Ghi nhận giao dịch thanh toán
+14	Refund	Ghi nhận giao dịch hoàn tiền
+15	Ticket	Đại diện cho quyền vào cửa được phát hành
+16	Check-in	Ghi nhận việc Ticket được sử dụng để vào cửa thành công
+17	Waitlist	Đại diện cho cơ chế danh sách chờ của Concert
+18	Waitlist Entry	Đại diện cho vị trí tham gia Waitlist của Customer
+19	Queue	Đại diện cho Fair Access / Virtual Queue của Concert
+20	Queue Entry	Đại diện cho việc Customer tham gia Queue
+21	Promotion	Xác định chương trình khuyến mãi
+22	Discount Code	Đại diện cho mã khuyến mãi có thể sử dụng
+23	Booking–Promotion Application	Ghi nhận Promotion thực tế được áp dụng cho Booking
+24	Audit Record	Bảo toàn các sự kiện nghiệp vụ và thay đổi cần kiểm toán
+25	System Configuration	Lưu trữ các cấu hình toàn cục (VD: Default Temporary Hold Duration)
+26	Check-in Staff Assignment	Liên kết nhân viên kiểm soát vào cửa với Concert được phân công (BR39, FR51)
+
+Ghi chú Thiết kế: 
+Về mặt mô hình hóa dữ liệu (ER Modeling), "Organizer" là một Khái niệm logic (Logical Role), không phải là một Thực thể độc lập. Hệ thống sẽ không tạo bảng vật lý/logical riêng cho Organizer. Thay vào đó, khái niệm này được triển khai trực tiếp thông qua việc bảng `Concert` thiết lập khóa ngoại (`Organizer User ID`) tham chiếu thẳng đến bảng `User Account`, kết hợp cùng bảng `User–Role Assignment` để đảm bảo User đó đang nắm giữ Role Organizer. "Phạm vi sở hữu" không phải là một thuộc tính vật lý, mà là một quan hệ suy diễn (derived relationship) thu được từ truy vấn dữ liệu.
+
+
+14. Attribute Identification
+Mỗi Entity được xác định cần có những thuộc tính (Attribute) nào để biểu diễn đầy đủ các thông tin nghiệp vụ mà hệ thống phải lưu trữ và quản lý?
+
+1. Identity & Authorization
+Entity	Attributes
+User Account	User ID, Username / Login Identifier, Account Status, Created Timestamp, Updated Timestamp, Email, Display Name, Password Hash
+Role	Role ID, Role Name, Role Description, Role Status
+User–Role Assignment	User ID, Role ID, Assigned Timestamp, Assignment Status
+
+File xác định User cần hỗ trợ tạo/cập nhật/khóa-mở khóa và truy vết actor; Role có 4 giá trị nghiệp vụ Admin, Organizer, Customer, Check-in Staff.
+
+Organizer không có bảng riêng. Thông tin cần thiết của Organizer là User ID của User đang mang Role Organizer; Concert dùng Organizer User ID.
+
+2. Concert & Artist
+Entity	Attributes
+Artist	Artist ID, Artist Name, Artist Description
+Concert	Concert ID, Organizer User ID, Artist ID, Venue ID, Concert Name, Start Datetime, End Datetime, Concert Status, Sale Start Datetime, Sale End Datetime, Purchase Limit, Temporary Hold Duration, Fair Access Enabled, Waitlist Enabled, Sales Paused, Cancellation Policy, Refund Policy
+
+Concert Status gồm: Draft, Published, OnSale, SaleClosed, Completed, Cancelled.
+
+Artist có đúng 3 thuộc tính được tài liệu xác định: ID, tên và mô tả.
+
+3. Venue Structure
+Entity	Attributes
+Venue	Venue ID, Venue Name, Address, Venue Status, Created Timestamp, Updated Timestamp
+Zone	Zone ID, Venue ID, Zone Code, Zone Name, Zone Description
+Seat	Seat ID, Zone ID, Venue ID, Seat Code, Seat Label
+
+Đặc biệt, Seat không có trạng thái bán vé. Trạng thái của Seat theo từng Concert nằm ở EventSeat. Đây là một phân biệt quan trọng trong mô hình.
+
+Venue ID trên Seat là denormalization có kiểm soát (tương tự Ticket.ConcertID theo FK-06): giá trị phải bằng Zone.VenueID của ZoneID tương ứng. Denormalization này cần thiết để SQL Server có thể enforce UNIQUE (Venue ID, Seat Code) tại database level theo BR05 (§12.7.3, §23.7). Bất biến nhất quán được duy trì bằng TRG_SeatVenueConsistency (§23.4).
+
+4. Ticket Inventory
+Entity	Attributes
+EventSeat	EventSeat ID, Concert ID, Seat ID, Ticket Category ID, Sale Price, Inventory Status, Added Timestamp, Unavailability Reason
+Ticket Category	Ticket Category ID, Concert ID, Category Name, Category Description, Category Status
+
+Inventory Status của EventSeat gồm:
+
+Available, OnHold, OnHoldForWaitlist, Booked, Unavailable.
+
+File cũng xác định rõ Pricing Configuration không phải Entity riêng; Sale Price là thuộc tính của EventSeat. Tương tự, Selling Configuration không phải Entity riêng; các thông tin mở/đóng bán và purchase limit nằm ở Concert.
+
+5. Booking
+Entity	Attributes
+Booking	Booking ID, Customer User ID, Concert ID, Booking Status, Hold Start Datetime, Hold Expiry Datetime, Subtotal Amount, Final Amount, Created Timestamp, Confirmed Timestamp, Cancelled Timestamp, Expired Timestamp
+Booking–EventSeat Allocation	Booking ID, EventSeat ID, Allocation Timestamp, Release Timestamp, Allocation Status, Price Snapshot
+
+Booking Status gồm:
+
+Pending, Confirmed, Expired, Cancelled.
+
+Booking–EventSeat Allocation phải tồn tại như một bản ghi riêng vì một Booking có thể chứa nhiều EventSeat và bản thân quan hệ này phải lưu allocation/release history.
+
+6. Payment & Refund
+Entity	Attributes
+Payment	Payment ID, Booking ID, Payment Status, Amount, Currency, Payment Reference, Payment Request Timestamp, Confirmation Timestamp, Failure Timestamp, Provider Reference
+Refund	Refund ID, Payment ID, Refund Status, Refund Amount, Refund Reason, Refund Request Timestamp, Refund Confirmation Timestamp, Refund Reference
+
+Payment Status:
+
+Pending, Confirmed, Failed, Refunded.
+
+Refund phải tham chiếu một Payment đã Confirmed.
+
+Đơn vị tiền tệ của hệ thống là VND.
+
+7. Ticket & Admission
+Entity	Attributes
+Ticket	Ticket ID, Booking ID, EventSeat ID, Concert ID, Ticket Code, Ticket Status, Issued Timestamp, Used Timestamp, Cancelled Timestamp
+Check-in	Check-in ID, Ticket ID, Concert ID, Check-in Staff User ID, Check-in Timestamp, Validation Result, Validation Information
+
+Ticket Status:
+
+Issued, Used, Cancelled.
+
+Check-in là một record/event độc lập vì tài liệu yêu cầu Check-in ID, Staff, timestamp và validation information; check-in thành công chuyển Ticket từ Issued → Used.
+
+8. Waitlist
+Entity	Attributes
+Waitlist	Waitlist ID, Concert ID, Waitlist Status, Open Timestamp, Close Timestamp, Allocation Policy
+Waitlist Entry	Waitlist Entry ID, Waitlist ID, Customer User ID, Joined Timestamp, Queue Position, Entry Status, Opportunity Granted Timestamp, Opportunity Expiry Timestamp, Resulting Booking ID
+
+Waitlist Entry phải lưu cả vị trí, trạng thái, thời điểm cấp cơ hội Booking và thời điểm cơ hội hết hạn.
+
+9. Fair Access / Virtual Queue
+Entity	Attributes
+Queue	Queue ID, Concert ID, Queue Status, Admission Capacity, Fair Access Policy
+Queue Entry	Queue Entry ID, Queue ID, Customer User ID, Joined Timestamp, Admission Position, Queue Status, Admission Timestamp, Exit Timestamp, Admission Expiry Timestamp
+
+Các thuộc tính này trực tiếp phục vụ BR45–BR48 và FR64–FR67, đặc biệt là Admission Capacity, thứ tự admission và thời hạn admission.
+
+10. Promotion & Discount
+Entity	Attributes
+Promotion	Promotion ID, Concert ID, Promotion Name, Promotion Description, Discount Type, Discount Value, Start Datetime, End Datetime, Promotion Status, Usage Limit, Code Required Flag
+Discount Code	Discount Code ID, Promotion ID, Code Value, Code Status, Valid-From Datetime, Valid-To Datetime
+Booking–Promotion Application	Booking ID, Promotion ID, Discount Code ID, Discount Amount, Applied Timestamp
+
+Promotion có phạm vi theo Concert và có thời gian hiệu lực riêng.
+
+Điểm rất quan trọng ở Booking–Promotion Application là Discount Amount thực tế phải được lưu lại, chứ không tính lại từ cấu hình Promotion sau này, nhằm bảo toàn lịch sử giao dịch.
+
+11. Audit & System Configuration
+Entity	Attributes
+Audit Record	Audit ID, Actor User ID, Event Type, Entity Type, Entity ID, Action, Event Timestamp, Previous Value, New Value, Transaction Reference
+System Configuration	Configuration ID, Configuration Key, Configuration Value
+
+Audit Record phải đủ thông tin để xác định ai, đối tượng nào, hành động gì, khi nào, và có thể tái dựng thay đổi cần audit.
+
+System Configuration hiện được đặc tả chủ yếu để lưu các cấu hình toàn cục như Default_Temporary_Hold_Duration.
+
+15. Candidate Key Identification
+Đối với mỗi Entity, những tập hợp Attribute tối thiểu nào có khả năng định danh duy nhất mỗi instance của Entity đó?
+
+15.1. Mục đích
+
+Candidate Key Identification xác định tập hợp thuộc tính tối thiểu có khả năng định danh duy nhất mỗi instance của từng Entity trong mô hình dữ liệu.
+
+Một tập hợp thuộc tính được xem là Candidate Key khi đồng thời thỏa mãn các điều kiện sau:
+
+Uniqueness: không có hai instance khác nhau của cùng một Entity có cùng giá trị trên toàn bộ tập thuộc tính của Candidate Key.
+Minimality: không thể loại bỏ bất kỳ thuộc tính nào khỏi Candidate Key mà vẫn giữ được tính duy nhất.
+Identity suitability: các thuộc tính được sử dụng để định danh phải đại diện cho identity của instance và không phụ thuộc vào các thuộc tính mô tả hoặc trạng thái có thể thay đổi trong vòng đời của Entity.
+
+Trong mô hình dữ liệu này, các thuộc tính ... ID được đặc tả là định danh duy nhất của các Entity tương ứng sẽ được xem xét đầu tiên như Candidate Key. Đối với các associative Entity không có một identifier riêng, Candidate Key được xác định từ tập hợp tối thiểu các thuộc tính tham chiếu đến các Entity tham gia vào quan hệ đó.
+
+Việc xác định Candidate Key phải nhất quán với các Data Requirements, Business Rules, các yêu cầu toàn vẹn dữ liệu và vòng đời của các Entity đã được xác định.
+
+15.2. Quy tắc xác định Candidate Key
+
+Các quy tắc sau được áp dụng khi xác định Candidate Key:
+
+CK01. Mỗi Entity phải có ít nhất một Candidate Key có khả năng định danh duy nhất mỗi instance.
+
+CK02. Candidate Key phải là tập thuộc tính tối thiểu; các thuộc tính không cần thiết để duy trì tính duy nhất không được đưa vào Candidate Key.
+
+CK03. Các thuộc tính mô tả, trạng thái, giá trị giao dịch hoặc timestamp không được sử dụng làm Candidate Key nếu không có Business Rule xác định rõ tính duy nhất của chúng.
+
+CK04. Đối với một Entity có một identifier riêng được hệ thống xác định là duy nhất, identifier đó được xem là Candidate Key của Entity.
+
+CK05. Đối với associative Entity không có identifier riêng, Candidate Key được xác định từ tổ hợp tối thiểu các identifier của các Entity tham gia nếu tổ hợp đó xác định duy nhất một association instance.
+
+CK06. Một Entity có thể có nhiều Candidate Key nếu nhiều tập thuộc tính khác nhau đều thỏa mãn điều kiện uniqueness và minimality.
+
+CK07. Candidate Key không được phụ thuộc vào trạng thái hiện tại của Entity hoặc các giá trị có thể thay đổi trong suốt vòng đời Entity.
+
+CK08. Việc một Candidate Key được chọn làm Primary Key là bước thiết kế quan hệ tiếp theo; Candidate Key Identification không mặc định tất cả Candidate Key đều là Primary Key.
+
+15.3. Candidate Key của các Entity
+#	Entity	Candidate Key	Loại
+1	User Account	{User ID}, {Username}	Two Simple/Alternate Candidates; {Username} là natural key (UNIQUE)
+2	Role	{Role ID}, {Role Name}	Two Candidate Keys; {Role Name} là natural key (UNIQUE)
+3	User–Role Assignment	{User ID, Role ID}	Composite Candidate Key
+4	Artist	{Artist ID}	Simple Candidate Key
+5	Concert	{Concert ID}	Simple Candidate Key
+6	Venue	{Venue ID}	Simple Candidate Key
+7	Zone	{Zone ID}	Simple Candidate Key
+8	Seat	{Seat ID}	Simple Candidate Key
+9	EventSeat	{EventSeat ID};{Concert ID, Seat ID}	Two Candidate Keys
+Lý do: DR-08 quy định một Seat không được xuất hiện quá một lần trong inventory của cùng một Concert, tức {Concert ID, Seat ID} là một tổ hợp unique; đồng thời Concert ID riêng và Seat ID riêng đều không đủ để định danh EventSeat.
+10	Ticket Category	{Ticket Category ID}	Simple Candidate Key
+11	Booking	{Booking ID}	Simple Candidate Key
+12	Booking–EventSeat Allocation	{Booking ID, EventSeat ID}	Composite Candidate Key
+13	Payment	{Payment ID}	Simple Candidate Key
+14	Refund	{Refund ID}	Simple Candidate Key
+15	Ticket	{Ticket ID}, {Ticket Code}	Two Candidate Keys
+16	Check-in	{Check-in ID}, {Ticket ID}	Two Candidate Keys; {Ticket ID} duy nhất vì mỗi Ticket tối đa một Check-in thành công
+17	Waitlist	{Waitlist ID}, {Concert ID}	Two Candidate Keys; {Concert ID} duy nhất vì quan hệ 1:1 với Concert
+18	Waitlist Entry	{Waitlist Entry ID}	Simple Candidate Key
+19	Queue	{Queue ID}, {Concert ID}	Two Candidate Keys; {Concert ID} duy nhất vì quan hệ 1:1 với Concert
+20	Queue Entry	{Queue Entry ID}	Simple Candidate Key
+21	Promotion	{Promotion ID}	Simple Candidate Key
+22	Discount Code	{Discount Code ID}	Simple Candidate Key
+23	Booking–Promotion Application	{Booking ID, Promotion ID}	Composite Candidate Key
+24	Audit Record	{Audit ID}	Simple Candidate Key
+25	System Configuration	{Configuration ID}, {Configuration Key}	Two Candidate Keys; {Configuration Key} duy nhất vì tra cứu cấu hình phải trả về tối đa một giá trị
+26	Check-in Staff Assignment	{User ID, Concert ID}	Composite Candidate Key
+
+Danh sách Entity nền tảng này tương ứng với danh mục dữ liệu nghiệp vụ trong Data Requirements, sau khi Organizer được xử lý như một vai trò của User Account thay vì một identity độc lập.
+
+15.4. Giải thích Candidate Key của các Entity chính
+15.4.1. User Account
+
+User Account có:
+
+User ID
+Username / Login Identifier
+Account Status
+Created Timestamp
+Updated Timestamp
+
+Trong đó User ID được xác định là định danh duy nhất của User Account. Các thuộc tính còn lại mô tả thông tin đăng nhập, trạng thái và lịch sử cập nhật.
+
+Do đó:
+
+Candidate Key = {User ID}, {Username}
+
+Username / Login Identifier được sử dụng cho xác thực theo mục 12.3.1; ràng buộc UNIQUE (Username) phải được bảo toàn, khuyến nghị theo collation case-insensitive để tránh nhầm lẫn danh tính.
+
+15.4.2. Role
+
+Role có Role ID, Role Name, Role Description và Role Status. Role ID là định danh duy nhất của Role.
+
+Do đó:
+
+Candidate Key = {Role ID}, {Role Name}
+
+Role Name là tên nghiệp vụ duy nhất của Role (theo mục 12.3.2); ràng buộc UNIQUE (Role Name) phải được bảo toàn, khuyến nghị theo collation case-insensitive.
+
+15.4.3. User–Role Assignment
+
+Entity này gồm:
+
+User ID
+Role ID
+Assigned Timestamp
+Assignment Status
+
+Assigned Timestamp và Assignment Status là dữ liệu mô tả assignment, không phải identity.
+
+Do đó Candidate Key tối thiểu là:
+
+{User ID, Role ID}
+
+15.4.4. Organizer
+
+Organizer không có Candidate Key riêng trong logical model.
+
+Tài liệu xác định Organizer là một human actor đồng thời được quản lý thông qua User/Role, vì vậy Organizer được biểu diễn bởi User Account được gán Role Organizer, thay vì duy trì một identity độc lập thứ hai. Concert tham chiếu đến Organizer User ID.
+
+Do đó không tạo:
+
+OrganizerID
+
+và không xác định Candidate Key riêng cho Organizer.
+
+15.4.5. Artist
+
+Artist có:
+
+Artist ID
+Artist Name
+Artist Description
+
+Trong đó Artist ID là định danh duy nhất.
+
+Candidate Key = {Artist ID}
+
+Không sử dụng Artist Name làm Candidate Key vì tài liệu không quy định tên Artist là duy nhất.
+
+15.4.6. Concert
+
+Concert có Concert ID cùng các thuộc tính về Organizer, Artist, Venue, lịch trình, bán vé, policy và lifecycle.
+
+Candidate Key = {Concert ID}
+
+Không sử dụng Concert Name + Start Datetime làm Candidate Key vì tài liệu không đưa ra uniqueness rule cho tổ hợp này.
+
+15.4.7. Venue, Zone và Seat
+
+Các entity này lần lượt có:
+
+Venue ID
+Zone ID
+Seat ID
+
+là các identifier riêng.
+
+Do đó:
+
+Venue → {Venue ID}
+Zone  → {Zone ID}
+Seat  → {Seat ID}
+
+Đặc biệt, Seat Code chỉ là identifier nghiệp vụ của Seat trong Zone/Venue; tài liệu không xác định Seat Code đơn lẻ là globally unique. Tuy nhiên, BR05 và mục 12.7.3 yêu cầu Seat Code duy nhất trong phạm vi Venue, do đó ràng buộc UNIQUE (Venue ID, Seat Code) phải được bảo toàn, trong khi không yêu cầu Seat Code globally unique.
+
+15.4.8. EventSeat
+
+EventSeat đại diện cho việc một Seat vật lý tham gia vào ticket inventory của một Concert cụ thể. Data Requirements xác định EventSeat ID là định danh duy nhất của đơn vị inventory. Đồng thời, DR-08 quy định một Seat không được xuất hiện nhiều hơn một lần trong kho EventSeat của cùng một Concert.
+
+Do đó, EventSeat có hai Candidate Key:
+
+Candidate Key 1
+
+{EventSeat ID}
+
+EventSeat ID được đặc tả là định danh duy nhất của EventSeat.
+
+Candidate Key 2
+
+{Concert ID, Seat ID}
+
+Tổ hợp này xác định duy nhất một EventSeat vì:
+
+một EventSeat thuộc chính xác một Concert;
+một EventSeat tham chiếu chính xác một Seat;
+một Seat không được xuất hiện nhiều hơn một lần trong inventory của cùng một Concert.
+
+Tính minimality của {Concert ID, Seat ID} được xác định vì:
+
+Concert ID riêng lẻ không đủ để định danh EventSeat;
+Seat ID riêng lẻ không đủ vì cùng một Seat vật lý có thể tham gia inventory của nhiều Concert khác nhau.
+
+Vì vậy:
+
+CK1={EventSeatID}
+CK2={ConcertID,SeatID}
+
+Trong bước Primary Key Selection tiếp theo, một trong hai Candidate Key sẽ được chọn làm Primary Key. Việc chọn EventSeat ID làm Primary Key không làm mất tư cách Candidate Key của {Concert ID, Seat ID}; Candidate Key thứ hai có thể được bảo toàn bằng một UNIQUE constraint.
+
+15.4.9. Ticket Category
+
+Ticket Category có Ticket Category ID, Concert ID, tên, mô tả và trạng thái.
+
+Candidate Key = {Ticket Category ID}
+
+Không xác định {Concert ID + Category Name} là Candidate Key vì tài liệu không quy định uniqueness của tên hạng vé. Lưu ý: {Concert ID, Ticket Category ID} phải được khai UNIQUE trên Ticket Category để phục vụ composite FK EventSeat → Ticket Category (§17.7); vì Ticket Category ID đơn lẻ đã duy nhất nên tập này là khóa thay thế dạng UNIQUE, không phải candidate key tối thiểu (theo CK02).
+
+15.4.10. Booking
+
+Booking có Booking ID, Customer User ID, Concert ID, lifecycle status, hold data, amounts và các timestamp.
+
+Candidate Key = {Booking ID}
+
+Customer, Concert, status và timestamp mô tả Booking nhưng không định danh nó.
+
+15.4.11. Booking–EventSeat Allocation
+
+Allocation gồm:
+
+Booking ID
+EventSeat ID
+Allocation Timestamp
+Release Timestamp
+Allocation Status
+
+Do một allocation biểu diễn việc một EventSeat được đưa vào một Booking, Candidate Key tối thiểu là:
+
+{Booking ID, EventSeat ID}
+
+15.4.12. Payment
+
+Payment có Payment ID, Booking ID, status, amount, currency, payment reference và các timestamp.
+
+Candidate Key = {Payment ID}
+
+Payment Reference không được xác định là globally unique trong Data Requirements, do đó không được tự động xem là Candidate Key.
+
+15.4.13. Refund
+
+Refund có:
+
+Refund ID
+Payment ID
+Refund Status
+Refund Amount
+Refund Reason
+Request/Confirmation Timestamp
+Refund Reference
+
+Candidate Key = {Refund ID}
+
+Không dùng Payment ID làm Candidate Key vì một Payment có thể được xử lý Refund theo business policy; bản thân Refund có identity riêng.
+
+15.5. Candidate Keys của Ticket
+
+Ticket là Entity đặc biệt vì có hai Candidate Key.
+
+Tài liệu xác định:
+
+Ticket ID là định danh duy nhất của Ticket.
+Ticket Code phải duy nhất trên toàn hệ thống.
+
+Ngoài ra DR-16 quy định mỗi Ticket phải có một Ticket Code duy nhất trên toàn hệ thống.
+
+Do đó:
+
+Candidate Key 1:
+
+{Ticket ID}
+
+Candidate Key 2:
+
+{Ticket Code}
+
+Cả hai đều là minimal unique identifier.
+
+Việc chọn Candidate Key nào làm Primary Key được thực hiện ở bước Relational Design. Candidate Key còn lại phải được bảo toàn tính duy nhất bằng một ràng buộc UNIQUE.
+
+15.6. Check-in
+
+Check-in được mô hình hóa như một event record có identity riêng:
+
+Check-in ID
+Ticket ID
+Concert ID
+Check-in Staff User ID
+Check-in Timestamp
+Validation Result
+Validation Information
+
+Do đó:
+
+Candidate Key = {Check-in ID}, {Ticket ID}
+
+{Ticket ID} cũng là một Candidate Key của Check-in vì DR-18 giới hạn mỗi Ticket chỉ có tối đa một Check-in thành công; ràng buộc UNIQUE (Ticket ID) trên Check-in phải được bảo toàn. PK vẫn giữ {Check-in ID}.
+
+15.7. Waitlist và Waitlist Entry
+Waitlist
+
+Waitlist có Waitlist ID, Concert ID, status, open/close timestamps và allocation policy.
+
+Candidate Key = {Waitlist ID}, {Concert ID}
+
+Quan hệ Waitlist–Concert là 1:1 theo mục 12.14.1; ràng buộc UNIQUE (Concert ID) phải được bảo toàn.
+
+Waitlist Entry
+
+Waitlist Entry có Waitlist Entry ID riêng, cùng Waitlist ID, Customer User ID, Joined Timestamp, Queue Position, Entry Status và Booking Opportunity data.
+
+Candidate Key = {Waitlist Entry ID}
+
+Không dùng {Waitlist ID, Customer User ID} làm Candidate Key, vì tài liệu đã cấp một identity riêng cho Waitlist Entry và còn cho phép policy nới lỏng uniqueness của active entry trong một số trường hợp.
+
+15.8. Queue và Queue Entry
+Queue
+
+Queue có Queue ID duy nhất, Concert ID, Queue Status, Admission Capacity và Fair Access Policy.
+
+Candidate Key = {Queue ID}, {Concert ID}
+
+Quan hệ Queue–Concert là 1:1 theo mục 12.15.1; ràng buộc UNIQUE (Concert ID) phải được bảo toàn.
+
+Queue Entry
+
+Queue Entry có Queue Entry ID duy nhất cùng Customer, timestamps, Admission Position và status.
+
+Candidate Key = {Queue Entry ID}
+
+15.9. Promotion và Discount Code
+Promotion
+
+Promotion có Promotion ID duy nhất và các thuộc tính về Concert, discount, hiệu lực và policy.
+
+Candidate Key = {Promotion ID}
+
+Discount Code
+
+Discount Code có Discount Code ID duy nhất, Promotion ID, Code Value, Code Status và validity period.
+
+Candidate Key = {Discount Code ID}
+
+Code Value không được xác định là Candidate Key trong phiên bản hiện tại vì tài liệu chưa quy định rõ phạm vi uniqueness của Code Value.
+
+15.10. Booking–Promotion Application
+
+Một Promotion hợp lệ chỉ được ghi nhận tối đa một lần cho mỗi Booking; hệ thống không được tạo nhiều Promotion Application độc lập cho cùng một cặp Booking và Promotion.
+
+Do đó:
+
+{BookingID, PromotionID}
+
+là Candidate Key của Booking–Promotion Application.
+
+Entity này lưu:
+
+Booking ID
+Promotion ID
+Discount Code ID, nếu có
+Discount Amount
+Applied Timestamp
+
+và Discount Amount thực tế phải được bảo toàn như dữ liệu giao dịch.
+
+Discount Code ID, Discount Amount và Applied Timestamp không thuộc Candidate Key vì chúng không tạo identity cho association.
+
+Việc số lượng Ticket/EventSeat đủ điều kiện được áp dụng Promotion trong cùng Booking được xác định theo các điều kiện và giới hạn của Promotion; điều này không làm thay đổi identity của Promotion Application.
+
+15.11. Audit Record
+
+Audit Record có:
+
+Audit ID
+Actor User ID
+Event Type
+Entity Type
+Entity ID
+Action
+Event Timestamp
+Previous Value
+New Value
+Transaction Reference
+
+Tài liệu xác định Audit ID là định danh duy nhất.
+
+Candidate Key = {Audit ID}
+
+Không sử dụng Actor User ID + Event Timestamp + Entity ID làm Candidate Key vì đây là các thuộc tính mô tả sự kiện audit, không phải identity được đặc tả cho record.
+
+15.12. System Configuration
+
+System Configuration có:
+
+Configuration ID
+Configuration Key
+Configuration Value
+
+Candidate Key = {Configuration ID}, {Configuration Key}
+
+Configuration Key được dùng để tra cứu cấu hình; để đảm bảo tra cứu trả về tối đa một giá trị, {Configuration Key} phải được bảo toàn bằng ràng buộc UNIQUE (Configuration Key). Do đó {Configuration Key} được ghi nhận là Candidate Key thứ hai của System Configuration.
+
+15.13. Candidate Key Summary
+
+Tập hợp Candidate Key cuối cùng của mô hình là:
+
+User Account
+    → {User ID}
+    → {Username}
+
+
+Role
+    → {Role ID}
+    → {Role Name}
+
+
+User–Role Assignment
+    → {User ID, Role ID}
+
+
+Artist
+    → {Artist ID}
+
+
+Concert
+    → {Concert ID}
+
+
+Venue
+    → {Venue ID}
+
+
+Zone
+    → {Zone ID}
+
+
+Seat
+    → {Seat ID}
+
+
+EventSeat
+    → {EventSeat ID}
+    → {Concert ID, Seat ID}
+
+
+Ticket Category
+    → {Ticket Category ID}
+    → (Concert ID, Ticket Category ID) — UNIQUE thay thế cho composite FK (§17.7)
+
+
+Booking
+    → {Booking ID}
+
+
+Booking–EventSeat Allocation
+    → {Booking ID, EventSeat ID}
+
+
+Payment
+    → {Payment ID}
+
+
+Refund
+    → {Refund ID}
+
+
+Ticket
+    → {Ticket ID}
+    → {Ticket Code}
+
+
+Check-in
+    → {Check-in ID}
+    → {Ticket ID}
+
+
+Waitlist
+    → {Waitlist ID}
+    → {Concert ID}
+
+
+Waitlist Entry
+    → {Waitlist Entry ID}
+
+
+Queue
+    → {Queue ID}
+    → {Concert ID}
+
+
+Queue Entry
+    → {Queue Entry ID}
+
+
+Promotion
+    → {Promotion ID}
+
+
+Discount Code
+    → {Discount Code ID}
+
+
+Booking–Promotion Application
+    → {Booking ID, Promotion ID}
+
+
+Audit Record
+    → {Audit ID}
+
+
+System Configuration
+    → {Configuration ID}
+    → {Configuration Key}
+
+Trong đó, phần lớn Entity có một simple Candidate Key bằng identifier riêng; các Entity có nhiều Candidate Key được ghi nhận riêng, bao gồm User Account (Username), Role (Role Name), EventSeat, Ticket, Check-in (Ticket ID), Waitlist/Queue (Concert ID), Ticket Category ((Concert ID, Ticket Category ID) dạng UNIQUE thay thế) và System Configuration (Configuration Key). Các associative Entity sử dụng composite Candidate Key khi cần thiết để định danh duy nhất association instance.
+
+
+16. Primary Key Selection
+Trong các Candidate Key của mỗi Entity, Candidate Key nào được lựa chọn làm Primary Key để định danh chính thức các instance của Entity đó?
+
+16.1. Nguyên tắc lựa chọn Primary Key
+
+Primary Key được lựa chọn từ các Candidate Key đã xác định theo các nguyên tắc:
+
+PK01. Mỗi Entity chỉ có đúng một Primary Key.
+
+PK02. Primary Key phải là một Candidate Key hợp lệ của Entity đó.
+
+PK03. Primary Key phải định danh duy nhất và không được chứa giá trị NULL.
+
+PK04. Primary Key nên ổn định trong suốt vòng đời của Entity và không phụ thuộc vào các thuộc tính mô tả hoặc trạng thái nghiệp vụ.
+
+PK05. Khi Entity có một identifier riêng, ổn định và được hệ thống quản lý, identifier đó được ưu tiên làm Primary Key.
+
+PK06. Khi Entity có nhiều Candidate Key, một Candidate Key được chọn làm Primary Key; các Candidate Key còn lại vẫn phải được bảo toàn uniqueness bằng appropriate UNIQUE constraint trong relational schema.
+
+PK07. Đối với associative Entity mà Candidate Key là tổ hợp các identifier của các Entity tham gia, tổ hợp tối thiểu đó được sử dụng làm Composite Primary Key khi không có yêu cầu nghiệp vụ về một identifier riêng.
+
+16.2. Primary Key được lựa chọn
+|  # | Entity                            | Candidate Key(s)                          | **Primary Key được chọn**      | Alternate / UNIQUE Key           |
+| -: | --------------------------------- | ----------------------------------------- | ------------------------------ | -------------------------------- |
+|  1 | **User Account**                  | `{User ID}, {Username}`                   | **User ID**                    | **UNIQUE (Username)**                  |
+|  2 | **Role**                          | `{Role ID}, {Role Name}`                  | **Role ID**                    | **UNIQUE (Role Name)**                 |
+|  3 | **User–Role Assignment**          | `{User ID, Role ID}`                      | **{User ID, Role ID}**         | —                                |
+|  4 | **Artist**                        | `{Artist ID}`                             | **Artist ID**                  | —                                |
+|  5 | **Concert**                       | `{Concert ID}`                            | **Concert ID**                 | —                                |
+|  6 | **Venue**                         | `{Venue ID}`                              | **Venue ID**                   | —                                |
+|  7 | **Zone**                          | `{Zone ID}`                               | **Zone ID**                    | —                                |
+|  8 | **Seat**                          | `{Seat ID}`                               | **Seat ID**                    | —                                |
+|  9 | **EventSeat**                     | `{EventSeat ID}`; `{Concert ID, Seat ID}` | **EventSeat ID**               | **UNIQUE (Concert ID, Seat ID)** |
+| 10 | **Ticket Category**               | `{Ticket Category ID}`                    | **Ticket Category ID**         | **UNIQUE (Concert ID, Ticket Category ID)** |
+| 11 | **Booking**                       | `{Booking ID}`                            | **Booking ID**                 | —                                |
+| 12 | **Booking–EventSeat Allocation**  | `{Booking ID, EventSeat ID}`              | **{Booking ID, EventSeat ID}** | —                                |
+| 13 | **Payment**                       | `{Payment ID}`                            | **Payment ID**                 | —                                |
+| 14 | **Refund**                        | `{Refund ID}`                             | **Refund ID**                  | —                                |
+| 15 | **Ticket**                        | `{Ticket ID}`; `{Ticket Code}`            | **Ticket ID**                  | **UNIQUE (Ticket Code)**         |
+| 16 | **Check-in**                      | `{Check-in ID}, {Ticket ID}`              | **Check-in ID**                | **UNIQUE (Ticket ID)**                 |
+| 17 | **Waitlist**                      | `{Waitlist ID}, {Concert ID}`             | **Waitlist ID**                | **UNIQUE (Concert ID)**                |
+| 18 | **Waitlist Entry**                | `{Waitlist Entry ID}`                     | **Waitlist Entry ID**          | —                                |
+| 19 | **Queue**                         | `{Queue ID}, {Concert ID}`                | **Queue ID**                   | **UNIQUE (Concert ID)**                |
+| 20 | **Queue Entry**                   | `{Queue Entry ID}`                        | **Queue Entry ID**             | —                                |
+| 21 | **Promotion**                     | `{Promotion ID}`                          | **Promotion ID**               | —                                |
+| 22 | **Discount Code**                 | `{Discount Code ID}`                      | **Discount Code ID**           | —                                |
+| 23 | **Booking–Promotion Application** | `{Booking ID, Promotion ID}`              | **{Booking ID, Promotion ID}** | —                                |
+| 24 | **Audit Record**                  | `{Audit ID}`                              | **Audit ID**                   | —                                |
+| 25 | **System Configuration**          | `{Configuration ID}, {Configuration Key}` | **Configuration ID**           | **UNIQUE (Configuration Key)**         |
+| 26 | **Check-in Staff Assignment**      | `{User ID, Concert ID}`                  | **{User ID, Concert ID}**      | —                                |
+16.3. Các quyết định quan trọng
+EventSeat
+
+Đây là trường hợp quan trọng nhất sau phần phản biện trước.
+
+Candidate Keys:
+
+{EventSeat ID}
+{Concert ID, Seat ID}
+
+Chọn:
+
+PRIMARY KEY (EventSeat ID)
+
+và đồng thời:
+
+UNIQUE (Concert ID, Seat ID)
+
+Lý do là EventSeat ID đã được đặc tả là identifier riêng của inventory unit, trong khi DR-08 đảm bảo {Concert ID, Seat ID} là một business/natural Candidate Key.
+
+Như vậy ta không loại bỏ Candidate Key thứ hai; chỉ đơn giản là chọn EventSeat ID làm Primary Key.
+
+Ticket
+
+Ticket có:
+
+{Ticket ID}
+{Ticket Code}
+
+Chọn:
+
+PRIMARY KEY (Ticket ID)
+UNIQUE (Ticket Code)
+
+File xác định Ticket ID là unique identifier và Ticket Code phải unique trên toàn hệ thống.
+
+Điều này đặc biệt hợp lý vì Ticket Code là mã được sử dụng trong Ticket Validation tại cổng, nên uniqueness của nó phải được bảo toàn ngay cả khi không chọn nó làm PK.
+
+User–Role Assignment
+
+Candidate Key duy nhất:
+
+{User ID, Role ID}
+
+nên Primary Key là:
+
+PRIMARY KEY (User ID, Role ID)
+
+File xác định chính hai thuộc tính này cùng với Assigned Timestamp và Assignment Status.
+
+Không cần tự thêm UserRoleAssignmentID vì Data Requirements hiện tại chưa yêu cầu một identifier riêng.
+
+Booking–EventSeat Allocation
+
+Candidate Key:
+
+{Booking ID, EventSeat ID}
+
+nên chọn luôn làm Composite Primary Key:
+
+PRIMARY KEY (Booking ID, EventSeat ID)
+
+Điều này phản ánh đúng bản chất association: một dòng biểu diễn một EventSeat được phân bổ cho một Booking. File cũng yêu cầu lưu allocation/release history trên chính quan hệ này.
+
+Booking–Promotion Application
+
+Candidate Key là:
+
+{Booking ID, Promotion ID}
+
+và nên chọn luôn:
+
+PRIMARY KEY (Booking ID, Promotion ID)
+
+Bởi vì Business Rule mới quy định một Booking chỉ có tối đa một Promotion Application cho cùng một Promotion.
+
+Các thuộc tính Discount Code ID, Discount Amount và Applied Timestamp mô tả application, không phải identity. File cũng yêu cầu lưu các giá trị này.
+
+16.4. Vì sao không chọn Natural Key khi đã có ID?
+
+Ví dụ EventSeat có:
+
+{EventSeatID}
+{ConcertID, SeatID}
+
+Ta không chọn {ConcertID, SeatID} làm PK dù nó là Candidate Key hợp lệ.
+
+Không phải vì nó kém hơn về uniqueness, mà vì hai khái niệm khác nhau:
+
+Candidate Key
+    ↓
+có thể dùng làm PK
+
+
+Primary Key
+    ↓
+chỉ một Candidate Key được chọn
+
+Ở đây:
+
+EventSeatID
+    = Primary Key
+
+
+ConcertID + SeatID
+    = Alternate Candidate Key
+    = UNIQUE constraint
+
+Đây là hoàn toàn hợp lệ.
+
+16.5. Kết quả cuối cùng của bước Primary Key
+
+Có thể tóm tắt mô hình PK như sau:
+
+User Account
+    PK = UserID
+    AK = Username (UNIQUE)
+
+Role
+    PK = RoleID
+    AK = RoleName (UNIQUE)
+
+User–Role Assignment
+    PK = (UserID, RoleID)
+
+Artist
+    PK = ArtistID
+
+Concert
+    PK = ConcertID
+
+Venue
+    PK = VenueID
+
+Zone
+    PK = ZoneID
+
+Seat
+    PK = SeatID
+
+EventSeat
+    PK = EventSeatID
+    AK = (ConcertID, SeatID)
+
+Ticket Category
+    PK = TicketCategoryID
+    AK = (ConcertID, TicketCategoryID) — UNIQUE thay thế cho composite FK
+
+Booking
+    PK = BookingID
+
+Booking–EventSeat Allocation
+    PK = (BookingID, EventSeatID)
+
+Payment
+    PK = PaymentID
+
+Refund
+    PK = RefundID
+
+Ticket
+    PK = TicketID
+    AK = TicketCode
+
+Check-in
+    PK = CheckInID
+    AK = TicketID (UNIQUE)
+
+Waitlist
+    PK = WaitlistID
+    AK = ConcertID (UNIQUE)
+
+Waitlist Entry
+    PK = WaitlistEntryID
+
+Queue
+    PK = QueueID
+    AK = ConcertID (UNIQUE)
+
+Queue Entry
+    PK = QueueEntryID
+
+Promotion
+    PK = PromotionID
+
+Discount Code
+    PK = DiscountCodeID
+
+Booking–Promotion Application
+    PK = (BookingID, PromotionID)
+
+Audit Record
+    PK = AuditID
+
+System Configuration
+    PK = ConfigurationID
+    AK = ConfigurationKey (UNIQUE)
+
+Check-in Staff Assignment
+    PK = (UserID, ConcertID)
+
+Trong đó AK ở đây là Alternate Key, tức Candidate Key được xác định nhưng không được chọn làm Primary Key.
+
+17. Foreign Key Identification
+Đối với mỗi Relationship, Attribute nào trong Entity tham gia cần được sử dụng làm Foreign Key để tham chiếu đến Primary Key hoặc Candidate Key của Entity liên quan?
+
+17.1. Mục đích
+
+Foreign Key Identification xác định các thuộc tính trong một Entity được sử dụng để tham chiếu đến Primary Key hoặc Candidate Key của Entity liên quan.
+
+Foreign Key được xác định dựa trên:
+
+các relationship đã được xác định giữa các Entity;
+các Data Requirements về toàn vẹn tham chiếu;
+Primary Key và Candidate Key đã được xác định ở các bước trước;
+cardinality và dependency của relationship;
+các Business Rules và Data Integrity Requirements tương ứng.
+
+Foreign Key phải tham chiếu đến một Primary Key hoặc một Candidate Key có tính duy nhất của Entity được tham chiếu. Khi relationship sử dụng nhiều thuộc tính để tham chiếu đến một composite Candidate Key, toàn bộ tập thuộc tính tương ứng phải được sử dụng làm Foreign Key.
+
+Một Foreign Key không tạo ra một identity mới cho Entity chứa nó; nó biểu diễn mối liên kết tham chiếu giữa Entity chứa Foreign Key và Entity được tham chiếu.
+
+Theo yêu cầu thiết kế quan hệ của hệ thống, các Foreign Key phải được sử dụng để thực thi referential integrity giữa các relations trong SQL Server.
+
+17.2. Nguyên tắc xác định Foreign Key
+
+FK01. Mỗi relationship có yêu cầu tham chiếu phải được biểu diễn bằng một Foreign Key hoặc một tổ hợp Foreign Key tương ứng trong relational model.
+
+FK02. Foreign Key phải tham chiếu đến Primary Key hoặc một Candidate Key có tính duy nhất của Entity được tham chiếu.
+
+FK03. Tên và ngữ nghĩa của Foreign Key phải phản ánh Entity được tham chiếu và vai trò của relationship.
+
+FK04. Khi một Entity tham chiếu đến một Entity khác thông qua một Primary Key đơn thuộc tính, Foreign Key sử dụng chính thuộc tính đó.
+
+FK05. Khi relationship tham chiếu đến một composite Candidate Key, toàn bộ các thuộc tính tạo nên composite Candidate Key phải được sử dụng làm Foreign Key.
+
+FK06. Foreign Key không được tự động được xem là Candidate Key hoặc Primary Key của Entity chứa nó. Việc Foreign Key đồng thời tham gia Primary Key chỉ xảy ra khi relationship đó được mô hình hóa bằng composite Primary Key.
+
+FK07. Một Entity có thể chứa nhiều Foreign Key đến cùng một Entity nếu các Foreign Key đó biểu diễn các vai trò nghiệp vụ khác nhau.
+
+FK08. Foreign Key phải tham chiếu đến đúng Entity và đúng Candidate Key theo semantics của relationship; không được tạo Foreign Key chỉ vì hai Entity có thuộc tính cùng tên.
+
+FK09. Các relationship polymorphic mà một thuộc tính có thể tham chiếu đến nhiều Entity khác nhau không được mô hình hóa như một Foreign Key thông thường nếu không có một target relation duy nhất.
+
+FK10. Các business integrity constraints không thể được thực thi chỉ bằng một Foreign Key đơn phải được bổ sung bằng UNIQUE, CHECK, composite constraint, trigger hoặc transaction/business logic phù hợp ở bước physical implementation.
+
+17.3. Foreign Key của các Relationship
+#	Relationship	Entity chứa FK	Foreign Key Attribute(s)	References	Ghi chú
+1	User assigned to Role	User–Role Assignment	User ID	User Account(User ID)	User tham gia assignment
+2	User assigned to Role	User–Role Assignment	Role ID	Role(Role ID)	Role được assignment
+3	Organizer owns/manages Concert	Concert	Organizer User ID	User Account(User ID)	Organizer không phải entity riêng
+4	Artist performs at Concert	Concert	Artist ID	Artist(Artist ID)	Theo BR54/DR-03
+5	Concert is held at Venue	Concert	Venue ID	Venue(Venue ID)	DR-02
+6	Zone belongs to Venue	Zone	Venue ID	Venue(Venue ID)	DR-04
+7	Seat belongs to Zone	Seat	Zone ID	Zone(Zone ID)	DR-05
+8	Seat references Venue (denorm)	Seat	Venue ID	Venue(Venue ID)	Denormalization có kiểm soát để enforce UNIQUE(Venue ID, Seat Code) tại DB level theo BR05; bất biến Seat.VenueID = Zone.VenueID duy trì bằng TRG_SeatVenueConsistency (§23.4)
+9	EventSeat belongs to Concert	EventSeat	Concert ID	Concert(Concert ID)	DR-06
+10	EventSeat represents Seat	EventSeat	Seat ID	Seat(Seat ID)	DR-06
+11	EventSeat is assigned Ticket Category	EventSeat	Ticket Category ID	Ticket Category(Ticket Category ID)	Ticket Category của inventory
+12	Ticket Category belongs to Concert	Ticket Category	Concert ID	Concert(Concert ID)	Category được cấu hình riêng cho Concert
+13	Booking belongs to Customer	Booking	Customer User ID	User Account(User ID)	Customer là User có Role Customer
+14	Booking is created for Concert	Booking	Concert ID	Concert(Concert ID)	DR-09
+15	Booking allocates EventSeat	Booking–EventSeat Allocation	Booking ID	Booking(Booking ID)	Composite PK/FK relationship
+16	Booking allocates EventSeat	Booking–EventSeat Allocation	EventSeat ID	EventSeat(EventSeat ID)	Composite PK/FK relationship
+17	Payment belongs to Booking	Payment	Booking ID	Booking(Booking ID)	DR-12/DR-13
+18	Refund belongs to Payment	Refund	Payment ID	Payment(Payment ID)	DR-19
+19	Ticket is issued from Booking	Ticket	Booking ID	Booking(Booking ID)	Booking phải Confirmed
+20	Ticket represents EventSeat	Ticket	EventSeat ID	EventSeat(EventSeat ID)	DR-15
+21	Ticket belongs to Concert	Ticket	Concert ID	Concert(Concert ID)	Concert hiệu lực của Ticket
+22	Check-in validates Ticket	Check-in	Ticket ID	Ticket(Ticket ID)	DR-17
+23	Check-in occurs for Concert	Check-in	Concert ID	Concert(Concert ID)	Concert nơi admission diễn ra
+24	Check-in performed by Staff	Check-in	Check-in Staff User ID	User Account(User ID)	User có Role Check-in Staff
+25	Waitlist is for Concert	Waitlist	Concert ID	Concert(Concert ID)	Waitlist thuộc Concert
+26	Waitlist Entry belongs to Waitlist	Waitlist Entry	Waitlist ID	Waitlist(Waitlist ID)	Entry thuộc Waitlist
+27	Waitlist Entry belongs to Customer	Waitlist Entry	Customer User ID	User Account(User ID)	DR-20
+28	Waitlist Entry results in Booking	Waitlist Entry	Resulting Booking ID	Booking(Booking ID)	Có thể NULL trước khi Booking được tạo
+29	Queue is for Concert	Queue	Concert ID	Concert(Concert ID)	Queue thuộc Concert
+30	Queue Entry belongs to Queue	Queue Entry	Queue ID	Queue(Queue ID)	Entry thuộc Queue
+31	Queue Entry belongs to Customer	Queue Entry	Customer User ID	User Account(User ID)	DR-21
+32	Promotion applies to Concert	Promotion	Concert ID	Concert(Concert ID)	Promotion giới hạn theo Concert
+33	Discount Code belongs to Promotion	Discount Code	Promotion ID	Promotion(Promotion ID)	Promotion chứa code
+34	Promotion is applied to Booking	Booking–Promotion Application	Booking ID	Booking(Booking ID)	Application record
+35	Promotion is applied to Booking	Booking–Promotion Application	Promotion ID	Promotion(Promotion ID)	Application record
+36	Discount Code used by Application	Booking–Promotion Application	Discount Code ID	Discount Code(Discount Code ID)	Optional; có thể NULL
+37	Audit performed by User	Audit Record	Actor User ID	User Account(User ID)	Actor thực hiện action
+38	EventSeat uses Ticket Category of same Concert	EventSeat	Concert ID, Ticket Category ID	Ticket Category(Concert ID, Ticket Category ID)	Composite FK bảo đảm cùng Concert
+
+Các relationship từ 1 đến 38 đều có cơ sở trực tiếp hoặc rõ ràng trong Data Requirements. Đặc biệt DR-01 đến DR-06, DR-09 đến DR-21 và DR-23 quy định rõ các tham chiếu tương ứng. Relationship số 8 (Seat.VenueID → Venue) là denormalization có kiểm soát để triển khai ràng buộc BR05 tại database level (§12.7.3, §23.7).
+
+
+17.4. Chi tiết các Foreign Key quan trọng
+17.4.1. User–Role Assignment
+
+Entity:
+
+User–Role Assignment
+--------------------
+User ID
+Role ID
+Assigned Timestamp
+Assignment Status
+
+Foreign Keys:
+
+User–Role Assignment.UserID
+    → UserAccount.UserID
+
+
+User–Role Assignment.RoleID
+    → Role.RoleID
+
+Hai Foreign Key này đồng thời tạo nên Composite Primary Key:
+
+PK = (UserID, RoleID)
+
+Data Requirements xác định trực tiếp User ID và Role ID là các reference của assignment.
+
+17.5. Concert Relationships
+
+Concert có ba Foreign Key chính:
+
+Concert.OrganizerUserID
+    → UserAccount.UserID
+
+
+Concert.ArtistID
+    → Artist.ArtistID
+
+
+Concert.VenueID
+    → Venue.VenueID
+
+OrganizerUserID tham chiếu trực tiếp User Account vì Organizer không có identity độc lập.
+
+DR-01, DR-02 và DR-03 yêu cầu mỗi Concert phải tham chiếu chính xác một Organizer User, một Venue và một Artist.
+
+17.6. Venue–Zone–Seat
+
+Chuỗi Foreign Key:
+
+Zone.VenueID
+    → Venue.VenueID
+
+
+Seat.ZoneID
+    → Zone.ZoneID
+
+Do đó:
+
+Venue
+  │
+  └── Zone
+        │
+        └── Seat
+
+Điều này trực tiếp triển khai DR-04 và DR-05.
+
+17.7. EventSeat Relationships
+
+EventSeat có:
+
+EventSeat.ConcertID
+    → Concert.ConcertID
+
+
+EventSeat.SeatID
+    → Seat.SeatID
+
+
+EventSeat.TicketCategoryID
+    → TicketCategory.TicketCategoryID
+
+Data Requirements xác định EventSeat phải tham chiếu chính xác một Concert và một Seat; đồng thời EventSeat có Ticket Category, Sale Price và Inventory Status.
+
+Đặc biệt:
+
+UNIQUE(EventSeat.ConcertID, EventSeat.SeatID)
+
+phải được giữ lại vì đây là Candidate Key thứ hai của EventSeat và trực tiếp triển khai DR-08.
+
+Nhưng cần phân biệt một constraint quan trọng
+
+DR-07 yêu cầu:
+
+Seat được EventSeat tham chiếu phải thuộc Venue mà Concert tương ứng tham chiếu.
+
+Chỉ các FK:
+
+EventSeat.ConcertID → Concert
+EventSeat.SeatID    → Seat
+
+không tự động đảm bảo được DR-07.
+
+Đây là một cross-entity integrity constraint cần được xử lý bổ sung ở bước relational/physical design. Không nên giả vờ rằng hai FK đơn đã tự đảm bảo điều kiện này.
+
+Tương tự, để đảm bảo Ticket Category được EventSeat tham chiếu thuộc cùng Concert với EventSeat (theo mục 12.8), thiết lập composite Foreign Key:
+
+(EventSeat.ConcertID, EventSeat.TicketCategoryID) → TicketCategory(ConcertID, TicketCategoryID)
+
+Bổ sung để composite FK hợp lệ: SQL Server chỉ cho phép FK tham chiếu tới cột Primary Key hoặc cột có UNIQUE, do đó {Concert ID, Ticket Category ID} phải được khai UNIQUE trên Ticket Category. Lưu ý: vì Ticket Category ID đơn lẻ đã duy nhất, tập {Concert ID, Ticket Category ID} không phải candidate key tối thiểu (theo CK02) mà là khóa thay thế dạng UNIQUE; cả hai cột tham gia composite FK đều phải NOT NULL.
+
+17.8. Ticket Category → Concert
+
+Ticket Category chứa:
+
+ConcertID
+
+tham chiếu:
+
+Concert.ConcertID
+
+Điều này phản ánh nguyên tắc mỗi Concert có ticket category configuration riêng.
+
+17.9. Booking Relationships
+
+Booking có:
+
+Booking.CustomerUserID
+    → UserAccount.UserID
+
+
+Booking.ConcertID
+    → Concert.ConcertID
+
+DR-09 yêu cầu mỗi Booking tham chiếu chính xác một Customer và một Concert.
+
+17.10. Booking–EventSeat Allocation
+
+Entity:
+
+Booking–EventSeat Allocation
+----------------------------
+BookingID
+EventSeatID
+AllocationTimestamp
+ReleaseTimestamp
+AllocationStatus
+
+Foreign Keys:
+
+BookingID
+    → Booking.BookingID
+
+
+EventSeatID
+    → EventSeat.EventSeatID
+
+Đồng thời:
+
+PK = (BookingID, EventSeatID)
+
+Data Requirements xác định rõ allocation là record riêng giữa Booking và EventSeat.
+
+DR-10 còn yêu cầu EventSeat được allocation phải thuộc cùng Concert với Booking.
+
+Tương tự DR-07, điều kiện này không được đảm bảo chỉ bằng hai FK đơn và cần một cross-entity integrity mechanism bổ sung.
+
+17.11. Payment và Refund
+Payment
+Payment.BookingID
+    → Booking.BookingID
+Refund
+Refund.PaymentID
+    → Payment.PaymentID
+
+DR-12/DR-13 quy định relationship giữa Booking và Payment; DR-19 quy định Refund phải tham chiếu đến một Payment Confirmed.
+
+Lưu ý: FK chỉ đảm bảo Payment tồn tại, không thể tự đảm bảo Payment đang ở Confirmed. Điều kiện trạng thái phải được enforced bằng business logic/transaction constraint.
+
+17.12. Ticket Relationships
+
+Ticket chứa:
+
+BookingID
+EventSeatID
+ConcertID
+
+với:
+
+Ticket.BookingID
+    → Booking.BookingID
+
+
+Ticket.EventSeatID
+    → EventSeat.EventSeatID
+
+
+Ticket.ConcertID
+    → Concert.ConcertID
+
+Data Requirements xác định cả ba tham chiếu này.
+
+Bổ sung: để đảm bảo EventSeat của Ticket nằm trong đúng Booking đã phát hành nó, phải bảo đảm composite reference sau:
+
+(Ticket.BookingID, Ticket.EventSeatID) → Booking–EventSeat Allocation (BookingID, EventSeatID)
+
+Hai cột tham gia đều NOT NULL theo §18.5 (AI01); điều này triển khai DR-14 và DR-15.
+Điều kiện nhất quán dữ liệu (FK-06): Ticket.ConcertID phải bằng ConcertID của Booking sinh ra Ticket (và Check-in.ConcertID phải bằng Ticket.ConcertID theo §17.13); được ép bằng trigger/SP khi INSERT/UPDATE.
+
+Ngoài ra:
+
+UNIQUE(TicketCode)
+
+vì Ticket Code là Candidate Key thay thế/Alternate Key.
+
+17.13. Check-in Relationships
+CheckIn.TicketID
+    → Ticket.TicketID
+
+
+CheckIn.ConcertID
+    → Concert.ConcertID
+
+
+CheckIn.CheckInStaffUserID
+    → UserAccount.UserID
+
+Data Requirements xác định cả Ticket, Concert và Check-in Staff User trong Check-in record.
+
+DR-17 yêu cầu successful Check-in tham chiếu đến một Ticket hợp lệ, còn DR-18 giới hạn một Ticket không có hơn một successful Check-in.
+
+17.14. Waitlist Relationships
+Waitlist
+Waitlist.ConcertID
+    → Concert.ConcertID
+Waitlist Entry
+WaitlistEntry.WaitlistID
+    → Waitlist.WaitlistID
+
+
+WaitlistEntry.CustomerUserID
+    → UserAccount.UserID
+
+
+WaitlistEntry.ResultingBookingID
+    → Booking.BookingID
+
+ResultingBookingID chỉ có giá trị khi Waitlist opportunity thực sự tạo Booking; vì vậy nó có thể NULL trong các trạng thái trước đó.
+
+Data Requirements xác định trực tiếp Waitlist Entry có Waitlist ID, Customer User ID và Resulting Booking ID.
+
+DR-20 yêu cầu active Waitlist Entry tham chiếu Customer và Concert.
+
+Ở đây Concert có thể được xác định thông qua Waitlist → Concert, vì WaitlistEntry tham chiếu Waitlist. Không nhất thiết phải lưu thêm ConcertID trong Waitlist Entry.
+
+17.15. Queue Relationships
+Queue
+Queue.ConcertID
+    → Concert.ConcertID
+Queue Entry
+QueueEntry.QueueID
+    → Queue.QueueID
+
+
+QueueEntry.CustomerUserID
+    → UserAccount.UserID
+
+Data Requirements xác định Queue thuộc một Concert, còn Queue Entry thuộc Queue và Customer.
+
+Không tạo QueueEntry.BookingID chỉ vì Customer sau đó có thể Booking.
+
+DR-22 nói rất rõ:
+
+Admission vào Queue không tạo quan hệ sở hữu EventSeat; quyền đối với EventSeat chỉ phát sinh từ Booking hợp lệ.
+
+Vì vậy Queue Entry không có FK tới EventSeat.
+
+17.16. Promotion Relationships
+Promotion
+Promotion.ConcertID
+    → Concert.ConcertID
+Discount Code
+DiscountCode.PromotionID
+    → Promotion.PromotionID
+
+Promotion được cấu hình trong phạm vi một Concert; Discount Code thuộc Promotion.
+
+17.17. Booking–Promotion Application
+
+Entity:
+
+Booking–Promotion Application
+-----------------------------
+BookingID
+PromotionID
+DiscountCodeID   nullable
+DiscountAmount
+AppliedTimestamp
+
+Foreign Keys:
+
+BookingID
+    → Booking.BookingID
+
+
+PromotionID
+    → Promotion.PromotionID
+
+
+DiscountCodeID
+    → DiscountCode.DiscountCodeID
+
+DiscountCodeID có thể NULL khi Promotion không yêu cầu code.
+
+PK = (BookingID, PromotionID)
+
+và do đó:
+
+UNIQUE(PromotionID, BookingID)
+
+đã được phản ánh ngay trong Primary Key.
+
+Data Requirements yêu cầu Promotion Application phải tham chiếu Booking và Promotion, còn Discount Code được sử dụng nếu có.
+
+17.18. Audit Record
+
+Audit Record có:
+
+AuditRecord.ActorUserID
+    → UserAccount.UserID
+
+Tuy nhiên:
+
+AuditRecord.EntityType
+AuditRecord.EntityID
+
+không nên được khai báo thành một Foreign Key thông thường.
+
+Lý do: EntityID có thể tham chiếu đến nhiều loại Entity khác nhau tùy EntityType, ví dụ:
+
+EntityType = Booking
+EntityID   = B001
+
+
+EntityType = Ticket
+EntityID   = T001
+
+
+EntityType = Payment
+EntityID   = P001
+
+Một Foreign Key chuẩn phải có một target relation xác định, trong khi EntityID ở đây là polymorphic reference.
+
+File xác định Audit Record phải chứa Entity Type và Entity ID để xác định business object bị tác động.
+
+Vì vậy:
+
+ActorUserID → UserAccount(UserID)     ← FK
+
+
+EntityType + EntityID                 ← polymorphic reference,
+                                         không phải FK thông thường
+
+Transaction Reference cũng chỉ được coi là FK nếu ở bước thiết kế sau xác định rõ nó tham chiếu đến một Entity transaction duy nhất. Với đặc tả hiện tại, không nên tự tạo FK cho nó.
+
+17.19. System Configuration
+
+System Configuration:
+
+ConfigurationID
+ConfigurationKey
+ConfigurationValue
+
+không có relationship nghiệp vụ tới Entity khác theo Data Requirements hiện tại.
+
+Do đó:
+
+Không có Foreign Key.
+
+Configuration được dùng làm nguồn cấu hình toàn cục cho các business rules, ví dụ Temporary Hold Duration.
+
+17.20. Tổng hợp Foreign Key cuối cùng
+
+Đây là bảng tổng hợp Foreign Key chính thức để đưa vào tài liệu:
+
+Entity chứa FK	Foreign Key	Referenced Entity	Referenced Key
+User–Role Assignment	UserID	User Account	UserID
+User–Role Assignment	RoleID	Role	RoleID
+Concert	OrganizerUserID	User Account	UserID
+Concert	ArtistID	Artist	ArtistID
+Concert	VenueID	Venue	VenueID
+Zone	VenueID	Venue	VenueID
+Seat	ZoneID	Zone	ZoneID
+EventSeat	ConcertID	Concert	ConcertID
+EventSeat	SeatID	Seat	SeatID
+EventSeat	TicketCategoryID	Ticket Category	TicketCategoryID
+Ticket Category	ConcertID	Concert	ConcertID
+Booking	CustomerUserID	User Account	UserID
+Booking	ConcertID	Concert	ConcertID
+Booking–EventSeat Allocation	BookingID	Booking	BookingID
+Booking–EventSeat Allocation	EventSeatID	EventSeat	EventSeatID
+Payment	BookingID	Booking	BookingID
+Refund	PaymentID	Payment	PaymentID
+Ticket	BookingID	Booking	BookingID
+Ticket	EventSeatID	EventSeat	EventSeatID
+Ticket	ConcertID	Concert	ConcertID
+Ticket	BookingID + EventSeatID	Booking–EventSeat Allocation	(BookingID, EventSeatID)
+Check-in	TicketID	Ticket	TicketID
+Check-in	ConcertID	Concert	ConcertID
+Check-in	CheckInStaffUserID	User Account	UserID
+Waitlist	ConcertID	Concert	ConcertID
+Waitlist Entry	WaitlistID	Waitlist	WaitlistID
+Waitlist Entry	CustomerUserID	User Account	UserID
+Waitlist Entry	ResultingBookingID	Booking	BookingID
+Queue	ConcertID	Concert	ConcertID
+Queue Entry	QueueID	Queue	QueueID
+Queue Entry	CustomerUserID	User Account	UserID
+Promotion	ConcertID	Concert	ConcertID
+Discount Code	PromotionID	Promotion	PromotionID
+Booking–Promotion Application	BookingID	Booking	BookingID
+Booking–Promotion Application	PromotionID	Promotion	PromotionID
+Booking–Promotion Application	DiscountCodeID	Discount Code	DiscountCodeID
+Audit Record	ActorUserID	User Account	UserID
+Check-in Staff Assignment	UserID	User Account	UserID
+Check-in Staff Assignment	ConcertID	Concert	ConcertID
+
+18. Constraint Identification
+Những Integrity Constraints nào cần được áp dụng cho các Entity, Attribute và Relationship để đảm bảo Entity Integrity, Referential Integrity, Domain Integrity và các Business Rules của hệ thống được duy trì?
+
+18.1. Mục đích
+
+Mô hình dữ liệu phải áp dụng các Integrity Constraints cần thiết để bảo đảm:
+
+Entity Integrity: mỗi instance của Entity được định danh duy nhất và không có Primary Key không hợp lệ;
+Referential Integrity: mọi Foreign Key phải tham chiếu đến một instance hợp lệ của Entity được tham chiếu;
+Domain Integrity: mỗi Attribute chỉ nhận các giá trị thuộc domain được xác định;
+Business Integrity: các quan hệ, trạng thái, số lượng, thời gian và điều kiện nghiệp vụ phải tuân thủ các Business Rules và Data Requirements đã được đặc tả.
+
+SQL Server phải sử dụng Primary Key để bảo đảm entity integrity và Foreign Key để thực thi referential integrity. Các constraint bổ sung như UNIQUE, CHECK và các cơ chế transaction/business logic được sử dụng khi yêu cầu nghiệp vụ không thể được biểu diễn đầy đủ chỉ bằng PK/FK.
+
+18.2. Entity Integrity Constraints
+EI01 — Primary Key phải duy nhất
+
+Mỗi Entity phải có đúng một Primary Key được xác định trong bước Primary Key Selection và mỗi giá trị Primary Key phải duy nhất trong Entity đó.
+
+Áp dụng cho toàn bộ 26 Entity (sau khi bổ sung Check-in Staff Assignment theo §12.13.2).
+
+Ví dụ:
+
+UserAccount.UserID
+Role.RoleID
+Concert.ConcertID
+EventSeat.EventSeatID
+Booking.BookingID
+Payment.PaymentID
+Ticket.TicketID
+...
+
+Không được tồn tại hai instance có cùng Primary Key.
+
+EI02 — Primary Key không được NULL
+
+Mọi Attribute thuộc Primary Key phải có giá trị bắt buộc (NOT NULL).
+
+Điều này đặc biệt quan trọng với Composite Primary Keys:
+
+(UserID, RoleID)
+(BookingID, EventSeatID)
+(BookingID, PromotionID)
+
+Không instance nào được tồn tại khi thiếu một thành phần của Primary Key.
+
+EI03 — Alternate Candidate Key phải được bảo toàn uniqueness
+
+Các Candidate Key không được chọn làm Primary Key vẫn phải được bảo vệ bằng UNIQUE.
+
+Cụ thể:
+
+EventSeat
+UNIQUE (ConcertID, SeatID)
+
+
+Ticket
+UNIQUE (TicketCode)
+
+(ConcertID, SeatID) là Candidate Key của EventSeat nhờ DR-08; Ticket Code phải unique toàn hệ thống theo DR-16.
+
+18.3. Referential Integrity Constraints
+RI01 — User–Role Assignment
+UserRoleAssignment.UserID
+    → UserAccount.UserID
+
+
+UserRoleAssignment.RoleID
+    → Role.RoleID
+
+Mọi assignment phải tham chiếu một User và một Role tồn tại.
+
+RI02 — Concert
+Concert.OrganizerUserID
+    → UserAccount.UserID
+
+
+Concert.ArtistID
+    → Artist.ArtistID
+
+
+Concert.VenueID
+    → Venue.VenueID
+
+DR-01, DR-02 và DR-03 yêu cầu mỗi Concert tham chiếu chính xác một Organizer User, Venue và Artist.
+
+RI03 — Venue hierarchy
+Zone.VenueID
+    → Venue.VenueID
+
+
+Seat.ZoneID
+    → Zone.ZoneID
+
+DR-04 và DR-05 yêu cầu Zone thuộc chính xác một Venue và Seat thuộc chính xác một Zone.
+
+RI04 — EventSeat
+EventSeat.ConcertID
+    → Concert.ConcertID
+
+
+EventSeat.SeatID
+    → Seat.SeatID
+
+
+EventSeat.TicketCategoryID
+    → TicketCategory.TicketCategoryID
+
+EventSeat phải tham chiếu một Concert và một Seat; Ticket Category được sử dụng để xác định hạng của inventory.
+
+RI05 — Booking
+Booking.CustomerUserID
+    → UserAccount.UserID
+
+
+Booking.ConcertID
+    → Concert.ConcertID
+
+DR-09 yêu cầu mỗi Booking tham chiếu chính xác một Customer và một Concert.
+
+RI06 — Booking–EventSeat Allocation
+BookingEventSeatAllocation.BookingID
+    → Booking.BookingID
+
+
+BookingEventSeatAllocation.EventSeatID
+    → EventSeat.EventSeatID
+
+Mọi allocation phải tham chiếu Booking và EventSeat tồn tại. DR-10 bổ sung rằng EventSeat phải thuộc Concert của Booking.
+
+RI07 — Payment
+Payment.BookingID
+    → Booking.BookingID
+RI08 — Refund
+Refund.PaymentID
+    → Payment.PaymentID
+
+DR-19 yêu cầu Refund tham chiếu Payment Confirmed.
+
+RI09 — Ticket
+Ticket.BookingID
+    → Booking.BookingID
+
+
+Ticket.EventSeatID
+    → EventSeat.EventSeatID
+
+
+Ticket.ConcertID
+    → Concert.ConcertID
+
+Mỗi Ticket phải thuộc một Booking Confirmed, một EventSeat và một Concert.
+
+RI10 — Check-in
+CheckIn.TicketID
+    → Ticket.TicketID
+
+
+CheckIn.ConcertID
+    → Concert.ConcertID
+
+
+CheckIn.CheckInStaffUserID
+    → UserAccount.UserID
+RI11 — Waitlist
+Waitlist.ConcertID
+    → Concert.ConcertID
+
+
+WaitlistEntry.WaitlistID
+    → Waitlist.WaitlistID
+
+
+WaitlistEntry.CustomerUserID
+    → UserAccount.UserID
+
+
+WaitlistEntry.ResultingBookingID
+    → Booking.BookingID
+
+ResultingBookingID có thể NULL trước khi opportunity tạo ra Booking.
+
+RI12 — Queue
+Queue.ConcertID
+    → Concert.ConcertID
+
+
+QueueEntry.QueueID
+    → Queue.QueueID
+
+
+QueueEntry.CustomerUserID
+    → UserAccount.UserID
+
+DR-21 yêu cầu Queue Entry tham chiếu Customer và Concert; trong mô hình chuẩn hóa, Concert được suy ra qua Queue.
+
+RI13 — Promotion
+Promotion.ConcertID
+    → Concert.ConcertID
+
+
+DiscountCode.PromotionID
+    → Promotion.PromotionID
+RI14 — Booking–Promotion Application
+BookingPromotionApplication.BookingID
+    → Booking.BookingID
+
+
+BookingPromotionApplication.PromotionID
+    → Promotion.PromotionID
+
+
+BookingPromotionApplication.DiscountCodeID
+    → DiscountCode.DiscountCodeID
+
+DiscountCodeID có thể NULL khi Promotion không yêu cầu code. Data Requirements quy định rõ Discount Code được dùng “nếu có”.
+
+RI15 — Audit Record
+AuditRecord.ActorUserID
+    → UserAccount.UserID
+
+Trong khi đó EntityType + EntityID không phải một Foreign Key thông thường, vì EntityID có thể đại diện cho nhiều loại business object khác nhau. File yêu cầu Audit Record lưu cả Entity Type và Entity ID để truy xuất đối tượng bị tác động.
+
+18.4. Domain Integrity Constraints
+18.4.1. Status domains
+
+Các status phải bị giới hạn vào các giá trị được đặc tả.
+
+Concert Status
+Draft
+Published
+OnSale
+SaleClosed
+Completed
+Cancelled
+
+Booking Status
+Pending
+Confirmed
+Expired
+Cancelled
+
+Payment Status
+Pending
+Confirmed
+Failed
+Refunded
+
+Ticket Status
+Issued
+Used
+Cancelled
+
+EventSeat Inventory Status
+Available
+OnHold
+OnHoldForWaitlist
+Booked
+Unavailable
+
+Refund Status
+Pending
+Confirmed
+Failed
+Cancelled
+
+Allocation Status (Booking–EventSeat Allocation)
+Active
+Released
+
+Role Status
+Active
+Inactive
+
+Account Status
+Active
+Locked
+Disabled
+
+Promotion Status
+Draft
+Active
+Expired
+Disabled
+
+Discount Code Status
+Active
+Expired
+Disabled
+
+Waitlist Status
+Open
+Closed
+
+Waitlist Entry Status
+Active
+Granted
+Expired
+Fulfilled
+
+Queue Status
+Open
+Closed
+
+Queue Entry Status
+Waiting
+Admitted
+Expired
+Exited
+
+Assignment Status
+Active
+Revoked
+
+Venue Status
+Active
+Inactive
+
+Category Status
+Active
+Inactive
+
+
+18.5. Attribute-Level Constraints
+AI01 — Mandatory attributes
+
+Các thuộc tính identity và các thuộc tính được Data Requirements xác định là bắt buộc phải NOT NULL.
+
+Ví dụ:
+
+ConcertID
+OrganizerUserID
+ArtistID
+VenueID
+
+
+BookingID
+CustomerUserID
+ConcertID
+
+
+EventSeatID
+ConcertID
+SeatID
+
+
+TicketID
+BookingID
+EventSeatID
+ConcertID
+TicketCode
+
+Các thuộc tính optional phải được phép NULL chỉ khi Data Requirements xác định rõ chúng có thể không tồn tại.
+
+Ví dụ:
+
+BookingPromotionApplication.DiscountCodeID
+WaitlistEntry.ResultingBookingID
+AI02 — Temporal constraints
+
+Các khoảng thời gian phải hợp lệ.
+
+Ví dụ:
+
+Concert.EndDatetime > Concert.StartDatetime
+SaleEndDatetime >= SaleStartDatetime
+Booking.HoldExpiryDatetime > Booking.HoldStartDatetime
+Promotion.EndDatetime > Promotion.StartDatetime
+
+File đã yêu cầu trực tiếp End datetime > Start datetime cho Concert và Hold expiry datetime > Hold start datetime cho Booking.
+
+AI03 — Monetary constraints
+
+Các giá trị tiền tệ phải:
+
+sử dụng VND;
+không làm mất giá trị lịch sử giao dịch;
+được lưu đúng giá trị thực tế đã sử dụng.
+
+Các monetary attributes gồm:
+
+EventSeat.SalePrice
+Booking.SubtotalAmount
+Booking.FinalAmount
+BookingPromotionApplication.DiscountAmount
+Payment.Amount
+Refund.RefundAmount
+
+File quy định toàn bộ giá trị tiền tệ giao dịch phải được lưu bằng VND và không được thay đổi hồi tố.
+
+Về mặt domain, các amount phải không âm; đây là ràng buộc bắt buộc ở tầng physical (implementation constraint) và được ép bằng CHECK (Amount >= 0) cho từng giá trị: EventSeat.SalePrice, Booking.SubtotalAmount, Booking.FinalAmount, BookingPromotionApplication.DiscountAmount, Payment.Amount, Refund.RefundAmount.
+
+AI04 — Identifier format/domain
+
+Các ID phải thuộc domain identifier hợp lệ và không được NULL.
+
+Đối với:
+
+TicketCode
+Username
+ZoneCode
+SeatCode
+ConfigurationKey
+
+format/length/case-sensitivity cụ thể chỉ nên được ràng buộc khi specification xác định rõ. Không nên tự đặt pattern không được tài liệu yêu cầu.
+
+AI05 — Status–Timestamp consistency
+
+Booking: tại một thời điểm tối đa một trong ba giá trị (Confirmed Timestamp, Cancelled Timestamp, Expired Timestamp) được ghi nhận; timestamp không NULL phải tương ứng với giá trị Booking Status hiện tại.
+
+Ticket: áp dụng tương tự với (Used Timestamp, Cancelled Timestamp) khớp với Ticket Status.
+
+Ràng buộc này được ép bằng CHECK dạng loại trừ giữa các timestamp kết hợp logic cập nhật trạng thái (trigger hoặc stored procedure) theo BR49; cần lưu ý CHECK trong SQL Server được đánh giá theo từng hàng và giá trị NULL cho kết quả UNKNOWN, nên biểu thức phải được viết tường minh (dùng CASE/COUNT với các cột NULL-able).
+
+18.6. Relationship and Cross-Entity Integrity Constraints
+
+Đây là phần quan trọng nhất vì nhiều Business Rules không thể được đảm bảo chỉ bằng PK/FK.
+
+CI01 — EventSeat phải thuộc đúng Venue của Concert
+
+DR-07 yêu cầu:
+
+Seat được EventSeat tham chiếu phải thuộc Venue mà Concert tương ứng tham chiếu.
+
+Do đó không được phép:
+
+Concert C001 → Venue V001
+EventSeat E001 → Concert C001
+EventSeat E001 → Seat S001
+Seat S001 → Zone Z001 → Venue V002
+
+Đây là dữ liệu không hợp lệ.
+
+Constraint này cần được enforce bằng composite/reference design hoặc transaction/business logic phù hợp.
+
+CI02 — Seat chỉ xuất hiện một lần trong inventory của Concert
+
+DR-08:
+
+UNIQUE (ConcertID, SeatID)
+
+Đây vừa là:
+
+Candidate Key constraint;
+Entity/business integrity constraint;
+Inventory integrity constraint.
+CI03 — Booking Allocation phải thuộc đúng Concert
+
+DR-10:
+
+EventSeat được phân bổ phải thuộc Concert của Booking.
+
+Không thể có:
+
+Booking B001 → Concert C001
+Allocation B001 → EventSeat E002
+EventSeat E002 → Concert C002
+CI04 — EventSeat không được đồng thời nằm trong hai Booking đang active
+
+DR-11:
+
+Một EventSeat không được phân bổ cho hai Booking đang hoạt động cùng thời điểm.
+
+Đây là constraint về temporal uniqueness, không phải FK đơn.
+
+Nó phải được xử lý bằng transaction/concurrency control và appropriate database constraint/design.
+
+Quyết định triển khai kỹ thuật (chuẩn kỹ thuật bắt buộc — không phải quyết định nghiệp vụ):
+1. Filtered UNIQUE index trên Allocation: UNIQUE INDEX UIX_Allocation_ActiveEventSeat ON Allocation (EventSeatID) WHERE AllocationStatus = 'Active' — giới hạn tại cơ sở dữ liệu: một EventSeat chỉ có tối đa một Allocation đang Active (triển khai DR-11).
+2. Khi giữ chỗ, dùng câu UPDATE nguyên tử có điều kiện: UPDATE EventSeat SET Inventory_Status = 'OnHold' WHERE EventSeatID = @id AND Inventory_Status = 'Available'; nếu @@ROWCOUNT = 0 nghĩa là seat đã bị chiếm, toàn bộ giao dịch phải rollback.
+3. Khi hệ thống cần mức độ cô lập cao hơn (tải concurrent lớn hoặc retry phức tạp): thực hiện trong giao dịch mức cô lập SERIALIZABLE hoặc SNAPSHOT kèm optimistic retry dựa trên rowversion; table hints (UPDLOCK, HOLDLOCK…) không được dùng làm cơ chế chính — chỉ được dùng khi cách tiếp cận 2 không đạt yêu cầu và phải có lý do cụ thể trong implementation notes.
+4. Mọi đường ghi trạng thái Allocation/EventSeat phải chạy trong cùng cơ chế kiểm soát này; không được có đường cập nhật trực tiếp bỏ qua nó.
+
+18.7. Lifecycle and State Integrity
+LI01 — State phải thuộc lifecycle hợp lệ
+
+Trạng thái của:
+
+Concert
+EventSeat
+Booking
+Payment
+Ticket
+
+chỉ được chuyển đổi theo state transition được phép.
+
+BR49 yêu cầu điều này trực tiếp.
+
+Ví dụ:
+
+Booking:
+Pending
+   ├── Confirmed
+   ├── Expired
+   └── Cancelled
+
+Không được phép tự ý:
+
+Pending → Used
+Pending → Refunded
+LI02 — Booking Confirmed phải có Payment Confirmed
+
+DR-12:
+
+Booking.Status = Confirmed
+    ⇒
+Payment.Status = Confirmed
+
+DR-13:
+
+Payment.Status = Failed
+    ⇒
+Booking cannot become Confirmed
+
+LI03 — Ticket chỉ phát hành sau Booking Confirmed
+
+DR-14 yêu cầu Ticket được phát hành phải tham chiếu Booking Confirmed.
+
+LI04 — Ticket chỉ Check-in khi hợp lệ và chưa Used
+
+Ticket phải ở trạng thái Issued khi Check-in thành công.
+
+Một Ticket:
+
+Issued → Used
+
+và không được Check-in lại.
+
+File quy định một Ticket không được có nhiều hơn một successful Check-in.
+
+18.8. Waitlist Integrity Constraints
+WI01
+
+Active Waitlist Entry phải tham chiếu Customer và Concert hợp lệ.
+
+WI02
+
+Một Customer chỉ có một active Waitlist Entry cho một Concert, trừ khi policy của Concert cho phép nhiều active Entry.
+
+WI03
+
+FIFO policy phải duy trì thứ tự theo Joined Timestamp khi policy được cấu hình là FIFO.
+
+WI04
+
+Booking opportunity phải có expiry timestamp.
+
+WI05
+
+Expired opportunity không còn cho phép Customer tạo Booking tương ứng.
+
+Các yêu cầu này được đặc tả trực tiếp trong Waitlist requirements.
+
+18.9. Virtual Queue / Fair Access Integrity
+QI01
+
+Queue Entry phải tuân thủ Fair Access Policy.
+
+QI02
+
+Admission không được vượt quá Admission Capacity.
+
+QI03
+
+Request frequency không được cho phép Customer nhận ưu tiên không công bằng.
+
+QI04
+
+Admission vào Queue không tạo ownership của EventSeat.
+
+QI05
+
+EventSeat ownership chỉ phát sinh từ Booking hợp lệ.
+
+Các yêu cầu này được quy định trong phần Queue/Queue Entry và DR-22.
+
+18.10. Promotion Integrity
+
+PI01 — One Application per Booking–Promotion
+
+Mỗi cặp:
+
+(BookingID, PromotionID)
+
+chỉ được xuất hiện tối đa một lần trong Booking–Promotion Application.
+
+Do đó:
+
+PRIMARY KEY (BookingID, PromotionID)
+
+đồng thời thực thi uniqueness của Promotion Application.
+
+PI02 — Application phải tham chiếu Promotion thực sự được dùng
+
+DR-23 yêu cầu Promotion Application tham chiếu đến Promotion thực sự được sử dụng trong giao dịch.
+
+PI03 — Discount Amount phải được bảo toàn
+
+Discount Amount thực tế phải được lưu và không được thay đổi chỉ vì cấu hình Promotion thay đổi sau đó.
+
+PI04 — Promotion phải còn hiệu lực
+
+Promotion chỉ được áp dụng trong khoảng:
+
+StartDatetime <= ApplicationTime <= EndDatetime
+
+và Booking phải đáp ứng toàn bộ điều kiện của Promotion.
+
+18.11. Historical and Audit Integrity
+
+BR50 yêu cầu các entity có historical business facts không được xóa theo cách làm mất dữ liệu lịch sử cần duy trì.
+
+Do đó:
+
+không physical-delete historical Concert/Booking/Payment/Ticket/EventSeat khi việc xóa làm mất business facts;
+các lifecycle changes phải được biểu diễn bằng state transitions;
+Audit Records thuộc phạm vi phải được bảo toàn;
+các historical monetary values phải giữ nguyên.
+
+File cũng quy định reporting/audit phải dựa trên các transactions và states đã được xác nhận.
+
+18.12. Constraint Matrix
+
+Để dễ chuyển sang SQL Server, toàn bộ constraint có thể tổng hợp thành:
+
+Constraint Type	Ví dụ tiêu biểu	Cơ chế triển khai phù hợp
+Entity Integrity	PK unique, PK NOT NULL	PRIMARY KEY
+Candidate Key Integrity	EventSeat (ConcertID, SeatID)	UNIQUE
+Referential Integrity	Booking.ConcertID → Concert	FOREIGN KEY
+Domain Integrity	Status ∈ allowed values	CHECK / domain table
+Mandatory Attribute	ConcertID NOT NULL	NOT NULL
+Temporal Integrity	End > Start	CHECK
+Monetary Domain	Amount ≥ 0, VND	CHECK, data type/domain
+Inventory Integrity	Seat không duplicate trong Concert	UNIQUE
+Cross-Entity Integrity	EventSeat Seat thuộc Concert Venue	composite relationship / transaction logic
+Allocation Integrity	EventSeat không active ở 2 Booking	transaction/concurrency/business logic
+Lifecycle Integrity	Pending → Confirmed/Expired/Cancelled	state-transition enforcement
+Payment Integrity	Confirmed Booking ↔ Confirmed Payment	transaction/business logic
+Ticket Integrity	Ticket chỉ phát hành sau Confirmed Booking	transaction/business logic
+Check-in Integrity	Ticket chỉ check-in một lần	UNIQUE + status logic
+Waitlist Integrity	FIFO, expiry, active-entry rule	constraints + business logic
+Queue Integrity	Admission capacity	transaction/business logic
+Promotion Integrity	(BookingID, PromotionID) unique	composite PK
+Historical Integrity	Không mất historical facts	delete policy / state model
+Audit Integrity	Audit record immutable/preserved	application/database control
+18.13. Tổng kết các constraint bắt buộc
+
+Để đánh giá thiết kế cuối cùng, danh sách tối thiểu các constraint bắt buộc (must enforce) được xác định như sau:
+
+Entity Integrity
+PK uniqueness
+PK NOT NULL
+UNIQUE(EventSeat.ConcertID, EventSeat.SeatID)
+UNIQUE(Ticket.TicketCode)
+UNIQUE(Venue.VenueID, Seat.SeatCode)
+UNIQUE(Venue.VenueID, Zone.ZoneCode)
+UNIQUE(Role.RoleName)
+UNIQUE(UserAccount.Username)
+UNIQUE(SystemConfiguration.ConfigurationKey)
+UNIQUE(Promotion.PromotionID, DiscountCode.CodeValue)
+UNIQUE(Waitlist.ConcertID)
+UNIQUE(Queue.ConcertID)
+UNIQUE(CheckIn.TicketID)
+UNIQUE(TicketCategory.ConcertID, TicketCategory.TicketCategoryID) — target của composite FK EventSeat → TicketCategory
+UNIQUE(Booking_ID, Payment_Reference) — idempotency khi retry thanh toán (chống tạo trùng Payment)
+Referential Integrity
+
+Toàn bộ các FK trong mục 17 phải tồn tại và tham chiếu đúng target key.
+Composite FK (EventSeat.ConcertID, EventSeat.TicketCategoryID) → TicketCategory(ConcertID, TicketCategoryID) để đảm bảo Ticket Category cùng Concert với EventSeat.
+
+Domain Integrity
+ConcertStatus ∈ {Draft, Published, OnSale, SaleClosed, Completed, Cancelled}
+
+
+BookingStatus ∈ {Pending, Confirmed, Expired, Cancelled}
+
+
+PaymentStatus ∈ {Pending, Confirmed, Failed, Refunded}
+
+
+TicketStatus ∈ {Issued, Used, Cancelled}
+
+
+EventSeatStatus ∈ {Available, OnHold, OnHoldForWaitlist, Booked, Unavailable}
+
+cùng các domain khác được đặc tả ở mục 18.4.1 cho Refund, Allocation, Role, Account, Promotion, Discount Code, Waitlist, Waitlist Entry, Queue và Queue Entry.
+
+Business Integrity
+End > Start
+HoldExpiry > HoldStart
+UNIQUE(ConcertID, SeatID)
+Booking EventSeat phải cùng Concert
+EventSeat Seat phải thuộc Concert Venue
+Active EventSeat không đồng thời ở 2 active Bookings
+Confirmed Booking ↔ Confirmed Payment
+Ticket → Booking Confirmed
+Ticket → EventSeat
+Refund → Confirmed Payment
+Payment.Amount = Booking.Final Amount
+Booking.Subtotal = Σ EventSeat.Sale Price
+Booking.Final Amount = Subtotal − Σ Discount Amount (≥ 0)
+Σ Refund.Amount ≤ Payment.Amount
+Các amount ≥ 0 (EventSeat.SalePrice, Booking.SubtotalAmount, Booking.FinalAmount, BookingPromotionApplication.DiscountAmount, Payment.Amount, Refund.RefundAmount) — CHECK
+Successful Check-in → valid Ticket
+Ticket không Check-in thành công quá một lần
+Waitlist FIFO / eligibility / expiry
+Queue admission ≤ capacity
+Queue admission không tạo EventSeat ownership
+One Booking + One Promotion → at most one Promotion Application
+Promotion validity conditions
+Historical transaction values preserved
+Audit history preserved
+
+19. Relationship Cardinality & Participation Identification
+Đối với mỗi Relationship giữa các Entity, Cardinality và Participation của mỗi phía là gì, và các ràng buộc này được suy ra từ những Business Rules/Data Requirements nào?
+
+Bảng dưới đây xác định Cardinality và Participation của từng quan hệ, được suy ra từ các Foreign Key (mục 17), Business Rules và Data Requirements (DR-01 – DR-25).
+#	Quan hệ	Phía 1	Phía 2	Cardinality	Participation Phía 1	Participation Phía 2	Cơ sở
+1	User được phân công Role	User	Role	M:N (qua User–Role Assignment)	Optional	Optional	BR52, 12.3.2
+2	Organizer sở hữu/quản lý Concert	User (Organizer)	Concert	1:N	Optional	Mandatory	BR01, DR-01
+3	Artist biểu diễn tại Concert	Artist	Concert	1:N	Optional	Mandatory	BR54, DR-03
+4	Concert tổ chức tại Venue	Venue	Concert	1:N	Optional	Mandatory	A2, BR02, DR-02
+5	Zone thuộc Venue	Venue	Zone	1:N	Optional	Mandatory	BR04, DR-04
+6	Seat thuộc Zone	Zone	Seat	1:N	Optional	Mandatory	BR04–BR05, DR-05
+7	EventSeat thuộc Concert	Concert	EventSeat	1:N	Optional	Mandatory	BR06, DR-06
+8	EventSeat đại diện Seat	Seat	EventSeat	1:N (khác Concert)	Optional	Mandatory	BR06, DR-06, DR-08
+9	EventSeat được gán Ticket Category	Ticket Category	EventSeat	1:N	Optional	Mandatory	12.8, FK#10
+10	Ticket Category thuộc Concert	Concert	Ticket Category	1:N	Optional	Mandatory	12.8.2
+11	Booking thuộc Customer	User (Customer)	Booking	1:N	Optional	Mandatory	BR11, DR-09
+12	Booking tạo cho Concert	Concert	Booking	1:N	Optional	Mandatory	BR11, DR-09
+13	Booking phân bổ EventSeat	Booking	EventSeat	M:N (qua Booking–EventSeat Allocation)	Mandatory	Optional	BR12, BR15, DR-10–DR-11
+14	Payment thuộc Booking	Booking	Payment	1:N	Optional	Mandatory	DR-12–DR-13
+15	Refund thuộc Payment	Payment	Refund	1:N	Optional	Mandatory	BR32, DR-19
+16	Ticket phát hành từ Booking	Booking	Ticket	1:N	Optional	Mandatory	BR25, DR-14
+17	Ticket đại diện EventSeat	EventSeat	Ticket	1:N (tối đa 1 Ticket hiệu lực cùng thời điểm)	Optional	Mandatory	BR26, DR-15
+18	Ticket thuộc Concert	Concert	Ticket	1:N	Optional	Mandatory	BR26, 12.12.1
+19	Check-in xác thực Ticket	Ticket	Check-in	1:N (tối đa 1 Check-in thành công)	Optional	Mandatory	BR29–BR30, DR-17–DR-18
+20	Check-in diễn ra tại Concert	Concert	Check-in	1:N	Optional	Optional	12.13, FK#22
+21	Check-in do nhân viên thực hiện	User (Check-in Staff)	Check-in	1:N	Optional	Optional	BR39, FK#23
+22	Waitlist dành cho Concert	Concert	Waitlist	1:1	Optional	Mandatory	BR40, 12.14.1
+23	Waitlist Entry thuộc Waitlist	Waitlist	Waitlist Entry	1:N	Optional	Mandatory	BR41, DR-20
+24	Waitlist Entry thuộc Customer	User	Waitlist Entry	1:N	Optional	Mandatory	BR41, DR-20
+25	Waitlist Entry tạo Booking	Booking	Waitlist Entry	1:N (tối đa 1)	Optional	Optional	12.14.2
+26	Queue dành cho Concert	Concert	Queue	1:1	Optional	Mandatory	BR45, 12.15.1
+27	Queue Entry thuộc Queue	Queue	Queue Entry	1:N	Optional	Mandatory	BR45–BR48, DR-21
+28	Queue Entry thuộc Customer	User	Queue Entry	1:N	Optional	Mandatory	DR-21
+29	Promotion áp dụng cho Concert	Concert	Promotion	1:N	Optional	Mandatory	BR35–BR36
+30	Discount Code thuộc Promotion	Promotion	Discount Code	1:N	Optional	Mandatory	FR53b, 12.16.2
+31	Promotion được áp dụng cho Booking	Booking	Promotion	M:N (qua Booking–Promotion Application)	Optional	Optional	BR36a, BR36b
+32	Audit Record do User thực hiện	User	Audit Record	1:N	Mandatory	Optional	BP15, FR58–FR59
+
+20. Entity–Relationship Diagram (ERD)
+Các Entity, Attribute chính, Key và Relationship đã xác định được biểu diễn như thế nào trong một ERD hoàn chỉnh, bao gồm Cardinality và Participation của từng Relationship?
+
+20.1. Danh sách 26 thực thể (theo §13), nhóm theo miền dữ liệu §12.2:
+- Định danh & Phân quyền: User Account, Role, User–Role Assignment, Check-in Staff Assignment (§12.13.2).
+- Concert & Nghệ sĩ: Artist, Concert. (Organizer là Vai trò — không phải entity; Concert.OrganizerUserID tham chiếu User Account.)
+- Cấu trúc địa điểm: Venue, Zone, Seat.
+- Kho vé: EventSeat, Ticket Category.
+- Đặt vé & Thanh toán: Booking, Booking–EventSeat Allocation, Payment, Refund.
+- Vé & Vào cửa: Ticket, Check-in.
+- Chờ & Truy cập công bằng: Waitlist, Waitlist Entry, Queue, Queue Entry.
+- Khuyến mãi: Promotion, Discount Code, Booking–Promotion Application.
+- Kiểm toán & Cấu hình: Audit Record, System Configuration.
+
+20.2. Các quan hệ chính (Cardinality/Participation theo §19 — bảng đã sửa — và §12.13.2):
+1. User : Role — M:N qua User–Role Assignment (cả hai Optional).
+2. User (Organizer) : Concert — 1:N (Concert Mandatory).
+3. Artist : Concert — 1:N (Concert Mandatory).
+4. Venue : Concert — 1:N (Concert Mandatory).
+5. Venue : Zone — 1:N (Zone Mandatory).
+6. Zone : Seat — 1:N (Seat Mandatory).
+7. Concert : EventSeat — 1:N (EventSeat Mandatory).
+8. Seat : EventSeat — 1:N (EventSeat Mandatory).
+9. Ticket Category : EventSeat — 1:N (EventSeat Mandatory); composite FK đảm bảo cùng Concert.
+10. Concert : Ticket Category — 1:N (Ticket Category Mandatory).
+11. User (Customer) : Booking — 1:N (Booking Mandatory).
+12. Concert : Booking — 1:N (Booking Mandatory).
+13. Booking : EventSeat — M:N qua Booking–EventSeat Allocation (Booking Mandatory; EventSeat Optional).
+14. Booking : Payment — 1:N (Payment Mandatory; Booking Optional).
+15. Payment : Refund — 1:N (Refund Mandatory; Payment Optional).
+16. Booking : Ticket — 1:N (Ticket Mandatory; Booking Optional) — chỉ khi Confirmed.
+17. EventSeat : Ticket — 1:N, tối đa 1 Ticket đang hiệu lực (Ticket Mandatory).
+18. Concert : Ticket — 1:N (Ticket Mandatory).
+19. Ticket : Check-in — 1:N, tối đa 1 Check-in thành công (Ticket Optional; Check-in Mandatory).
+20. Concert : Check-in — 1:N (Check-in Mandatory).
+21. User (Check-in Staff) : Check-in — 1:N (Check-in Mandatory).
+22. Concert : Waitlist — 1:1 (Waitlist Mandatory).
+23. Waitlist : Waitlist Entry — 1:N (Entry Mandatory; Waitlist Optional).
+24. User (Customer) : Waitlist Entry — 1:N (Entry Mandatory).
+25. Waitlist Entry : Booking — 1:0..1 (cả hai Optional) qua ResultingBookingID.
+26. Concert : Queue — 1:1 (Queue Mandatory).
+27. Queue : Queue Entry — 1:N (Entry Mandatory; Queue Optional).
+28. User (Customer) : Queue Entry — 1:N (Entry Mandatory).
+29. Concert : Promotion — 1:N (Promotion Mandatory).
+30. Promotion : Discount Code — 1:N (Discount Code Mandatory).
+31. Booking : Promotion — M:N qua Booking–Promotion Application (cả hai Optional).
+32. User : Audit Record — 1:N (Audit Mandatory).
+33. User (Check-in Staff) : Check-in Staff Assignment — 1:N (Assignment Mandatory) — BR39/FR51.
+34. Concert : Check-in Staff Assignment — 1:N (Assignment Mandatory) — BR39/FR51.
+
+20.3. Ghi chú ERD:
+- Các quan hệ M:N đều được phân giải bằng bảng associative: User–Role Assignment, Booking–EventSeat Allocation, Booking–Promotion Application.
+- Ticket.ConcertID và Check-in.ConcertID là denormalization có kiểm soát (phục vụ validation tại cổng) với ràng buộc nhất quán (FK-06).
+- Audit Record.EntityType + EntityID là tham chiếu đa hình (polymorphic), không phải FK thông thường (§17.18).
+
+
+21. Relational Schema / Relation Identification
+
+Quy ước ký hiệu: PK = Primary Key; FK→X = Foreign Key tới X; UQ = UNIQUE; NN = NOT NULL; thuộc tính không ghi NN là nullable theo Data Requirements.
+
+R1. UserAccount (UserID NN PK, Username NN UQ, AccountStatus NN, CreatedTimestamp NN, UpdatedTimestamp NN, Email, DisplayName, PasswordHash)
+   PK = UserID; UQ = Username (§15.4.1).
+
+R2. Role (RoleID NN PK, RoleName NN UQ, RoleDescription, RoleStatus NN)
+   PK = RoleID; UQ = RoleName (§15.4.2).
+
+R3. UserRoleAssignment (UserID NN FK→UserAccount, RoleID NN FK→Role, AssignedTimestamp NN, AssignmentStatus NN)
+   PK = (UserID, RoleID) (§15.4.3).
+
+R4. Artist (ArtistID NN PK, ArtistName NN, ArtistDescription)
+   PK = ArtistID.
+
+R5. Concert (ConcertID NN PK, OrganizerUserID NN FK→UserAccount, ArtistID NN FK→Artist, VenueID NN FK→Venue, ConcertName NN, StartDatetime NN, EndDatetime NN, ConcertStatus NN, SaleStartDatetime, SaleEndDatetime, PurchaseLimit NN, TemporaryHoldDuration, FairAccessEnabled NN, WaitlistEnabled NN, SalesPaused NN, CancellationPolicy, RefundPolicy)
+   PK = ConcertID (§12.5.1).
+
+R6. Venue (VenueID NN PK, VenueName NN, Address, VenueStatus NN, CreatedTimestamp NN, UpdatedTimestamp NN)
+   PK = VenueID.
+
+R7. Zone (ZoneID NN PK, VenueID NN FK→Venue, ZoneCode NN, ZoneName, ZoneDescription)
+   PK = ZoneID; UQ = (VenueID, ZoneCode) (§12.7.2, B5).
+
+R8. Seat (SeatID NN PK, ZoneID NN FK→Zone, VenueID NN FK→Venue, SeatCode NN, SeatLabel)
+   PK = SeatID; UQ = (VenueID, SeatCode) — triển khai BR05 (§12.7.3);
+   VenueID là denormalization có kiểm soát: phải bằng Zone.VenueID của ZoneID tương ứng; bất biến duy trì bằng TRG_SeatVenueConsistency (§23.4, §14).
+
+R9. EventSeat (EventSeatID NN PK, ConcertID NN FK→Concert, SeatID NN FK→Seat, TicketCategoryID NN FK→TicketCategory, SalePrice NN, InventoryStatus NN, AddedTimestamp NN, UnavailabilityReason)
+   PK = EventSeatID; UQ = (ConcertID, SeatID); FK composite (ConcertID, TicketCategoryID) → TicketCategory(ConcertID, TicketCategoryID) (§17.7).
+
+R10. TicketCategory (TicketCategoryID NN PK, ConcertID NN FK→Concert, CategoryName NN, CategoryDescription, CategoryStatus NN)
+    PK = TicketCategoryID; UQ = (ConcertID, TicketCategoryID) — khóa thay thế dạng UNIQUE cho composite FK (§17.7).
+
+R11. Booking (BookingID NN PK, CustomerUserID NN FK→UserAccount, ConcertID NN FK→Concert, BookingStatus NN, HoldStartDatetime, HoldExpiryDatetime, SubtotalAmount NN, FinalAmount NN, CreatedTimestamp NN, ConfirmedTimestamp, CancelledTimestamp, ExpiredTimestamp)
+    PK = BookingID (§12.9.1).
+
+R12. BookingEventSeatAllocation (BookingID NN FK→Booking, EventSeatID NN FK→EventSeat, AllocationTimestamp NN, ReleaseTimestamp, AllocationStatus NN, PriceSnapshot NN)
+    PK = (BookingID, EventSeatID) (§12.9.2).
+
+R13. Payment (PaymentID NN PK, BookingID NN FK→Booking, PaymentStatus NN, Amount NN, Currency NN, PaymentReference NN, PaymentRequestTimestamp NN, ConfirmationTimestamp, FailureTimestamp, ProviderReference)
+     PK = PaymentID (§12.10.1);
+     UQ = (BookingID, PaymentReference) — idempotency khi retry thanh toán (§12.10.1, §18.13).
+
+R14. Refund (RefundID NN PK, PaymentID NN FK→Payment, RefundStatus NN, RefundAmount NN, RefundReason, RefundRequestTimestamp NN, RefundConfirmationTimestamp, RefundReference)
+     PK = RefundID (§12.11.1).
+
+R15. Ticket (TicketID NN PK, BookingID NN FK→Booking, EventSeatID NN FK→EventSeat, ConcertID NN FK→Concert, TicketCode NN UQ, TicketStatus NN, IssuedTimestamp NN, UsedTimestamp, CancelledTimestamp)
+     PK = TicketID; UQ = TicketCode; FK composite (BookingID, EventSeatID) → BookingEventSeatAllocation(BookingID, EventSeatID) (§17.12).
+
+R16. CheckIn (CheckInID NN PK, TicketID NN FK→Ticket UQ, ConcertID NN FK→Concert, CheckInStaffUserID NN FK→UserAccount, CheckInTimestamp NN, ValidationResult NN, ValidationInformation)
+     PK = CheckInID; UQ = TicketID — mỗi Ticket tối đa một Check-in thành công (§12.13.1).
+
+R17. Waitlist (WaitlistID NN PK, ConcertID NN FK→Concert UQ, WaitlistStatus NN, OpenTimestamp, CloseTimestamp, AllocationPolicy NN)
+     PK = WaitlistID; UQ = ConcertID — quan hệ 1:1 (§12.14.1).
+
+R18. WaitlistEntry (WaitlistEntryID NN PK, WaitlistID NN FK→Waitlist, CustomerUserID NN FK→UserAccount, JoinedTimestamp NN, QueuePosition, EntryStatus NN, OpportunityGrantedTimestamp, OpportunityExpiryTimestamp, ResultingBookingID FK→Booking)
+     PK = WaitlistEntryID (§12.14.2).
+
+R19. Queue (QueueID NN PK, ConcertID NN FK→Concert UQ, QueueStatus NN, AdmissionCapacity NN, FairAccessPolicy NN)
+     PK = QueueID; UQ = ConcertID — quan hệ 1:1 (§12.15.1).
+
+R20. QueueEntry (QueueEntryID NN PK, QueueID NN FK→Queue, CustomerUserID NN FK→UserAccount, JoinedTimestamp NN, AdmissionPosition, QueueStatus NN, AdmissionTimestamp, ExitTimestamp, AdmissionExpiryTimestamp)
+     PK = QueueEntryID (§12.15.2).
+
+R21. Promotion (PromotionID NN PK, ConcertID NN FK→Concert, PromotionName NN, PromotionDescription, DiscountType NN, DiscountValue NN, StartDatetime NN, EndDatetime NN, PromotionStatus NN, UsageLimit, CodeRequiredFlag NN)
+     PK = PromotionID (§12.16.1).
+
+R22. DiscountCode (DiscountCodeID NN PK, PromotionID NN FK→Promotion, CodeValue NN, CodeStatus NN, ValidFromDatetime, ValidToDatetime)
+     PK = DiscountCodeID; UQ = (PromotionID, CodeValue) (§12.16.2).
+
+R23. BookingPromotionApplication (BookingID NN FK→Booking, PromotionID NN FK→Promotion, DiscountCodeID FK→DiscountCode, DiscountAmount NN, AppliedTimestamp NN)
+     PK = (BookingID, PromotionID) (§12.16.3).
+
+R24. AuditRecord (AuditID NN PK, ActorUserID NN FK→UserAccount, EventType NN, EntityType NN, EntityID NN, Action NN, EventTimestamp NN, PreviousValue, NewValue, TransactionReference)
+     PK = AuditID; EntityType+EntityID là tham chiếu đa hình, không phải FK (§12.17.1).
+
+R25. SystemConfiguration (ConfigurationID NN PK, ConfigurationKey NN UQ, ConfigurationValue NN)
+     PK = ConfigurationID; UQ = ConfigurationKey (§12.18).
+
+R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Concert, AssignedTimestamp NN)
+     PK = (UserID, ConcertID) (§12.13.2).
+
+
+22. Normalization
+
+22.1. Tiêu chí áp dụng:
+- 1NF: mọi thuộc tính là nguyên tử (không có danh sách/gộp trong một cột); mỗi thực thể được tách thành quan hệ riêng với một PK.
+- 2NF: với PK phức hợp, không có thuộc tính không-khóa phụ thuộc bộ phận vào một phần của PK.
+- 3NF: không có thuộc tính không-khóa phụ thuộc bắc cầu vào PK.
+- BCNF: mọi functional dependency đều có vế trái là siêu khóa.
+
+22.2. Kết quả kiểm tra từng quan hệ (R1–R26 — theo §21):
+
+| Quan hệ | PK | 1NF | 2NF | 3NF/BCNF | Ghi chú |
+|---|---|---|---|---|---|
+| R1 UserAccount | UserID | ✅ | — | ✅ | Username là natural key (UQ), không phụ thuộc bắc cầu. |
+| R2 Role | RoleID | ✅ | — | ✅ | RoleName UQ. |
+| R3 UserRoleAssignment | (UserID,RoleID) | ✅ | ✅ | ✅ | AssignedTimestamp/Status phụ thuộc cả hai thành phần PK; không có phụ thuộc bộ phận. |
+| R4 Artist | ArtistID | ✅ | — | ✅ | — |
+| R5 Concert | ConcertID | ✅ | — | ✅ | Cancellation/Refund Policy là cấu trúc policy trên Concert (đã chốt §9 D3). |
+| R6 Venue | VenueID | ✅ | — | ✅ | — |
+| R7 Zone | ZoneID | ✅ | — | ✅ | UQ (VenueID,ZoneCode). |
+| R8 Seat | SeatID | ✅ | — | ⚠️ denorm | VenueID là denormalization có kiểm soát (SeatID→ZoneID→VenueID); bất biến Seat.VenueID = Zone.VenueID duy trì bằng TRG_SeatVenueConsistency — tương tự Ticket.ConcertID (FK-06); UQ (VenueID,SeatCode) enforce BR05 tại DB level. |
+| R9 EventSeat | EventSeatID | ✅ | — | ✅ | UQ (ConcertID,SeatID); TicketCategoryID phụ thuộc EventSeatID (không bắc cầu). |
+| R10 TicketCategory | TicketCategoryID | ✅ | — | ✅ | UQ (ConcertID,CategoryID) là khóa thay thế UNIQUE. |
+| R11 Booking | BookingID | ✅ | — | ✅ | Subtotal/Final là snapshot, không phụ thuộc EventSeat (đã vật lý hóa §12.20). |
+| R12 BookingEventSeatAllocation | (BookingID,EventSeatID) | ✅ | ✅ | ✅ | ReleaseTimestamp/Status/PriceSnapshot phụ thuộc cả cặp PK; không phụ thuộc bộ phận. |
+| R13 Payment | PaymentID | ✅ | — | ✅ | UQ (BookingID,PaymentReference). |
+| R14 Refund | RefundID | ✅ | — | ✅ | — |
+| R15 Ticket | TicketID | ✅ | — | ✅ | TicketCode UQ; ConcertID là denormalization có kiểm soát (FK-06). |
+| R16 CheckIn | CheckInID | ✅ | — | ✅ | UQ TicketID; ConcertID denormalization có kiểm soát. |
+| R17 Waitlist | WaitlistID | ✅ | — | ✅ | UQ ConcertID (1:1). |
+| R18 WaitlistEntry | WaitlistEntryID | ✅ | — | ✅ | QueuePosition là giá trị cache/derived (FIFO) — không tạo phụ thuộc bắc cầu. |
+| R19 Queue | QueueID | ✅ | — | ✅ | UQ ConcertID (1:1). |
+| R20 QueueEntry | QueueEntryID | ✅ | — | ✅ | AdmissionPosition là cache/derived. |
+| R21 Promotion | PromotionID | ✅ | — | ✅ | — |
+| R22 DiscountCode | DiscountCodeID | ✅ | — | ✅ | UQ (PromotionID,CodeValue). |
+| R23 BookingPromotionApplication | (BookingID,PromotionID) | ✅ | ✅ | ✅ | DiscountCodeID/Amount/AppliedTimestamp phụ thuộc cả cặp PK. |
+| R24 AuditRecord | AuditID | ✅ | — | ✅ | EntityType+EntityID là tham chiếu đa hình (không FD chuẩn hóa). |
+| R25 SystemConfiguration | ConfigurationID | ✅ | — | ✅ | UQ ConfigurationKey. |
+| R26 CheckinStaffAssignment | (UserID,ConcertID) | ✅ | ✅ | ✅ | AssignedTimestamp phụ thuộc cả cặp PK. |
+
+22.3. Kết luận Normalization:
+- Toàn bộ 26 quan hệ đạt chuẩn 1NF–2NF–3NF/BCNF theo định nghĩa trên.
+- Không có quan hệ nào cần tách thêm ở bước này.
+- Hai denormalization có chủ đích được giữ và kiểm soát bằng ràng buộc nhất quán (FK-06): Ticket.ConcertID và Check-in.ConcertID; các vị trí Queue/Waitlist (QueuePosition, AdmissionPosition) là cache phục vụ thứ tự, được tái tính theo policy (FIFO).
+
+
+23. Physical SQL Server Design
+
+23.1. Ánh xạ kiểu dữ liệu (lựa chọn triển khai — nhất quán với đặc tả A19–A22 và §14):
+- Mọi cột định danh (…ID): INT IDENTITY(1,1), NOT NULL, đóng vai PK surrogate (theo §16).
+- Số tiền (VND, không có phần lẻ theo A19): DECIMAL(18,0) — áp dụng cho EventSeat.SalePrice, Booking.SubtotalAmount, Booking.FinalAmount, BookingPromotionApplication.DiscountAmount, Payment.Amount, Refund.RefundAmount, Allocation.PriceSnapshot.
+- Currency: CHAR(3) mặc định 'VND' + CHECK (Currency = 'VND') (A19).
+- Thời gian/ngày: DATETIME2(7) cho mọi datetime/timestamp (Start/End, Hold, các timestamp trạng thái).
+- Trạng thái (status): VARCHAR(32) NOT NULL, kèm CHECK constraint chặt theo danh sách §18.4.1 — áp dụng cho mọi cột status (Concert, Booking, Payment, Ticket, EventSeat, Refund, Allocation, Role, Account, Promotion, DiscountCode, Waitlist, WaitlistEntry, Queue, QueueEntry, Assignment, Venue, Category).
+- Cờ Boolean: BIT (FairAccessEnabled, WaitlistEnabled, SalesPaused, CodeRequiredFlag).
+- Mã và tên: NVARCHAR(255) cho tên (ConcertName, VenueName, ZoneName, SeatLabel, PromotionName, ArtistName, RoleName…); VARCHAR(64) NOT NULL cho các code và định danh loại (TicketCode, ZoneCode, SeatCode, CodeValue, ConfigurationKey, Username, AuditRecord.EventType, AuditRecord.EntityType).
+  AuditRecord.EventType theo quy ước ENTITY_ACTION (ví dụ: BOOKING_CREATED, PAYMENT_CONFIRMED, ADMISSION_ATTEMPT) — phạm vi sự kiện xác định bởi §12.17; không dùng CHECK cố định vì tập giá trị mở rộng theo phạm vi audit mà không cần ALTER TABLE.
+  AuditRecord.EntityType là tên loại entity bị tác động (ví dụ: 'Booking', 'Payment', 'EventSeat') — không CHECK cố định vì tập entity mở theo §13.
+- Văn bản mô tả: NVARCHAR(500) cho các trường mô tả nghiệp vụ (ArtistDescription, RoleDescription, ZoneDescription, SeatLabel, CategoryDescription, RefundReason, CancellationPolicy, RefundPolicy, UnavailabilityReason, ValidationInformation, PromotionDescription); NVARCHAR(MAX) cho PreviousValue và NewValue của AuditRecord vì phải lưu toàn bộ giá trị trước/sau của bất kỳ entity nào (§12.17).
+- ConfigValue: NVARCHAR(500) (các khóa thời lượng như Waitlist_Opportunity_Duration lưu theo đơn vị thống nhất do hệ thống quy định — không trái đặc tả).
+
+23.2. Khóa và chỉ mục (bảng → khóa):
+- PRIMARY KEY clustered trên cả 26 bảng theo §16.2/§21.
+- UNIQUE (các alternate/UNIQUE key — theo §16.2 và §18.13):
+  * Username (UserAccount), RoleName (Role)
+  * (VenueID, ZoneCode) — Zone
+  * (VenueID, SeatCode) — Seat; VenueID là cột trực tiếp trên Seat (denormalization có kiểm soát — §21 R8, §23.4)
+  * EventSeat: (ConcertID, SeatID)
+  * TicketCategory: (ConcertID, TicketCategoryID) — target của composite FK EventSeat → TicketCategory
+  * TicketCode (Ticket), CheckIn.TicketID
+  * Waitlist.ConcertID, Queue.ConcertID (1:1)
+  * SystemConfiguration.ConfigurationKey
+  * DiscountCode: (PromotionID, CodeValue)
+  * Payment: (BookingID, PaymentReference) — idempotency (S15)
+- Filtered UNIQUE index (theo §18.6/CI04, B2, B1 — cơ chế được Microsoft xác nhận, S2):
+  * UIX_Allocation_ActiveEventSeat: UNIQUE (EventSeatID) WHERE AllocationStatus = 'Active' — triển khai DR-11.
+  * UIX_Payment_ConfirmedPerBooking: UNIQUE (BookingID) WHERE PaymentStatus = 'Confirmed' — "≤1 Payment Confirmed/Booking" (B2).
+  * UIX_WaitlistEntry_ActivePerCustomer: UNIQUE (WaitlistID, CustomerUserID) WHERE EntryStatus = 'Active' — áp dụng cho chính sách đơn-entry mặc định (B1); khi Concert bật đa-entry, phải bỏ index này và chuyển sang kiểm soát bằng SP/trigger.
+- Chỉ mục hỗ trợ truy vấn vận hành: (EventSeatID) có WHERE TicketStatus='Issued' trên Ticket; (BookingID) trên Payment; (ConcertID) trên Ticket/Check-in để truy vấn theo Concert (BO9/FR55).
+  * Lưu ý: Yêu cầu đánh chỉ mục "(ConcertID, EventSeatID) trên Allocation" là một lỗi đặc tả cũ và đã được gỡ bỏ vì cột ConcertID không tồn tại trên bảng BookingEventSeatAllocation (theo §12.9.2 và §17.10). Để thực thi CI03, hệ thống sẽ thực hiện truy vấn thay thế bằng cách JOIN với bảng Booking qua chỉ mục IX_Booking_Concert_Status.
+- Chỉ mục hỗ trợ báo cáo vận hành (phục vụ FR55–FR57, BO9, A16):
+  * IX_Booking_Concert_Status: (ConcertID, BookingStatus) trên Booking — đếm vé bán/pending theo Concert.
+  * IX_Ticket_Concert_Status: (ConcertID, TicketStatus) trên Ticket — báo cáo tình trạng sử dụng vé theo Concert.
+  * IX_CheckIn_Concert_Timestamp: (ConcertID, CheckInTimestamp) trên CheckIn — admission reporting và phát hiện bất thường.
+  * IX_Payment_Status_Timestamp: (PaymentStatus, ConfirmationTimestamp) trên Payment — báo cáo doanh thu theo thời gian và trạng thái.
+  * IX_WaitlistEntry_Waitlist_Status: (WaitlistID, EntryStatus) trên WaitlistEntry — truy vấn nhanh active entries của Waitlist.
+  * IX_QueueEntry_Queue_Status: (QueueID, QueueStatus) trên QueueEntry — admission control và capacity check.
+
+23.3. CHECK constraints (theo §18.5 AI01–AI05 và §18.13):
+- NOT NULL (AI01): mọi cột PK và mọi thuộc tính bắt buộc theo §12 (BookingID/EventSeatID/ConcertID/TicketCode…; composite FK có các cột tham gia NOT NULL).
+- Temporal (AI02): Concert.EndDatetime > Concert.StartDatetime; SaleEndDatetime >= SaleStartDatetime; Booking.HoldExpiryDatetime > Booking.HoldStartDatetime; Promotion.EndDatetime > Promotion.StartDatetime.
+- Monetary (AI03): CHECK (Amount >= 0) cho EventSeat.SalePrice, Booking.SubtotalAmount, Booking.FinalAmount, BookingPromotionApplication.DiscountAmount, Payment.Amount, Refund.RefundAmount; CHECK (Currency = 'VND').
+- Status domains (§18.4.1, 15 domain): CHECK trên mỗi cột status theo đúng tập giá trị (Concert/Booking/Payment/Ticket/EventSeat(bao gồm OnHoldForWaitlist)/Refund/Allocation/Role/Account/Promotion/DiscountCode/Waitlist/WaitlistEntry/Queue/QueueEntry).
+- Status–Timestamp (AI05): tối đa 1 trong các timestamp trạng thái khác NULL (Booking: Confirmed/Cancelled/Expired; Ticket: Used/Cancelled), viết tường minh (CASE khi cột NULL-able) để tránh UNKNOWN; kết hợp trigger khi trạng thái thay đổi (BR49).
+
+23.4. Triggers (các bất biến không thể CHECK/FK — theo §18.6–§18.13 và các resolution):
+- TRG_StateTransition (BR49): AFTER UPDATE kiểm tra OLD→NEW hợp lệ theo §10.1 cho Concert, EventSeat, Booking, Payment, Ticket, Refund, Waitlist, WaitlistEntry, Queue, QueueEntry.
+- TRG_TicketConcertConsistency (FK-06): Ticket.ConcertID = Booking.ConcertID và CheckIn.ConcertID = Ticket.ConcertID (INSERT/UPDATE).
+- TRG_EventSeatVenue (DR-07): Seat của EventSeat thuộc Venue của Concert (kiểm tra chéo khi INSERT EventSeat).
+- TRG_AllocationConcert (DR-10): EventSeat của Allocation thuộc Concert của Booking.
+- TRG_InventoryAllocationConsistency (CONSTR-04): khi Allocation đang Active, EventSeat.InventoryStatus ∈ {OnHold, Booked}.
+- TRG_TicketCountOnConfirm (B3): khi Booking → Confirmed, count(Ticket) phải bằng count(Allocation Active) của Booking; lệch → ROLLBACK.
+- TRG_OneActiveTicketPerEventSeat (D18): mỗi EventSeat tối đa một Ticket có TicketStatus = Issued tại một thời điểm.
+- TRG_RefundLimits (CT-06): Σ Refund.Amount ≤ Payment.Amount; không tạo Refund khi Payment đã hoàn đủ.
+- TRG_PaymentConfirmedSingle (B2): chỉ cho phép tối đa một Payment Confirmed cho một Booking (song hành với filtered unique UIX_Payment_ConfirmedPerBooking).
+- TRG_DiscountCodeConditional (FK-03): khi Promotion.CodeRequiredFlag = TRUE thì BookingPromotionApplication.DiscountCodeID phải có giá trị.
+- TRG_PromotionValidity (PI04/CT-17): AppliedTimestamp ∈ [Promotion.Start, Promotion.End]; DiscountCode validity nằm trong Promotion validity.
+- TRG_AuditLog (BP15): tự ghi INSERT/UPDATE/DELETE thuộc phạm vi audit; AuditRecord bất biến (chặn UPDATE/DELETE).
+- TRG_SystemActorGuard (D14): sự kiện hệ thống (SIP1–SIP3) ghi ActorUserID = tài khoản dự trữ "System".
+- TRG_SeatVenueConsistency (§14, BR05): AFTER INSERT, UPDATE ON Seat — kiểm tra Seat.VenueID = Zone.VenueID của Zone tương ứng (JOIN Zone ON Zone.ZoneID = inserted.ZoneID); vi phạm → ROLLBACK. Đảm bảo bất biến denormalization VenueID trên Seat luôn nhất quán với chuỗi Seat→Zone→Venue.
+
+23.5. Stored procedures (tầng orchestration giao dịch — theo BP5–BP11, BR22–BR24, §18.13):
+- sp_CreateBooking: kiểm tra trạng thái Concert (OnSale, SalesPaused), purchase limit (FR19 — đếm Pending+Confirmed theo D2), giữ chỗ nguyên tử theo pattern conditional UPDATE (CI04); sinh HoldStart/HoldExpiry từ cấu hình Concert hoặc toàn cục (BR53); ghi Allocation + Audit.
+- sp_ConfirmPayment: đối chiếu Payment.Amount = Booking.FinalAmount (DR-12/§12.20), kiểm tra ≤1 Payment Confirmed (B2), chuyển Payment→Confirmed, Booking→Confirmed, phát hành Ticket đúng số Allocation Active (B3), cập nhật EventSeat→Booked.
+- sp_ReleaseExpiredHolds (BP7/SIP1): tìm Booking Pending quá hạn, chuyển Expired, giải phóng Allocation/EventSeat→Available.
+- sp_AllocateWaitlist (BP10/SIP2): theo AllocationPolicy (FIFO theo JoinedTimestamp — BR43), cấp cơ hội có thời hạn (D4), đặt EventSeat tạm OnHoldForWaitlist (D7), ghi Audit.
+- sp_ProcessRefund (BP8/BR31–BR34): kiểm tra policy hoàn trên Concert (D3), giới hạn Σ Refund ≤ Payment.Amount, cập nhật Refund/Payment.
+- sp_ApplyPromotion (BP13/FR53, FR53b): kiểm tra hiệu lực, discount code, điều kiện; ghi Booking–Promotion Application với DiscountAmount snapshot.
+- sp_CheckInTicket (BP9/FR41–FR45): xác thực Ticket theo TicketCode + Concert + trạng thái; thành công → Check-in + Ticket→Used; thất bại → Audit EventType=ADMISSION_ATTEMPT (D6).
+
+23.6. Giao dịch và cô lập (chống oversell — §18.6 CI04, S6/S7):
+- Giữ chỗ: `UPDATE EventSeat SET InventoryStatus='OnHold' WHERE EventSeatID=@id AND InventoryStatus='Available';` nếu @@ROWCOUNT=0 → mất seat, ROLLBACK; thực hiện trong một transaction cùng việc tạo Booking/Allocation (BR15 — toàn bộ hoặc không gì).
+- Cô lập cao hơn khi cần: khi tải concurrent đòi hỏi bổ sung, dùng mức cô lập SERIALIZABLE hoặc SNAPSHOT kèm optimistic retry dựa trên rowversion (S14); table hints (UPDLOCK…) chỉ được dùng khi cơ chế conditional UPDATE không đạt và phải ghi lý do cụ thể trong implementation notes.
+- Xác nhận Booking/Payment: toàn bộ trong một transaction (Payment Confirmed → Booking Confirmed → phát hành Ticket), có TRG_StateTransition và TRG_TicketCountOnConfirm làm nút bảo vệ.
+- Retry thanh toán: nhờ UNIQUE (BookingID, PaymentReference) + idempotency (S15) — không sinh bản ghi trùng.
+
+23.7. Bảo mật, phân quyền và ghi chú triển khai:
+- Phân quyền dữ liệu (BR37–BR39, FR48–FR51): Organizer theo Concert.OrganizerUserID; Customer theo dữ liệu của chính mình; Check-in Staff theo bảng CheckinStaffAssignment (org-scoped RBAC — S20, D5); Admin toàn hệ thống.
+- Least privilege: quyền DB cấp tối thiểu theo vai trò (S20); không cấp quyền trực tiếp ghi vào bảng ngoài stored procedures quy định.
+- Seat unique theo Venue (BR05): Seat lưu trực tiếp VenueID (denormalization có kiểm soát — đã chốt, phản ánh tại §14 và §21 R8) để SQL Server enforce UNIQUE(VenueID, SeatCode) tại DB level mà không cần computed column hay trigger phức tạp. Bất biến Seat.VenueID = Zone.VenueID của ZoneID tương ứng được duy trì bằng TRG_SeatVenueConsistency (§23.4). Đây là pattern chuẩn production cho venue/seat hierarchy.
+- Tiền tệ: toàn bộ DECIMAL(18,0) VND (A19); không lưu tỷ giá/đa tiền tệ.
+- Phạm vi triển khai: single SQL Server instance, không HA/replication/multi-region (A22).
+- Dữ liệu lịch sử: không physical-delete các bản ghi nghiệp vụ đã phát sinh (BR50, §12.22); Audit Record bất biến.
+- Dữ liệu nền tảng bắt buộc khi triển khai (bootstrap data — phải tồn tại trước khi bất kỳ nghiệp vụ nào vận hành):
+  * Bảng Role: 4 bản ghi — Admin, Organizer, Customer, Check-in Staff (§12.3.2, BR52).
+  * Bảng UserAccount: 1 bản ghi dự trữ Username='system', AccountStatus='Active', PasswordHash=NULL — dùng làm ActorUserID cho SIP1–SIP3; không được gán Role; không cho phép đăng nhập (§12.17.1, dòng 992).
+  * Bảng SystemConfiguration: 3 bản ghi — Default_Temporary_Hold_Duration (BR53), Waitlist_Opportunity_Duration (D4), Queue_Admission_Validity (D4); giá trị do triển khai xác định theo chính sách vận hành (§12.18).
