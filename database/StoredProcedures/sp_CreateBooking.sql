@@ -14,6 +14,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreateBooking
     @CustomerUserID  INT,
     @ConcertID       INT,
     @SeatList        NVARCHAR(MAX),   -- vd: '101,102,103'
+    @WaitlistEntryID INT = NULL,
     @NewBookingID    INT OUTPUT
 )
 AS
@@ -43,10 +44,35 @@ BEGIN
         -- --------------------------------------------------------
         CREATE TABLE #SeatRequests (EventSeatID INT NOT NULL);
 
-        INSERT INTO #SeatRequests (EventSeatID)
-        SELECT CAST(value AS INT)
-        FROM   STRING_SPLIT(@SeatList, ',')
-        WHERE  LTRIM(RTRIM(value)) <> '';
+        DECLARE @OfferedEventSeatID INT;
+
+        IF @WaitlistEntryID IS NOT NULL
+        BEGIN
+            -- Luong Waitlist: Khach hang dang dung co hoi Waitlist de mua ve
+            SELECT @OfferedEventSeatID = OfferedEventSeatID
+            FROM   WaitlistEntry
+            WHERE  WaitlistEntryID = @WaitlistEntryID
+              AND  CustomerUserID  = @CustomerUserID
+              AND  EntryStatus     = 'Granted'
+              AND  OpportunityExpiryTimestamp >= SYSDATETIME();
+
+            IF @OfferedEventSeatID IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                THROW 51005, 'sp_CreateBooking: WaitlistEntry khong hop le, khong thuoc ve Customer, hoac da het han.', 1;
+            END
+
+            -- Bo qua @SeatList cua client, chi book dung cai ghe duoc offer
+            INSERT INTO #SeatRequests (EventSeatID) VALUES (@OfferedEventSeatID);
+        END
+        ELSE
+        BEGIN
+            -- Luong binh thuong
+            INSERT INTO #SeatRequests (EventSeatID)
+            SELECT CAST(value AS INT)
+            FROM   STRING_SPLIT(@SeatList, ',')
+            WHERE  LTRIM(RTRIM(value)) <> '';
+        END
 
         DECLARE @RequestedCount INT = (SELECT COUNT(*) FROM #SeatRequests);
 
@@ -92,7 +118,7 @@ BEGIN
         SET    InventoryStatus = 'OnHold'
         WHERE  EventSeatID     IN (SELECT EventSeatID FROM #SeatRequests)
           AND  ConcertID       = @ConcertID
-          AND  InventoryStatus = 'Available';  -- conditional
+          AND  InventoryStatus = CASE WHEN @WaitlistEntryID IS NOT NULL THEN 'OnHoldForWaitlist' ELSE 'Available' END;  -- conditional
 
         IF @@ROWCOUNT <> @RequestedCount
         BEGIN
@@ -148,6 +174,17 @@ BEGIN
              CAST(@NewBookingID AS VARCHAR(64)), 'INSERT',
              SYSDATETIME(),
              '{"Status":"Pending","SeatCount":' + CAST(@RequestedCount AS VARCHAR) + '}');
+
+        -- --------------------------------------------------------
+        -- 9. Cap nhat WaitlistEntry neu co
+        -- --------------------------------------------------------
+        IF @WaitlistEntryID IS NOT NULL
+        BEGIN
+            UPDATE WaitlistEntry
+            SET    EntryStatus = 'Fulfilled',
+                   ResultingBookingID = @NewBookingID
+            WHERE  WaitlistEntryID = @WaitlistEntryID;
+        END
 
         DROP TABLE #SeatRequests;
         COMMIT TRANSACTION;
