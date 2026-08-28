@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- sp_AllocateWaitlist (BP10 / SIP2 / BR42-BR44)
 -- Phan bo co hoi Booking cho Customer trong Waitlist theo
 -- FIFO (JoinedTimestamp tang dan - BR43).
@@ -24,7 +24,15 @@ BEGIN
     WHERE   ConfigurationKey = 'Waitlist_Opportunity_Duration';
     SET @OpportunityDuration = ISNULL(@OpportunityDuration, 3600);
 
-    -- Lay WaitlistID cua Concert
+    -- 1. Kiem tra Concert phai OnSale va khong SalesPaused
+    IF NOT EXISTS (
+        SELECT 1 FROM Concert
+        WHERE  ConcertID    = @ConcertID
+          AND  ConcertStatus = 'OnSale'
+          AND  SalesPaused   = 0
+    ) RETURN;
+
+    -- 2. Lay WaitlistID cua Concert
     DECLARE @WaitlistID INT;
     SELECT  @WaitlistID = WaitlistID
     FROM    Waitlist
@@ -33,8 +41,7 @@ BEGIN
 
     IF @WaitlistID IS NULL RETURN;
 
-    -- Lay danh sach EventSeat cua Concert dang Available
-    -- de co the giu cho Waitlist
+    -- 3. Lay danh sach EventSeat cua Concert dang Available
     DECLARE @AvailableSeatID INT;
     SELECT TOP 1 @AvailableSeatID = EventSeatID
     FROM   EventSeat
@@ -43,17 +50,25 @@ BEGIN
 
     IF @AvailableSeatID IS NULL RETURN;
 
-    -- Lay Customer dau tien trong Waitlist theo FIFO (BR43)
+    -- 4. Kiem tra Purchase Limit cua Concert
+    DECLARE @PurchaseLimit INT;
+    SELECT  @PurchaseLimit = PurchaseLimit
+    FROM    Concert
+    WHERE   ConcertID = @ConcertID;
+
+    -- 5. Lay Customer dau tien trong Waitlist theo FIFO (BR43)
+    --    va phai con TRONG GIOI HAN MUA VE (Purchase Limit)
     DECLARE @WaitlistEntryID  INT;
     DECLARE @CustomerUserID   INT;
 
     SELECT TOP 1
            @WaitlistEntryID = WaitlistEntryID,
            @CustomerUserID  = CustomerUserID
-    FROM   WaitlistEntry
-    WHERE  WaitlistID   = @WaitlistID
-      AND  EntryStatus  = 'Active'
-    ORDER BY JoinedTimestamp ASC;
+    FROM   WaitlistEntry we
+    WHERE  we.WaitlistID   = @WaitlistID
+      AND  we.EntryStatus  = 'Active'
+      AND  (dbo.fn_GetCustomerTicketCount(we.CustomerUserID, @ConcertID) + 1) <= @PurchaseLimit
+    ORDER BY we.JoinedTimestamp ASC;
 
     IF @WaitlistEntryID IS NULL RETURN;
 
@@ -78,8 +93,16 @@ BEGIN
         UPDATE WaitlistEntry
         SET    EntryStatus                = 'Granted',
                OpportunityGrantedTimestamp = @Now,
-               OpportunityExpiryTimestamp  = @OpportunityExpiry
-        WHERE  WaitlistEntryID = @WaitlistEntryID;
+               OpportunityExpiryTimestamp  = @OpportunityExpiry,
+               OfferedEventSeatID          = @AvailableSeatID
+        WHERE  WaitlistEntryID = @WaitlistEntryID
+          AND  EntryStatus = 'Active';  -- conditional
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            RETURN;  -- WaitlistEntry da bi thay doi boi session khac
+        END
 
         -- Ghi AuditRecord
         INSERT INTO AuditRecord
@@ -91,7 +114,7 @@ BEGIN
              CAST(@WaitlistEntryID AS VARCHAR(64)),
              'UPDATE',
              @Now,
-             '{"EntryStatus":"Granted","EventSeatID":' + CAST(@AvailableSeatID AS VARCHAR) + '}');
+             '{"EntryStatus":"Granted","OfferedEventSeatID":' + CAST(@AvailableSeatID AS VARCHAR) + '}');
 
         COMMIT TRANSACTION;
 
