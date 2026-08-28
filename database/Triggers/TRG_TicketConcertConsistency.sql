@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- TRG_TicketConcertConsistency (FK-06)
 -- Dam bao hai bat bien denormalization co kiem soat:
 --   1. Ticket.ConcertID = Booking.ConcertID cua Booking tuong ung.
@@ -21,7 +21,7 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50010, 'FK-06 Violation: Ticket.ConcertID phai bang Booking.ConcertID.', 1;
+        THROW 50012, 'FK-06 Violation: Ticket.ConcertID phai bang Booking.ConcertID.', 1;
     END
 END;
 GO
@@ -42,7 +42,7 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50011, 'FK-06 Violation: CheckIn.ConcertID phai bang Ticket.ConcertID.', 1;
+        THROW 50013, 'FK-06 Violation: CheckIn.ConcertID phai bang Ticket.ConcertID.', 1;
     END
 END;
 GO
