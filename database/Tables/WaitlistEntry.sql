@@ -7,10 +7,12 @@ CREATE TABLE WaitlistEntry (
     EntryStatus VARCHAR(32) NOT NULL,
     OpportunityGrantedTimestamp DATETIME2(7),
     OpportunityExpiryTimestamp DATETIME2(7),
+    OfferedEventSeatID INT NULL,
     ResultingBookingID INT,
     CONSTRAINT PK_WaitlistEntry PRIMARY KEY CLUSTERED (WaitlistEntryID),
     CONSTRAINT FK_WaitlistEntry_Waitlist FOREIGN KEY (WaitlistID) REFERENCES Waitlist(WaitlistID),
     CONSTRAINT FK_WaitlistEntry_Customer FOREIGN KEY (CustomerUserID) REFERENCES UserAccount(UserID),
+    CONSTRAINT FK_WaitlistEntry_EventSeat FOREIGN KEY (OfferedEventSeatID) REFERENCES EventSeat(EventSeatID),
     CONSTRAINT FK_WaitlistEntry_Booking FOREIGN KEY (ResultingBookingID) REFERENCES Booking(BookingID),
     CONSTRAINT CHK_WaitlistEntry_Status CHECK (EntryStatus IN ('Active', 'Granted', 'Expired', 'Fulfilled'))
 );
