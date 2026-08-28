@@ -1329,9 +1329,9 @@ Check-in là một record/event độc lập vì tài liệu yêu cầu Check-in
 8. Waitlist
 Entity	Attributes
 Waitlist	Waitlist ID, Concert ID, Waitlist Status, Open Timestamp, Close Timestamp, Allocation Policy
-Waitlist Entry	Waitlist Entry ID, Waitlist ID, Customer User ID, Joined Timestamp, Queue Position, Entry Status, Opportunity Granted Timestamp, Opportunity Expiry Timestamp, Resulting Booking ID
+Waitlist Entry	Waitlist Entry ID, Waitlist ID, Customer User ID, Joined Timestamp, Queue Position, Entry Status, Opportunity Granted Timestamp, Opportunity Expiry Timestamp, Offered Event Seat ID, Resulting Booking ID
 
-Waitlist Entry phải lưu cả vị trí, trạng thái, thời điểm cấp cơ hội Booking và thời điểm cơ hội hết hạn.
+Waitlist Entry phải lưu cả vị trí, trạng thái, thời điểm cấp cơ hội Booking, thời điểm cơ hội hết hạn và ID của ghế (Offered Event Seat ID) được giữ riêng cho cơ hội này.
 
 9. Fair Access / Virtual Queue
 Entity	Attributes
@@ -2820,6 +2820,9 @@ WaitlistEntry.CustomerUserID
 WaitlistEntry.ResultingBookingID
     → Booking.BookingID
 
+WaitlistEntry.OfferedEventSeatID
+    → EventSeat.EventSeatID
+
 ResultingBookingID có thể NULL trước khi opportunity tạo ra Booking.
 
 RI12 — Queue
@@ -3504,7 +3507,7 @@ R16. CheckIn (CheckInID NN PK, TicketID NN FK→Ticket UQ, ConcertID NN FK→Con
 R17. Waitlist (WaitlistID NN PK, ConcertID NN FK→Concert UQ, WaitlistStatus NN, OpenTimestamp, CloseTimestamp, AllocationPolicy NN)
      PK = WaitlistID; UQ = ConcertID — quan hệ 1:1 (§12.14.1).
 
-R18. WaitlistEntry (WaitlistEntryID NN PK, WaitlistID NN FK→Waitlist, CustomerUserID NN FK→UserAccount, JoinedTimestamp NN, QueuePosition, EntryStatus NN, OpportunityGrantedTimestamp, OpportunityExpiryTimestamp, ResultingBookingID FK→Booking)
+R18. WaitlistEntry (WaitlistEntryID NN PK, WaitlistID NN FK→Waitlist, CustomerUserID NN FK→UserAccount, JoinedTimestamp NN, QueuePosition, EntryStatus NN, OpportunityGrantedTimestamp, OpportunityExpiryTimestamp, OfferedEventSeatID FK→EventSeat, ResultingBookingID FK→Booking)
      PK = WaitlistEntryID (§12.14.2).
 
 R19. Queue (QueueID NN PK, ConcertID NN FK→Concert UQ, QueueStatus NN, AdmissionCapacity NN, FairAccessPolicy NN)
@@ -3643,10 +3646,10 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
 - TRG_SeatVenueConsistency (§14, BR05): AFTER INSERT, UPDATE ON Seat — kiểm tra Seat.VenueID = Zone.VenueID của Zone tương ứng (JOIN Zone ON Zone.ZoneID = inserted.ZoneID); vi phạm → ROLLBACK. Đảm bảo bất biến denormalization VenueID trên Seat luôn nhất quán với chuỗi Seat→Zone→Venue.
 
 23.5. Stored procedures (tầng orchestration giao dịch — theo BP5–BP11, BR22–BR24, §18.13):
-- sp_CreateBooking: kiểm tra trạng thái Concert (OnSale, SalesPaused), purchase limit (FR19 — đếm Pending+Confirmed theo D2), giữ chỗ nguyên tử theo pattern conditional UPDATE (CI04); sinh HoldStart/HoldExpiry từ cấu hình Concert hoặc toàn cục (BR53); ghi Allocation + Audit.
+- sp_CreateBooking: kiểm tra trạng thái Concert (OnSale, SalesPaused), purchase limit (FR19 — đếm Pending+Confirmed theo D2), nếu là luồng Waitlist, bỏ qua danh sách ghế (SeatList) từ client, bắt buộc sử dụng OfferedEventSeatID từ DB; giữ chỗ nguyên tử theo pattern conditional UPDATE (CI04); sinh HoldStart/HoldExpiry từ cấu hình Concert hoặc toàn cục (BR53); ghi Allocation + Audit.
 - sp_ConfirmPayment: đối chiếu Payment.Amount = Booking.FinalAmount (DR-12/§12.20), kiểm tra ≤1 Payment Confirmed (B2), chuyển Payment→Confirmed, Booking→Confirmed, phát hành Ticket đúng số Allocation Active (B3), cập nhật EventSeat→Booked.
-- sp_ReleaseExpiredHolds (BP7/SIP1): tìm Booking Pending quá hạn, chuyển Expired, giải phóng Allocation/EventSeat→Available.
-- sp_AllocateWaitlist (BP10/SIP2): theo AllocationPolicy (FIFO theo JoinedTimestamp — BR43), cấp cơ hội có thời hạn (D4), đặt EventSeat tạm OnHoldForWaitlist (D7), ghi Audit.
+- sp_ReleaseExpiredHolds (BP7/SIP1): tìm Booking Pending quá hạn, chuyển Expired, giải phóng Allocation/EventSeat→Available. Đối với Waitlist, dùng conditional update (AND EntryStatus='Granted') để thu hồi an toàn tránh transaction crash; sử dụng JOIN lại bảng gốc để ghi AuditRecord chính xác.
+- sp_AllocateWaitlist (BP10/SIP2): kiểm tra Concert OnSale/SalesPaused=0 và kiểm tra khách hàng chưa vượt quá Purchase Limit (tự động bỏ qua khách đã đủ vé); theo AllocationPolicy (FIFO theo JoinedTimestamp — BR43), cấp cơ hội có thời hạn (D4), đặt EventSeat tạm OnHoldForWaitlist (D7) và ghi OfferedEventSeatID vào WaitlistEntry để liên kết ghế với cơ hội được cấp, ghi Audit.
 - sp_ProcessRefund (BP8/BR31–BR34): kiểm tra policy hoàn trên Concert (D3), giới hạn Σ Refund ≤ Payment.Amount, cập nhật Refund/Payment.
 - sp_ApplyPromotion (BP13/FR53, FR53b): kiểm tra hiệu lực, discount code, điều kiện; ghi Booking–Promotion Application với DiscountAmount snapshot.
 - sp_CheckInTicket (BP9/FR41–FR45): xác thực Ticket theo TicketCode + Concert + trạng thái; thành công → Check-in + Ticket→Used; thất bại → Audit EventType=ADMISSION_ATTEMPT (D6).
