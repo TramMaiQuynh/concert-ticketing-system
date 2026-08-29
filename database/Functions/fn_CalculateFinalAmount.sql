@@ -9,24 +9,19 @@ CREATE OR ALTER FUNCTION dbo.fn_CalculateFinalAmount
 (
     @BookingID INT
 )
-RETURNS DECIMAL(18,0)
+RETURNS TABLE
+WITH SCHEMABINDING
 AS
-BEGIN
-    DECLARE @Subtotal      DECIMAL(18,0);
-    DECLARE @TotalDiscount DECIMAL(18,0);
-    DECLARE @FinalAmount   DECIMAL(18,0);
-
-    SELECT @Subtotal = dbo.fn_CalculateBookingSubtotal(@BookingID);
-
-    SELECT @TotalDiscount = ISNULL(SUM(bpa.DiscountAmount), 0)
-    FROM   BookingPromotionApplication bpa
-    WHERE  bpa.BookingID = @BookingID;
-
-    SET @FinalAmount = @Subtotal - @TotalDiscount;
-
-    -- Dam bao khong am (du lieu bao ve; CHECK tren Booking se bat neu SP logic sai)
-    IF @FinalAmount < 0 SET @FinalAmount = 0;
-
-    RETURN @FinalAmount;
-END;
+RETURN (
+    SELECT CASE
+               WHEN (s.Subtotal - d.TotalDiscount) < 0 THEN 0
+               ELSE (s.Subtotal - d.TotalDiscount)
+           END AS FinalAmount
+    FROM   dbo.fn_CalculateBookingSubtotal(@BookingID) s
+    CROSS APPLY (
+        SELECT ISNULL(SUM(bpa.DiscountAmount), 0) AS TotalDiscount
+        FROM   dbo.BookingPromotionApplication bpa
+        WHERE  bpa.BookingID = @BookingID
+    ) d
+);
 GO
