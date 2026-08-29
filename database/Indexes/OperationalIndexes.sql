@@ -19,5 +19,9 @@ CREATE NONCLUSTERED INDEX IX_Booking_Concert_Status ON Booking (ConcertID, Booki
 CREATE NONCLUSTERED INDEX IX_Ticket_Concert_Status ON Ticket (ConcertID, TicketStatus);
 CREATE NONCLUSTERED INDEX IX_CheckIn_Concert_Timestamp ON CheckIn (ConcertID, CheckInTimestamp);
 CREATE NONCLUSTERED INDEX IX_Payment_Status_Timestamp ON Payment (PaymentStatus, ConfirmationTimestamp);
-CREATE NONCLUSTERED INDEX IX_WaitlistEntry_Waitlist_Status ON WaitlistEntry (WaitlistID, EntryStatus);
+CREATE NONCLUSTERED INDEX IX_WaitlistEntry_Waitlist_Status_Joined ON WaitlistEntry (WaitlistID, EntryStatus, JoinedTimestamp);
 CREATE NONCLUSTERED INDEX IX_QueueEntry_Queue_Status ON QueueEntry (QueueID, QueueStatus);
+
+-- Optimized covering index for iTVF (fn_GetCustomerTicketCount)
+CREATE NONCLUSTERED INDEX IX_Booking_Customer_Concert_Status 
+ON Booking (CustomerUserID, ConcertID, BookingStatus);
