@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 01_SetupMockData.sql
 -- Xoa het data cu, seeding du lieu test sach.
 -- Schema khop voi deploy.ps1 thuc te.
