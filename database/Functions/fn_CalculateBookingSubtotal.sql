@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS dbo.fn_CalculateBookingSubtotal;
+GO
 -- ============================================================
 -- fn_CalculateBookingSubtotal
 -- Tinh tong gia goc = tong SalePrice cua cac EventSeat
@@ -5,7 +7,7 @@
 -- Dung trong sp_CreateBooking de tinh SubtotalAmount (§12.9.1).
 -- Tra ve: DECIMAL(18,0) - tong gia goc.
 -- ============================================================
-CREATE OR ALTER FUNCTION dbo.fn_CalculateBookingSubtotal
+CREATE FUNCTION dbo.fn_CalculateBookingSubtotal
 (
     @BookingID INT
 )

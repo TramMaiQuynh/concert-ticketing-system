@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS dbo.fn_GetCustomerTicketCount;
+GO
 -- ============================================================
 -- fn_GetCustomerTicketCount
 -- Dem tong so ve (Pending + Confirmed) cua mot Customer
@@ -6,7 +8,7 @@
 -- trong sp_CreateBooking.
 -- Tra ve: INT - so luong EventSeat dang duoc giu/mua.
 -- ============================================================
-CREATE OR ALTER FUNCTION dbo.fn_GetCustomerTicketCount
+CREATE FUNCTION dbo.fn_GetCustomerTicketCount
 (
     @CustomerUserID INT,
     @ConcertID      INT

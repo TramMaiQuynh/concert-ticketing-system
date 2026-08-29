@@ -1,3 +1,5 @@
+DROP FUNCTION IF EXISTS dbo.fn_CalculateFinalAmount;
+GO
 -- ============================================================
 -- fn_CalculateFinalAmount
 -- Tinh FinalAmount = SubtotalAmount - tong DiscountAmount
@@ -5,7 +7,7 @@
 -- FinalAmount >= 0 duoc dam bao boi CHECK constraint tren Booking.
 -- Tra ve: DECIMAL(18,0) - gia sau khi ap dung tat ca Promotion.
 -- ============================================================
-CREATE OR ALTER FUNCTION dbo.fn_CalculateFinalAmount
+CREATE FUNCTION dbo.fn_CalculateFinalAmount
 (
     @BookingID INT
 )
