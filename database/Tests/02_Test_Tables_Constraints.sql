@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 02_Test_Tables_Constraints.sql
 -- Test CHECK constraints va UNIQUE indexes.
 -- ============================================================
@@ -59,9 +59,9 @@ SET @SQL = N'
     DECLARE @bid INT;
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
-    INSERT INTO Payment (BookingID,PaymentStatus,Amount) VALUES (@bid,''Pending'',-100);';
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',-100,''REF-TEST'');';
 EXEC sp_RunTest @Suite,'CHK_Payment_Amount_Negative','ERROR',NULL,@SQL;
 
 -- CHK_Payment_Status: trang thai sai
@@ -69,9 +69,9 @@ SET @SQL = N'
     DECLARE @bid INT;
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
-    INSERT INTO Payment (BookingID,PaymentStatus,Amount) VALUES (@bid,''BadStatus'',100000);';
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''BadStatus'',100000,''REF-TEST'');';
 EXEC sp_RunTest @Suite,'CHK_Payment_Status_Invalid','ERROR',NULL,@SQL;
 
 -- ===== Ticket =====
@@ -81,7 +81,7 @@ SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,'Confirmed',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus,UsedTimestamp,CancelledTimestamp)
     VALUES (@bid,@esid,@cid,''TCK_BOTH'',''Issued'',SYSDATETIME(),SYSDATETIME());';
@@ -95,9 +95,9 @@ SET @SQL = N'
     DECLARE @uid2 INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust2'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
     DECLARE @bid1 INT, @bid2 INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,''Pending'',1000000,1000000);
     SET @bid1=SCOPE_IDENTITY();
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
     SET @bid2=SCOPE_IDENTITY();
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
     VALUES (@bid1,@esid,''Active'');
@@ -112,9 +112,9 @@ SET @SQL = N'
     DECLARE @uid2 INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust2'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
     DECLARE @bid1 INT, @bid2 INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,''Pending'',1000000,1000000);
     SET @bid1=SCOPE_IDENTITY();
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
     SET @bid2=SCOPE_IDENTITY();
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
     VALUES (@bid1,@esid,''Released'');
