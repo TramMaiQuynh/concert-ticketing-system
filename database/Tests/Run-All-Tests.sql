@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- Run-All-Tests.sql
 -- Master file: chay toan bo test suite va in bao cao.
 -- Chay bang: sqlcmd -S .\SQLEXPRESS -E -d ConcertTicketingDB -i Run-All-Tests.sql
