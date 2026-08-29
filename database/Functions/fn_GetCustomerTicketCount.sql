@@ -11,20 +11,18 @@ CREATE OR ALTER FUNCTION dbo.fn_GetCustomerTicketCount
     @CustomerUserID INT,
     @ConcertID      INT
 )
-RETURNS INT
+RETURNS TABLE
+WITH SCHEMABINDING
 AS
-BEGIN
-    DECLARE @TicketCount INT;
-
-    SELECT @TicketCount = COUNT(besa.EventSeatID)
-    FROM   Booking                    b
-    JOIN   BookingEventSeatAllocation besa
+RETURN
+(
+    SELECT ISNULL(COUNT(besa.EventSeatID), 0) AS TicketCount
+    FROM   dbo.Booking b
+    JOIN   dbo.BookingEventSeatAllocation besa
                ON besa.BookingID = b.BookingID
               AND besa.AllocationStatus = 'Active'
     WHERE  b.CustomerUserID = @CustomerUserID
       AND  b.ConcertID      = @ConcertID
-      AND  b.BookingStatus  IN ('Pending', 'Confirmed');
-
-    RETURN ISNULL(@TicketCount, 0);
-END;
+      AND  b.BookingStatus  IN ('Pending', 'Confirmed')
+);
 GO
