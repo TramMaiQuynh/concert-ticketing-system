@@ -24,7 +24,11 @@ BEGIN
     SET @ValidationInfo   = '';
 
     BEGIN TRY
-        BEGIN TRANSACTION;
+        DECLARE @TranCounter INT = @@TRANCOUNT;
+        IF @TranCounter > 0
+            SAVE TRANSACTION sp_CheckInTicket_Save;
+        ELSE
+            BEGIN TRANSACTION;
 
         -- 1. Tim Ticket theo TicketCode
         DECLARE @TicketID     INT;
@@ -127,13 +131,18 @@ BEGIN
              SYSDATETIME(),
              '{"TicketStatus":"Used","ValidationResult":"SUCCESS"}');
 
-        COMMIT TRANSACTION;
+        IF @TranCounter = 0
+            COMMIT TRANSACTION;
         RETURN;
 
         AuditAndExit:
         -- 10. Ghi AuditRecord - ADMISSION_ATTEMPT (that bai)
-        ROLLBACK TRANSACTION;
+        IF @TranCounter = 0
+            ROLLBACK TRANSACTION;
+        ELSE IF XACT_STATE() <> -1
+            ROLLBACK TRANSACTION sp_CheckInTicket_Save;
 
+        -- Khi insert AuditRecord that bai, ta khong can Transaction, hoac dung 1 Transaction doc lap
         BEGIN TRANSACTION;
         INSERT INTO AuditRecord
             (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
@@ -149,7 +158,10 @@ BEGIN
 
     END TRY
     BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        IF @TranCounter = 0
+            IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        ELSE IF XACT_STATE() <> -1
+            ROLLBACK TRANSACTION sp_CheckInTicket_Save;
         THROW;
     END CATCH
 END;
