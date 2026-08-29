@@ -1,4 +1,4 @@
-CREATE TRIGGER TRG_AllocationConcert ON BookingEventSeatAllocation
+CREATE OR ALTER TRIGGER TRG_AllocationConcert ON BookingEventSeatAllocation
 AFTER INSERT, UPDATE
 AS
 BEGIN
