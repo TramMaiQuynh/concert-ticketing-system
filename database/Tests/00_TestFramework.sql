@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 00_TestFramework.sql
 -- Framework test nhe (khong can cai tSQLt).
 -- Luu y: Moi lan goi sp_RunTest se chay trong BEGIN TRAN / ROLLBACK
