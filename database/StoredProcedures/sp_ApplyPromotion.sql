@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- sp_ApplyPromotion (BP13 / FR53 / BR35-BR36)
 -- Ap dung Promotion vao Booking.
 -- Transaction bao gom:
@@ -163,9 +163,11 @@ BEGIN
             (@BookingID, @PromotionID, @DiscountCodeID, @DiscountAmount, @Now);
 
         -- 5. Cap nhat Booking.FinalAmount
-        UPDATE Booking
-        SET    FinalAmount = dbo.fn_CalculateFinalAmount(@BookingID)
-        WHERE  BookingID   = @BookingID;
+        UPDATE b
+        SET    b.FinalAmount = fa.FinalAmount
+        FROM   Booking b
+        CROSS APPLY dbo.fn_CalculateFinalAmount(b.BookingID) fa
+        WHERE  b.BookingID = @BookingID;
 
         -- 6. Ghi AuditRecord
         INSERT INTO AuditRecord
