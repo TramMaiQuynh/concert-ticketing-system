@@ -102,7 +102,9 @@ BEGIN
             SET @HoldDuration = ISNULL(@GlobalHoldDur, 900);
         END
 
-        DECLARE @ExistingCount INT = dbo.fn_GetCustomerTicketCount(@CustomerUserID, @ConcertID);
+        DECLARE @ExistingCount INT;
+        SELECT @ExistingCount = TicketCount 
+        FROM dbo.fn_GetCustomerTicketCount(@CustomerUserID, @ConcertID);
 
         IF (@ExistingCount + @RequestedCount) > @PurchaseLimit
         BEGIN
