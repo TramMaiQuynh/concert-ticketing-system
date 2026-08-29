@@ -1,4 +1,4 @@
-﻿# ====================================================================
+# ====================================================================
 # 11_Test_Concurrency.ps1
 # Test Oversell (Lost Update Guard) for sp_CreateBooking
 # ====================================================================
@@ -16,7 +16,8 @@ Write-Host "========================================" -ForegroundColor Cyan
 # Prepare data: Make sure EventSeat 5 is Available
 $prepSql = "
 USE ConcertTicketingDB;
-UPDATE EventSeat SET InventoryStatus = 'Available' WHERE EventSeatID = 5;
+DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat);
+UPDATE EventSeat SET InventoryStatus = 'Available' WHERE EventSeatID = @esid;
 "
 Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $Database -Query $prepSql
 
@@ -27,9 +28,12 @@ $scriptBlock = {
     $connStr = "Server=$ServerInstance;Database=$Database;Integrated Security=True;Pooling=False;"
     $sql = "
     SET QUOTED_IDENTIFIER ON;
-    DECLARE @Seats dbo.EventSeatListType;
-    INSERT INTO @Seats VALUES (5);
-    EXEC sp_CreateBooking @CustomerUserID = 3, @ConcertID = 1, @SeatList = @Seats;
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
+    DECLARE @uid INT = (SELECT TOP 1 UserID FROM UserAccount WHERE Username='test_cust1');
+    DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat);
+    DECLARE @esid_str VARCHAR(20) = CAST(@esid AS VARCHAR(20));
+    DECLARE @bid INT;
+    EXEC sp_CreateBooking @CustomerUserID = @uid, @ConcertID = @cid, @SeatList = @esid_str, @NewBookingID=@bid OUTPUT;
     "
     try {
         $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
