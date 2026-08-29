@@ -1,6 +1,6 @@
-﻿-- ============================================================
+-- ============================================================
 -- 10_Test_Security_Permissions.sql
--- Test RBAC permissions theo GrantPermissions.sql thá»±c táº¿.
+-- Test RBAC permissions theo GrantPermissions.sql thực tế.
 -- ============================================================
 USE ConcertTicketingDB;
 GO
