@@ -9,16 +9,13 @@ CREATE OR ALTER FUNCTION dbo.fn_CalculateBookingSubtotal
 (
     @BookingID INT
 )
-RETURNS DECIMAL(18,0)
+RETURNS TABLE
+WITH SCHEMABINDING
 AS
-BEGIN
-    DECLARE @Subtotal DECIMAL(18,0);
-
-    SELECT @Subtotal = SUM(besa.PriceSnapshot)
-    FROM   BookingEventSeatAllocation besa
+RETURN (
+    SELECT ISNULL(SUM(besa.PriceSnapshot), 0) AS Subtotal
+    FROM   dbo.BookingEventSeatAllocation besa
     WHERE  besa.BookingID        = @BookingID
-      AND  besa.AllocationStatus = 'Active';
-
-    RETURN ISNULL(@Subtotal, 0);
-END;
+      AND  besa.AllocationStatus = 'Active'
+);
 GO
