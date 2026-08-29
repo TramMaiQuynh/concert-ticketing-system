@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 05_Test_Functions.sql
 -- Test 3 scalar functions.
 -- ============================================================
@@ -24,10 +24,10 @@ EXEC sp_RunTest @Suite,'fn_GetCustomerTicketCount_NoBooking','SUCCESS',NULL,@SQL
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    DECLARE @esid1 INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
-    DECLARE @esid2 INT = (SELECT TOP 2 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+    DECLARE @esid1 INT = (SELECT MIN(EventSeatID) FROM EventSeat WHERE InventoryStatus=''Available'');
+    DECLARE @esid2 INT = (SELECT MIN(EventSeatID) FROM EventSeat WHERE InventoryStatus=''Available'' AND EventSeatID > @esid1);
     DECLARE @bid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     -- Ghe phai OnHold truoc moi insert Active Allocation
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID IN (@esid1,@esid2);
@@ -42,15 +42,15 @@ EXEC sp_RunTest @Suite,'fn_GetCustomerTicketCount_With2Pending','SUCCESS',NULL,@
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    DECLARE @esid1 INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
-    DECLARE @esid2 INT = (SELECT EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY);
+    DECLARE @esid1 INT = (SELECT MIN(EventSeatID) FROM EventSeat WHERE InventoryStatus=''Available'');
+    DECLARE @esid2 INT = (SELECT MIN(EventSeatID) FROM EventSeat WHERE InventoryStatus=''Available'' AND EventSeatID > @esid1);
     DECLARE @bid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,'Pending',1000000,1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID IN (@esid1,@esid2);
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
     VALUES (@bid,@esid1,''Active'',1000000), (@bid,@esid2,''Released'',500000);
-    DECLARE @sub DECIMAL(18,0) = dbo.fn_CalculateBookingSubtotal(@bid);
+    DECLARE @sub DECIMAL(18,0) = (SELECT Subtotal FROM dbo.fn_CalculateBookingSubtotal(@bid));
     IF @sub <> 1000000 BEGIN DECLARE @m2 NVARCHAR(200)=''Expected subtotal=1000000, got ''+CAST(@sub AS VARCHAR); THROW 50000, @m2, 1; END;';
 EXEC sp_RunTest @Suite,'fn_CalculateBookingSubtotal_OnlyActive','SUCCESS',NULL,@SQL;
 
@@ -70,7 +70,7 @@ SET @SQL = N'
     VALUES (@bid,@esid,''Active'',1000000);
     INSERT INTO BookingPromotionApplication (BookingID,PromotionID,DiscountAmount,AppliedTimestamp)
     VALUES (@bid,@pid,200000,SYSDATETIME());
-    DECLARE @final DECIMAL(18,0) = dbo.fn_CalculateFinalAmount(@bid);
+    DECLARE @final DECIMAL(18,0) = (SELECT FinalAmount FROM dbo.fn_CalculateFinalAmount(@bid));
     IF @final <> 800000 BEGIN DECLARE @m3 NVARCHAR(200)=''Expected 800000, got ''+CAST(@final AS VARCHAR); THROW 50000, @m3, 1; END;';
 EXEC sp_RunTest @Suite,'fn_CalculateFinalAmount_Fixed200k','SUCCESS',NULL,@SQL;
 
@@ -89,7 +89,7 @@ SET @SQL = N'
     VALUES (@bid,@esid,''Active'',100000);
     INSERT INTO BookingPromotionApplication (BookingID,PromotionID,DiscountAmount,AppliedTimestamp)
     VALUES (@bid,@pid,500000,SYSDATETIME());  -- Discount > Subtotal
-    DECLARE @final DECIMAL(18,0) = dbo.fn_CalculateFinalAmount(@bid);
+    DECLARE @final DECIMAL(18,0) = (SELECT FinalAmount FROM dbo.fn_CalculateFinalAmount(@bid));
     IF @final <> 0 BEGIN DECLARE @m4 NVARCHAR(200)=''Expected 0, got ''+CAST(@final AS VARCHAR); THROW 50000, @m4, 1; END;';
 EXEC sp_RunTest @Suite,'fn_CalculateFinalAmount_ZeroFloor','SUCCESS',NULL,@SQL;
 
