@@ -44,7 +44,7 @@ SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @bid INT, @pid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Confirmed'',1000000,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
@@ -56,7 +56,7 @@ SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @bid INT, @pid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000);
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',500000,''REF-TEST'');  -- sai so tien
     SET @pid = SCOPE_IDENTITY();
@@ -73,8 +73,8 @@ SET @SQL = N'
     DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR); EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
     -- Insert payment voi dung FinalAmount
     DECLARE @fa DECIMAL(18,0) = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
-    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentMethod,PaymentReference)
-    VALUES (@bid,''Pending'',@fa,''CARD'',''REF-HAPPY-001'');
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference)
+    VALUES (@bid,''Pending'',@fa,''REF-HAPPY-001'');
     SET @pid = SCOPE_IDENTITY();
     -- Confirm
     EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid, @ProviderReference=''PROVIDER-001'';

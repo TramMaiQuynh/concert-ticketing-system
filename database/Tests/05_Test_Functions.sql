@@ -16,7 +16,7 @@ DECLARE @SQL NVARCHAR(MAX);
 -- Customer chua co booking -> count = 0
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    DECLARE @cnt INT = dbo.fn_GetCustomerTicketCount(@uid, 999999);
+    DECLARE @cnt INT = (SELECT TicketCount FROM dbo.fn_GetCustomerTicketCount(@uid, 999999));
     IF @cnt <> 0 THROW 50000, ''Expected 0'', 1;';
 EXEC sp_RunTest @Suite,'fn_GetCustomerTicketCount_NoBooking','SUCCESS',NULL,@SQL;
 
@@ -31,9 +31,9 @@ SET @SQL = N'
     SET @bid = SCOPE_IDENTITY();
     -- Ghe phai OnHold truoc moi insert Active Allocation
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID IN (@esid1,@esid2);
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
-    VALUES (@bid,@esid1,''Active''), (@bid,@esid2,''Active'');
-    DECLARE @cnt INT = dbo.fn_GetCustomerTicketCount(@uid,@cid);
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
+    VALUES (@bid,@esid1,''Active'',1000000), (@bid,@esid2,''Active'',1000000);
+    DECLARE @cnt INT = (SELECT TicketCount FROM dbo.fn_GetCustomerTicketCount(@uid,@cid));
     IF @cnt <> 2 BEGIN DECLARE @m1 NVARCHAR(200)=''Expected count=2, got ''+CAST(@cnt AS VARCHAR); THROW 50000, @m1, 1; END;';
 EXEC sp_RunTest @Suite,'fn_GetCustomerTicketCount_With2Pending','SUCCESS',NULL,@SQL;
 
@@ -59,7 +59,9 @@ EXEC sp_RunTest @Suite,'fn_CalculateBookingSubtotal_OnlyActive','SUCCESS',NULL,@
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion WHERE ConcertID=@cid);
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag)
+    VALUES (@cid, ''TestPromo'', ''Fixed'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0);
+    DECLARE @pid INT = SCOPE_IDENTITY();
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
     DECLARE @bid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount)
@@ -78,7 +80,7 @@ EXEC sp_RunTest @Suite,'fn_CalculateFinalAmount_Fixed200k','SUCCESS',NULL,@SQL;
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion WHERE ConcertID=@cid);
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag) VALUES (@cid, ''TestPromo'', ''Fixed'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0); DECLARE @pid INT = SCOPE_IDENTITY();
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
     DECLARE @bid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount)

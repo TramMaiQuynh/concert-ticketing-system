@@ -50,7 +50,7 @@ EXEC sp_RunTest @Suite,'CHK_EventSeat_Status_Invalid','ERROR',NULL,@SQL;
 SET @SQL = N'
     DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion);
     INSERT INTO DiscountCode (PromotionID,CodeValue,CodeStatus)
-    VALUES (@pid,''BADCODE'',''Disabled'');';
+    VALUES (@pid,''BADCODE'',''InvalidStatus'');';
 EXEC sp_RunTest @Suite,'CHK_DiscountCode_Status_Invalid','ERROR',NULL,@SQL;
 
 -- ===== Payment =====
@@ -99,10 +99,10 @@ SET @SQL = N'
     SET @bid1=SCOPE_IDENTITY();
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
     SET @bid2=SCOPE_IDENTITY();
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
-    VALUES (@bid1,@esid,''Active'');
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
-    VALUES (@bid2,@esid,''Active'');';
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
+    VALUES (@bid1, @esid, ''Active'', 1000000);
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
+    VALUES (@bid2, @esid, ''Active'', 1000000);';
 EXEC sp_RunTest @Suite,'UIX_Allocation_2Active_SameSeat','ERROR',NULL,@SQL;
 
 -- 1 Active + 1 Released tren cung ghe -> OK
@@ -116,13 +116,12 @@ SET @SQL = N'
     SET @bid1=SCOPE_IDENTITY();
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
     SET @bid2=SCOPE_IDENTITY();
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
-    VALUES (@bid1,@esid,''Released'');
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus)
-    VALUES (@bid2,@esid,''Active'');';
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
+    VALUES (@bid1,@esid,''Released'',1000000);
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
+    VALUES (@bid2,@esid,''Active'',1000000);';
 EXEC sp_RunTest @Suite,'UIX_Allocation_1Active_1Released_OK','SUCCESS',NULL,@SQL;
 
 PRINT '== Constraints Tests Done ==';
 GO
-
-

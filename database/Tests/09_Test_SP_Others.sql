@@ -111,7 +111,7 @@ SET @SQL = N'
     DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR); EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
     DECLARE @fa DECIMAL(18,0) = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
     DECLARE @pid INT;
-    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentMethod,PaymentReference) VALUES (@bid,''Pending'',@fa,''CARD'',''REF-TEST'');
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
     EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;
     -- Lay ticket code
@@ -141,7 +141,7 @@ SET @SQL = N'
     DECLARE @bid INT, @pid INT;
     DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR); EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
     DECLARE @fa DECIMAL(18,0) = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
-    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentMethod,PaymentReference) VALUES (@bid,''Pending'',@fa,''CARD'',''REF-TEST'');
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
     EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;
     DECLARE @tcode VARCHAR(64) = (SELECT TOP 1 TicketCode FROM Ticket WHERE BookingID=@bid);
@@ -215,7 +215,7 @@ SET @SQL = N'
     DECLARE @bid INT;
     DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR); EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
     -- Dat expiry ve qua khu
-    UPDATE Booking SET HoldExpiryDatetime=DATEADD(HOUR,-1,SYSDATETIME())
+    UPDATE Booking SET HoldStartDatetime=DATEADD(HOUR,-2,SYSDATETIME()), HoldExpiryDatetime=DATEADD(HOUR,-1,SYSDATETIME())
     WHERE BookingID=@bid;
     -- Chay release
     EXEC sp_ReleaseExpiredHolds;

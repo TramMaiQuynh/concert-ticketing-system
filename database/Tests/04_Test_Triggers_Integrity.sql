@@ -44,6 +44,7 @@ SET @SQL = N'
     DECLARE @cid2 INT;
     INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 ArtistID FROM Artist),(SELECT TOP 1 VenueID FROM Venue),''DUMMY'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
     SET @cid2 = SCOPE_IDENTITY();
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid,@esid,''Active'',1000000);
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus)
     VALUES (@bid,@esid,@cid2,''TCK_WRONGCID'',''Issued'');';
@@ -58,12 +59,16 @@ SET @SQL = N'
     DECLARE @bid INT, @tid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid,@esid,''Active'',1000000);
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus)
     VALUES (@bid,@esid,@cid,''TCK_CHK_TEST'',''Used'');
     SET @tid = SCOPE_IDENTITY();
+    DECLARE @cid2 INT;
+    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 ArtistID FROM Artist),(SELECT TOP 1 VenueID FROM Venue),''DUMMY2'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
+    SET @cid2 = SCOPE_IDENTITY();
     INSERT INTO CheckIn (TicketID,ConcertID,CheckInStaffUserID,CheckInTimestamp,ValidationResult)
-    VALUES (@tid,@cid+9999,@staff,SYSDATETIME(),''SUCCESS'');';
+    VALUES (@tid,@cid2,@staff,SYSDATETIME(),''SUCCESS'');';
 EXEC sp_RunTest @Suite,'CheckIn_ConcertID_Mismatch_Fail','ERROR',50011,@SQL;
 
 -- ===== TRG_InventoryAllocationConsistency: Active Alloc tren ghe Available =====
@@ -90,7 +95,8 @@ SET @SQL = N'
     SET @bid1 = SCOPE_IDENTITY();
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Confirmed'',1000000,1000000);
     SET @bid2 = SCOPE_IDENTITY();
-    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid1,@esid,''Active'',1000000);
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid1,@esid,''Released'',1000000);
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid2,@esid,''Active'',1000000);
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus)
     VALUES (@bid1,@esid,@cid,''TCK_DUP_1'',''Issued'');
