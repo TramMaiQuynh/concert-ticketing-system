@@ -93,15 +93,7 @@ BEGIN
         WHERE  PaymentID = @PaymentID;
 
         -- --------------------------------------------------------
-        -- 5. Chuyen Booking -> Confirmed
-        -- --------------------------------------------------------
-        UPDATE Booking
-        SET    BookingStatus         = 'Confirmed',
-               ConfirmedTimestamp    = SYSDATETIME()
-        WHERE  BookingID = @BookingID;
-
-        -- --------------------------------------------------------
-        -- 6. Phat hanh Ticket cho moi Active Allocation (B3)
+        -- 5. Phat hanh Ticket cho moi Active Allocation (B3)
         --    Moi Allocation nhan 1 Ticket voi TicketCode = NEWID()
         -- --------------------------------------------------------
         INSERT INTO Ticket
@@ -116,6 +108,14 @@ BEGIN
         FROM   BookingEventSeatAllocation besa
         WHERE  besa.BookingID        = @BookingID
           AND  besa.AllocationStatus = 'Active';
+
+        -- --------------------------------------------------------
+        -- 6. Chuyen Booking -> Confirmed
+        -- --------------------------------------------------------
+        UPDATE Booking
+        SET    BookingStatus         = 'Confirmed',
+               ConfirmedTimestamp    = SYSDATETIME()
+        WHERE  BookingID = @BookingID;
 
         -- --------------------------------------------------------
         -- 7. Chuyen EventSeat -> Booked
