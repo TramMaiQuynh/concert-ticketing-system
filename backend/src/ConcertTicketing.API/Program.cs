@@ -5,8 +5,10 @@ using FluentValidation.AspNetCore;
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Scalar.AspNetCore;
 using Serilog;
 using StackExchange.Redis;
@@ -40,8 +42,27 @@ try
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<CreateBookingValidator>();
 
-    // ── OpenAPI / Scalar ──────────────────────────────────────────────────────
-    builder.Services.AddOpenApi();
+    // ── OpenAPI / Scalar ──────────────────────────────────────────────
+    // Thêm Bearer security scheme → Scalar UI sẽ hiển thị nút "Authorize"
+    // để nhập JWT token test các endpoint cần xác thực.
+    builder.Services.AddOpenApi(options =>
+    {
+        options.AddDocumentTransformer((document, context, ct) =>
+        {
+            document.Components ??= new OpenApiComponents();
+            document.Components.SecuritySchemes = new Dictionary<string, OpenApiSecurityScheme>
+            {
+                ["Bearer"] = new OpenApiSecurityScheme
+                {
+                    Type        = SecuritySchemeType.Http,
+                    Scheme      = "bearer",
+                    BearerFormat = "JWT",
+                    Description = "Nhập Access Token (không cần prefix 'Bearer ')."
+                }
+            };
+            return Task.CompletedTask;
+        });
+    });
 
     // ── JWT Authentication ────────────────────────────────────────────────────
     var jwtSecret   = builder.Configuration["Jwt:Secret"]!;
@@ -211,6 +232,11 @@ try
         {
             options.Title = "Concert Ticketing API";
             options.Theme = ScalarTheme.DeepSpace;
+            // Cho phép nhập JWT token trực tiếp trên Scalar UI
+            options.Authentication = new ScalarAuthenticationOptions
+            {
+                PreferredSecuritySchemes = ["Bearer"]
+            };
         });
     }
 
