@@ -12,7 +12,7 @@ namespace ConcertTicketing.Infrastructure.Cache;
 /// LƯU Ý: SemaphoreSlim chỉ hoạt động trong 1 process duy nhất.
 /// Nếu scale lên nhiều instances, phải đổi sang Redis Distributed Lock (SET NX PX).
 /// </summary>
-public class SeatMapCache
+public class SeatMapCache : ISeatMapCache
 {
     private readonly IDatabase _redis;
     private readonly IConcertRepository _concertRepository;
