@@ -8,8 +8,16 @@ namespace ConcertTicketing.Application.Interfaces;
 public interface IUserRepository
 {
     Task<UserAccount?> GetByUsernameAsync(string username);
+    Task<UserAccount?> GetByIdAsync(int userId);
     Task<IEnumerable<string>> GetRolesAsync(int userId);
     Task<int> CreateAsync(UserAccount user, string passwordHash);
+
+    // ── Refresh Token (lưu trong DB, không phải Redis) ──────────────────────
+    // Trả về raw token để gửi cho client qua HttpOnly Cookie.
+    // DB chỉ lưu SHA-256 hash của token.
+    Task<string> CreateRefreshTokenAsync(int userId, DateTime expiryUtc);
+    Task<(int UserId, bool IsValid)> ValidateRefreshTokenAsync(string rawToken);
+    Task RevokeRefreshTokenAsync(string rawToken);
 }
 
 public interface IBookingRepository
