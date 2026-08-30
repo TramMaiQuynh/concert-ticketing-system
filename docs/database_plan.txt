@@ -3671,3 +3671,25 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
   * Bảng Role: 4 bản ghi — Admin, Organizer, Customer, Check-in Staff (§12.3.2, BR52).
   * Bảng UserAccount: 1 bản ghi dự trữ Username='system', AccountStatus='Active', PasswordHash=NULL — dùng làm ActorUserID cho SIP1–SIP3; không được gán Role; không cho phép đăng nhập (§12.17.1, dòng 992).
   * Bảng SystemConfiguration: 3 bản ghi — Default_Temporary_Hold_Duration (BR53), Waitlist_Opportunity_Duration (D4), Queue_Admission_Validity (D4); giá trị do triển khai xác định theo chính sách vận hành (§12.18).
+
+24. Mở rộng Kiến trúc và Hệ thống (Architectural & System Extensions)
+
+Trong quá trình ánh xạ thiết kế logic sang thiết kế vật lý và áp dụng kiến trúc "Pragmatic Thick Database Architecture", một số thành phần mở rộng đã được bổ sung vào hệ thống để đảm bảo tính an toàn, bảo mật và vận hành, mặc dù chúng không thuộc miền dữ liệu lõi (Core Domain).
+
+24.1. Bảng RefreshToken (Authentication & Security)
+Để phục vụ việc quản lý phiên đăng nhập API bằng JWT (JSON Web Token), bảng RefreshToken được bổ sung.
+- Mục đích: Lưu trữ, xác thực và thu hồi các mã làm mới (refresh tokens) của người dùng.
+- Liên kết: Tham chiếu khóa ngoại đến UserAccount(UserID).
+- Các thuộc tính chính: TokenID (PK), UserID (FK), TokenHash (UNIQUE), ExpiryDatetime, IsRevoked.
+- Lưu ý: Bảng này chỉ phục vụ lớp bảo mật của API, không tham gia vào luồng nghiệp vụ vé.
+
+24.2. Bổ sung các Stored Procedures giao dịch (Thick Database Enforcement)
+Để đảm bảo lớp API không có quyền tự do ghi dữ liệu vào các bảng core, tất cả các tác vụ thay đổi trạng thái đều phải thông qua Stored Procedures (kể cả những tác vụ cơ bản). Bổ sung thêm 3 SPs vào danh sách giao dịch chính (ngoài 7 SPs tại mục 23.5):
+- sp_RegisterUser: Quản lý việc tạo tài khoản mới và cấp phát Role Customer (đảm bảo tính nhất quán của bảng UserAccount và UserRoleAssignment trong cùng một giao dịch).
+- sp_InitiatePayment: Tạo bản ghi Payment ở trạng thái Pending một cách an toàn trước khi gọi cổng thanh toán bên thứ ba, gắn với Payment Reference.
+- sp_CancelBooking: Xử lý hủy Booking an toàn, cập nhật trạng thái Booking -> Cancelled và giải phóng (Release) toàn bộ Allocation/EventSeat liên quan về Available trong cùng một transaction.
+
+24.3. Lược đồ Background Jobs (Hangfire)
+Hệ thống sử dụng thư viện Hangfire để quản lý các tiến trình chạy ngầm (Background Jobs) như dọn dẹp giữ chỗ hết hạn (HoldReleaseWorker gọi sp_ReleaseExpiredHolds).
+- Hangfire tự động tạo một lược đồ riêng (schema HangFire) cùng các bảng nội bộ của nó (như Job, State, Server...).
+- Lược đồ này hoàn toàn độc lập và không can thiệp vào mô hình thực thể lõi của hệ thống bán vé. Không cần lập mô hình ERD hay chuẩn hóa cho các bảng này.
