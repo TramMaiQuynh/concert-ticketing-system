@@ -11,13 +11,15 @@ namespace ConcertTicketing.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
 
     // Tên cookie — ngắn để giảm bandwidth, không cần dễ đọc
     private const string RefreshTokenCookie = "rt";
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _configuration = configuration;
     }
 
     /// <summary>Đăng nhập — trả Access Token trong body, Refresh Token trong HttpOnly Cookie</summary>
@@ -86,12 +88,13 @@ public class AuthController : ControllerBase
 
     private void SetRefreshTokenCookie(string rawRefreshToken)
     {
+        var expiryDays = _configuration.GetValue<int>("Jwt:RefreshTokenExpiryDays", 7);
         Response.Cookies.Append(RefreshTokenCookie, rawRefreshToken, new CookieOptions
         {
             HttpOnly  = true,              // Không thể đọc bằng JavaScript → chống XSS
             Secure    = Request.IsHttps,   // Chỉ gửi qua HTTPS (tắt trong HTTP local dev)
             SameSite  = SameSiteMode.Strict, // Chống CSRF
-            Expires   = DateTimeOffset.UtcNow.AddDays(7),
+            Expires   = DateTimeOffset.UtcNow.AddDays(expiryDays),
             Path      = "/api/auth"        // Cookie chỉ được gửi đến /api/auth/* (tối giản phạm vi)
         });
     }

@@ -5,6 +5,7 @@ using FluentValidation.AspNetCore;
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -138,11 +139,15 @@ try
 
     // ── Redis ─────────────────────────────────────────────────────────────────
     var redisConnection = builder.Configuration["Redis:ConnectionString"]!;
+    if (!redisConnection.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
+    {
+        redisConnection += ",abortConnect=false";
+    }
     builder.Services.AddSingleton<IConnectionMultiplexer>(
         ConnectionMultiplexer.Connect(redisConnection));
 
     // ── Hangfire (cho Email Job — cần retry + persistence) ───────────────────
-    builder.Services.AddHangfire(config => config
+    builder.Services.AddHangfire(configuration => configuration
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
@@ -152,7 +157,8 @@ try
             SlidingInvisibilityTimeout   = TimeSpan.FromMinutes(5),
             QueuePollInterval            = TimeSpan.Zero,
             UseRecommendedIsolationLevel = true,
-            DisableGlobalLocks           = true
+            DisableGlobalLocks           = true,
+            PrepareSchemaIfNecessary     = false
         }));
     builder.Services.AddHangfireServer();
 
@@ -165,6 +171,8 @@ try
         new CheckInRepository(connectionString));
     builder.Services.AddScoped<IUserRepository>(_ =>
         new UserRepository(connectionString));
+    builder.Services.AddScoped<IPaymentRepository>(_ =>
+        new PaymentRepository(connectionString));
 
     // ── Application Services ──────────────────────────────────────────────────
     builder.Services.AddScoped<IAuthService, AuthService>();
@@ -195,6 +203,11 @@ try
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── THỨ TỰ MIDDLEWARE RẤT QUAN TRỌNG ────────────────────────────────────
+    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    });
+
     // 1. Request Logging (trước hết, log mọi request vào)
     app.UseSerilogRequestLogging();
 
