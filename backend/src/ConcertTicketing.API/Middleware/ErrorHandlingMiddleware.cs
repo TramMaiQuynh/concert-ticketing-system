@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
@@ -49,7 +49,7 @@ public class ErrorHandlingMiddleware
 
         var problemDetail = new
         {
-            type = $"https://api.concert.vn/errors/{title.ToLower().Replace(" ", "-")}",
+            type = "https://api.concert.vn/errors/" + title.ToLower().Replace(" ", "-"),
             title,
             status = (int)statusCode,
             detail,
@@ -65,56 +65,48 @@ public class ErrorHandlingMiddleware
         await context.Response.WriteAsync(json);
     }
 
-    /// <summary>
-    /// Map SQL Error Numbers từ Stored Procedures → HTTP Status Codes.
-    /// Xem: database/StoredProcedures/ để biết nguồn gốc từng error number.
-    /// </summary>
     private static (HttpStatusCode, string, string) MapSqlException(SqlException ex)
     {
         return ex.Number switch
         {
             // sp_CreateBooking
-            51001 => (HttpStatusCode.BadRequest, "Concert Not On Sale",
-                      "Concert hiện không trong trạng thái mở bán vé."),
-            51002 => (HttpStatusCode.BadRequest, "Empty Seat List",
-                      "Danh sách ghế không được để trống."),
-            51003 => (HttpStatusCode.UnprocessableEntity, "Purchase Limit Exceeded",
-                      "Bạn đã vượt quá giới hạn số vé được mua cho concert này."),
-            51004 => (HttpStatusCode.Conflict, "Seat Unavailable",
-                      "Một hoặc nhiều ghế bạn chọn đã được người khác đặt. Vui lòng chọn ghế khác."),
-            51005 => (HttpStatusCode.BadRequest, "Invalid Waitlist Entry",
-                      "Thông tin hàng đợi không hợp lệ."),
+            51001 => (HttpStatusCode.BadRequest, "Concert Not On Sale", "Concert hiện không trong trạng thái mở bán vé."),
+            51002 => (HttpStatusCode.BadRequest, "Empty Seat List", "Danh sách ghế không được để trống."),
+            51003 => (HttpStatusCode.UnprocessableEntity, "Purchase Limit Exceeded", "Bạn đã vượt quá giới hạn số vé được mua cho concert này."),
+            51004 => (HttpStatusCode.Conflict, "Seat Unavailable", "Một hoặc nhiều ghế bạn chọn đã được người khác đặt. Vui lòng chọn ghế khác."),
+            51005 => (HttpStatusCode.BadRequest, "Invalid Waitlist Entry", "Thông tin hàng đợi không hợp lệ."),
 
             // sp_ConfirmPayment
-            52001 => (HttpStatusCode.NotFound, "Booking Not Found",
-                      "Booking không tồn tại trong hệ thống."),
-            52002 => (HttpStatusCode.Conflict, "Booking Not Pending",
-                      "Booking này không ở trạng thái chờ thanh toán."),
-            52003 => (HttpStatusCode.Gone, "Booking Expired",
-                      "Thời gian giữ chỗ đã hết hạn. Vui lòng đặt lại."),
-            52005 => (HttpStatusCode.BadRequest, "Payment Amount Mismatch",
-                      "Số tiền thanh toán không khớp với tổng hóa đơn."),
+            52001 => (HttpStatusCode.NotFound, "Booking Not Found", "Booking không tồn tại trong hệ thống."),
+            52002 => (HttpStatusCode.Conflict, "Booking Not Pending", "Booking này không ở trạng thái chờ thanh toán."),
+            52003 => (HttpStatusCode.Gone, "Booking Expired", "Thời gian giữ chỗ đã hết hạn. Vui lòng đặt lại."),
+            52005 => (HttpStatusCode.BadRequest, "Payment Amount Mismatch", "Số tiền thanh toán không khớp với tổng hóa đơn."),
 
             // sp_ProcessRefund
-            53001 => (HttpStatusCode.NotFound, "Payment Not Found",
-                      "Thông tin thanh toán không tồn tại."),
-            53004 => (HttpStatusCode.UnprocessableEntity, "Refund Exceeds Payment",
-                      "Số tiền hoàn trả vượt quá số tiền đã thanh toán."),
+            53001 => (HttpStatusCode.NotFound, "Payment Not Found", "Thông tin thanh toán không tồn tại."),
+            53004 => (HttpStatusCode.UnprocessableEntity, "Refund Exceeds Payment", "Số tiền hoàn trả vượt quá số tiền đã thanh toán."),
 
             // sp_ApplyPromotion
-            54006 => (HttpStatusCode.BadRequest, "Promotion Expired",
-                      "Mã khuyến mãi đã hết hiệu lực."),
-            54009 => (HttpStatusCode.BadRequest, "Invalid Discount Code",
-                      "Mã khuyến mãi không hợp lệ."),
+            54006 => (HttpStatusCode.BadRequest, "Promotion Expired", "Mã khuyến mãi đã hết hiệu lực."),
+            54009 => (HttpStatusCode.BadRequest, "Invalid Discount Code", "Mã khuyến mãi không hợp lệ."),
 
-            // Duplicate Key (Webhook idempotency) — KHÔNG được trả lỗi cho Cổng thanh toán
-            // Được xử lý riêng trong PaymentController, không nên tới đây
-            2627 => (HttpStatusCode.Conflict, "Duplicate Entry",
-                     "Bản ghi đã tồn tại."),
+            // sp_CancelBooking
+            55001 => (HttpStatusCode.NotFound, "Booking Not Found", "Booking không tồn tại hoặc không thuộc quyền sở hữu của bạn."),
+            55002 => (HttpStatusCode.Conflict, "Booking Not Pending", "Chỉ có thể hủy Booking đang ở trạng thái chờ thanh toán."),
 
-            // Mặc định
-            _ => (HttpStatusCode.InternalServerError, "Database Error",
-                  $"Đã xảy ra lỗi cơ sở dữ liệu (Code: {ex.Number}).")
+            // sp_InitiatePayment
+            56001 => (HttpStatusCode.NotFound, "Booking Not Found", "Booking không tồn tại hoặc không thuộc quyền sở hữu của bạn."),
+            56002 => (HttpStatusCode.Conflict, "Booking Not Pending", "Chỉ có thể thanh toán cho Booking đang ở trạng thái chờ."),
+            56003 => (HttpStatusCode.Conflict, "Payment Already Pending", "Đã có giao dịch thanh toán đang chờ xử lý cho Booking này."),
+
+            // sp_RegisterUser
+            57001 => (HttpStatusCode.Conflict, "Username Exists", "Tên đăng nhập này đã có người sử dụng. Vui lòng chọn tên khác."),
+            57002 => (HttpStatusCode.InternalServerError, "Role Not Found", "Lỗi hệ thống: Role Customer không tồn tại hoặc không hoạt động."),
+
+            // Duplicate Key
+            2627 => (HttpStatusCode.Conflict, "Duplicate Entry", "Bản ghi đã tồn tại."),
+
+            _ => (HttpStatusCode.InternalServerError, "Database Error", "Đã xảy ra lỗi cơ sở dữ liệu (Code: " + ex.Number + ").")
         };
     }
 }
