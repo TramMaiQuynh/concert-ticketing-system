@@ -60,45 +60,17 @@ public class UserRepository : IUserRepository
     public async Task<int> CreateAsync(UserAccount user, string passwordHash)
     {
         using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
 
-        // Dùng transaction để đảm bảo: tạo user + gán role là 1 atomic operation.
-        // Nếu gán role thất bại (vd: Role 'Customer' không tồn tại), user không được tạo.
-        using var tx = conn.BeginTransaction();
-        try
-        {
-            // OUTPUT INSERTED.UserID = lấy ID vừa được IDENTITY generate, không cần SELECT thêm
-            // Không INSERT CreatedTimestamp / UpdatedTimestamp — đã có DEFAULT SYSDATETIME()
-            var userId = await conn.QuerySingleAsync<int>(
-                @"INSERT INTO UserAccount (Username, Email, PasswordHash, DisplayName, AccountStatus)
-                  OUTPUT INSERTED.UserID
-                  VALUES (@Username, @Email, @PasswordHash, @DisplayName, 'Active')",
-                new
-                {
-                    user.Username,
-                    user.Email,
-                    PasswordHash = passwordHash,       // BCrypt hash
-                    user.DisplayName
-                },
-                transaction: tx);
+        var p = new DynamicParameters();
+        p.Add("@Username", user.Username);
+        p.Add("@Email", user.Email);
+        p.Add("@PasswordHash", passwordHash);
+        p.Add("@DisplayName", user.DisplayName);
+        p.Add("@NewUserID", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-            // AssignmentStatus là NOT NULL không có DEFAULT → phải truyền 'Active'
-            await conn.ExecuteAsync(
-                @"INSERT INTO UserRoleAssignment (UserID, RoleID, AssignmentStatus)
-                  SELECT @UserID, RoleID, 'Active'
-                  FROM Role
-                  WHERE RoleName = 'Customer' AND RoleStatus = 'Active'",
-                new { UserID = userId },
-                transaction: tx);
+        await conn.ExecuteAsync("sp_RegisterUser", p, commandType: CommandType.StoredProcedure);
 
-            tx.Commit();
-            return userId;
-        }
-        catch
-        {
-            tx.Rollback();
-            throw;
-        }
+        return p.Get<int>("@NewUserID");
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
@@ -112,8 +84,8 @@ public class UserRepository : IUserRepository
         var tokenHash = ComputeSha256Hex(rawToken);
 
         await conn.ExecuteAsync(
-            @"INSERT INTO RefreshToken (UserID, TokenHash, ExpiryDatetime)
-              VALUES (@UserID, @TokenHash, @ExpiryDatetime)",
+            @"INSERT INTO RefreshToken (UserID, TokenHash, ExpiryDatetime, IsRevoked)
+              VALUES (@UserID, @TokenHash, @ExpiryDatetime, 0)",
             new { UserID = userId, TokenHash = tokenHash, ExpiryDatetime = expiryUtc });
 
         return rawToken; // Chỉ raw token được gửi cho client — DB không bao giờ lưu raw

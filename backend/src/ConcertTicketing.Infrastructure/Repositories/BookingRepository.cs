@@ -8,8 +8,6 @@ using ConcertTicketing.Application.Interfaces;
 
 namespace ConcertTicketing.Infrastructure.Repositories;
 
-
-
 public class BookingRepository : IBookingRepository
 {
     private readonly string _connectionString;
@@ -35,14 +33,13 @@ public class BookingRepository : IBookingRepository
 
         var newBookingId = p.Get<int>("@NewBookingID");
 
-        // Lấy thông tin booking vừa tạo để trả về response đầy đủ
         var booking = await conn.QuerySingleAsync<Booking>(
             "SELECT * FROM Booking WHERE BookingID = @BookingID",
             new { BookingID = newBookingId });
 
         return new CreateBookingResponse(
             booking.BookingID,
-            booking.BookingReference ?? string.Empty,
+            $"BKG-{booking.BookingID:D6}",
             booking.HoldExpiryDatetime ?? DateTime.UtcNow.AddMinutes(15),
             booking.SubtotalAmount,
             booking.FinalAmount,
@@ -53,18 +50,28 @@ public class BookingRepository : IBookingRepository
     {
         using var conn = new SqlConnection(_connectionString);
 
-        // Multi-query: lấy booking + allocations cùng lúc
         var sql = @"
-            SELECT b.*, c.ConcertName
+            SELECT 
+                b.*, 
+                c.ConcertName,
+                ISNULL((SELECT SUM(DiscountAmount) FROM BookingPromotionApplication WHERE BookingID = b.BookingID), 0) AS DiscountAmount
             FROM Booking b
             JOIN Concert c ON b.ConcertID = c.ConcertID
             WHERE b.BookingID = @BookingID AND b.CustomerUserID = @CustomerUserID;
 
-            SELECT ba.SeatID, es.SeatNumber, es.SectionName, sc.CategoryName, ba.PriceAtBooking
-            FROM BookingAllocation ba
-            JOIN EventSeat es ON ba.SeatID = es.SeatID
-            JOIN SeatCategory sc ON es.SeatCategoryID = sc.SeatCategoryID
-            WHERE ba.BookingID = @BookingID;";
+            SELECT
+                besa.EventSeatID AS SeatID,
+                s.SeatCode       AS SeatNumber,
+                z.ZoneName       AS SectionName,
+                tc.CategoryName,
+                besa.PriceSnapshot AS PriceAtBooking
+            FROM BookingEventSeatAllocation besa
+            JOIN EventSeat      es ON es.EventSeatID      = besa.EventSeatID
+            JOIN Seat           s  ON s.SeatID            = es.SeatID
+            JOIN Zone           z  ON z.ZoneID            = s.ZoneID
+            JOIN TicketCategory tc ON tc.ConcertID        = es.ConcertID
+                                   AND tc.TicketCategoryID = es.TicketCategoryID
+            WHERE besa.BookingID = @BookingID;";
 
         using var multi = await conn.QueryMultipleAsync(sql,
             new { BookingID = bookingId, CustomerUserID = customerUserId });
@@ -79,39 +86,50 @@ public class BookingRepository : IBookingRepository
             (int)row.ConcertID,
             (string)row.ConcertName,
             (string)row.BookingStatus,
-            (DateTime)row.BookingDatetime,
+            (DateTime)row.CreatedTimestamp,
             (DateTime?)row.HoldExpiryDatetime,
             (decimal)row.SubtotalAmount,
             (decimal)row.DiscountAmount,
             (decimal)row.FinalAmount,
-            (string?)row.BookingReference,
+            $"BKG-{row.BookingID:D6}",
             allocations);
     }
 
     public async Task CancelAsync(int bookingId, int customerUserId)
     {
         using var conn = new SqlConnection(_connectionString);
-        // Hủy booking — kiểm tra owner trước để tránh IDOR
-        var affected = await conn.ExecuteAsync(@"
-            UPDATE Booking
-            SET BookingStatus = 'Cancelled'
-            WHERE BookingID = @BookingID
-              AND CustomerUserID = @CustomerUserID
-              AND BookingStatus = 'Pending'",
-            new { BookingID = bookingId, CustomerUserID = customerUserId });
 
-        if (affected == 0)
-            throw new ArgumentException("Booking không tồn tại hoặc không thể hủy.");
+        var p = new DynamicParameters();
+        p.Add("@BookingID", bookingId, DbType.Int32);
+        p.Add("@CustomerUserID", customerUserId, DbType.Int32);
+
+        await conn.ExecuteAsync("sp_CancelBooking", p, commandType: CommandType.StoredProcedure);
     }
 
     public async Task ApplyPromotionAsync(int bookingId, int customerUserId, string discountCode)
     {
         using var conn = new SqlConnection(_connectionString);
 
+        // Lookup promotion ID and discount code ID
+        var sqlLookup = @"
+            SELECT dc.DiscountCodeID, dc.PromotionID
+            FROM DiscountCode dc
+            JOIN Promotion p ON p.PromotionID = dc.PromotionID
+            WHERE dc.CodeValue = @DiscountCode
+              AND dc.CodeStatus = 'Active'
+              AND p.ConcertID = (SELECT ConcertID FROM Booking WHERE BookingID = @BookingID AND CustomerUserID = @CustomerUserID)";
+              
+        var codeInfo = await conn.QuerySingleOrDefaultAsync<dynamic>(sqlLookup, 
+            new { DiscountCode = discountCode, BookingID = bookingId, CustomerUserID = customerUserId });
+
+        if (codeInfo == null)
+            throw new ArgumentException("Mã giảm giá không hợp lệ hoặc không áp dụng cho booking này.");
+
         var p = new DynamicParameters();
         p.Add("@BookingID",    bookingId,    DbType.Int32);
-        p.Add("@DiscountCode", discountCode, DbType.String, size: 50);
-        p.Add("@CustomerUserID", customerUserId, DbType.Int32);
+        p.Add("@PromotionID", (int)codeInfo.PromotionID, DbType.Int32);
+        p.Add("@DiscountCodeID", (int)codeInfo.DiscountCodeID, DbType.Int32);
+        p.Add("@ActorUserID", customerUserId, DbType.Int32);
 
         await conn.ExecuteAsync("sp_ApplyPromotion", p,
             commandType: CommandType.StoredProcedure);

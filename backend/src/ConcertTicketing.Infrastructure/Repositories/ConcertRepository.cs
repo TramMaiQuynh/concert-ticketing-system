@@ -8,8 +8,6 @@ using ConcertTicketing.Application.Interfaces;
 
 namespace ConcertTicketing.Infrastructure.Repositories;
 
-
-
 public class ConcertRepository : IConcertRepository
 {
     private readonly string _connectionString;
@@ -27,15 +25,15 @@ public class ConcertRepository : IConcertRepository
             SELECT
                 c.ConcertID, c.ConcertName,
                 a.ArtistName,
-                v.VenueName, v.City,
-                c.ConcertDate, c.Status, c.SalesPaused,
-                c.SaleStartDatetime, c.ImageUrl
+                v.VenueName, v.Address,
+                c.StartDatetime, c.ConcertStatus, c.SalesPaused,
+                c.SaleStartDatetime
             FROM Concert c
             JOIN Artist a ON c.ArtistID = a.ArtistID
             JOIN Venue  v ON c.VenueID  = v.VenueID
-            WHERE (@Status IS NULL OR c.Status = @Status)
-              AND c.Status != 'Draft'
-            ORDER BY c.ConcertDate ASC
+            WHERE (@Status IS NULL OR c.ConcertStatus = @Status)
+              AND c.ConcertStatus != 'Draft'
+            ORDER BY c.StartDatetime ASC
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;";
 
         return await conn.QueryAsync<ConcertListItem>(sql, new
@@ -54,10 +52,10 @@ public class ConcertRepository : IConcertRepository
             SELECT
                 c.ConcertID, c.ConcertName,
                 a.ArtistName,
-                v.VenueName, v.Address, v.City, v.Capacity,
-                c.ConcertDate, c.Status, c.SalesPaused,
+                v.VenueName, v.Address,
+                c.StartDatetime, c.ConcertStatus, c.SalesPaused,
                 c.SaleStartDatetime, c.SaleEndDatetime,
-                c.PurchaseLimitPerCustomer, c.Description, c.ImageUrl
+                c.PurchaseLimit
             FROM Concert c
             JOIN Artist a ON c.ArtistID = a.ArtistID
             JOIN Venue  v ON c.VenueID  = v.VenueID
@@ -73,14 +71,20 @@ public class ConcertRepository : IConcertRepository
 
         var sql = @"
             SELECT
-                es.SeatID, es.SeatNumber, es.SectionName, es.Row,
-                sc.CategoryName,
+                es.EventSeatID AS SeatID,
+                s.SeatCode     AS SeatNumber,
+                z.ZoneName     AS SectionName,
+                s.SeatLabel    AS [Row],
+                tc.CategoryName,
                 es.InventoryStatus,
-                es.Price
+                es.SalePrice   AS Price
             FROM EventSeat es
-            JOIN SeatCategory sc ON es.SeatCategoryID = sc.SeatCategoryID
+            JOIN Seat            s  ON s.SeatID           = es.SeatID
+            JOIN Zone            z  ON z.ZoneID           = s.ZoneID
+            JOIN TicketCategory  tc ON tc.ConcertID       = es.ConcertID
+                                   AND tc.TicketCategoryID = es.TicketCategoryID
             WHERE es.ConcertID = @ConcertID
-            ORDER BY es.SectionName, es.Row, es.SeatNumber;";
+            ORDER BY z.ZoneName, s.SeatCode;";
 
         return await conn.QueryAsync<SeatDto>(sql, new { ConcertID = concertId });
     }
