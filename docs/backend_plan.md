@@ -29,8 +29,7 @@
   (PeriodicTimer 1 phút: sp_ReleaseExpiredHolds -> sp_AllocateWaitlist per Concert)
          |
          v
-[ Hangfire Server ]  <- Email Job có Retry + Dashboard /hangfire
-  (SendTicketEmailJob — persistence trong HangFire schema)
+[ Hangfire Server ]  <- Dashboard /hangfire (Đã cấu hình nhưng chưa có Job cụ thể ở phase này)
 ```
 
 ### Phân tầng Backend
@@ -67,7 +66,7 @@
 > [!NOTE]
 > **Tại sao dùng cả Hangfire lẫn IHostedService?**
 > - `IHostedService (HoldReleaseWorker)`: Job định kỳ đơn giản, idempotent. App restart thì SP chạy lại ở chu kỳ tiếp theo là OK. Không cần persistence hay retry.
-> - `Hangfire (SendTicketEmailJob)`: Job nghiệp vụ quan trọng. App restart giữa lúc gửi email thì Hangfire tự retry từ DB. IHostedService sẽ mất job đó vĩnh viễn.
+> - `Hangfire`: Sẵn sàng cho các job nghiệp vụ (vd: Email) cần retry từ DB. Hiện tại chỉ setup Dashboard và Schema.
 
 > [!IMPORTANT]
 > **Hangfire dùng `PrepareSchemaIfNecessary = false`.** Schema HangFire phải được tạo trước qua `database/Scripts/HangfireSchema.sql` trong `deploy.ps1`. Backend không tự tạo schema.
@@ -100,7 +99,6 @@ backend/
 |   +-- ConcertTicketing.Infrastructure/
 |   |   +-- BackgroundJobs/
 |   |   |   +-- HoldReleaseWorker.cs     # IHostedService: sp_ReleaseExpiredHolds + sp_AllocateWaitlist
-|   |   |   +-- SendTicketEmailJob.cs    # Hangfire Job: gửi email có retry
 |   |   +-- Cache/SeatMapCache.cs        # TTL 15s + SemaphoreSlim Mutex (single-process)
 |   |   +-- Repositories/
 |   |       +-- BookingRepository.cs     # sp_CreateBooking, sp_CancelBooking, sp_ApplyPromotion
@@ -405,7 +403,6 @@ POST /api/payments/{paymentId}/refund   -> EXEC sp_ProcessRefund     [Role: Admi
     |                 |  ?bookingId=&paymentId=&vnp_TransactionNo=
     |                 |-- EXEC sp_ConfirmPayment ------------->|
     |                 |<-- OK ---------------------------------|
-    |                 |-- Hangfire.Enqueue(SendTicketEmailJob)
     |                 |-- 200 OK ----------->|                |
 ```
 
@@ -413,7 +410,6 @@ POST /api/payments/{paymentId}/refund   -> EXEC sp_ProcessRefund     [Role: Admi
 - `[AllowAnonymous]` — VNPay không gửi JWT.
 - Nhận parameters từ query string: `bookingId`, `paymentId`, `vnp_TransactionNo`.
 - Gọi `PaymentRepository.ConfirmAsync(bookingId, paymentId, vnp_TransactionNo)`.
-- Sau confirm thành công: `Hangfire.Enqueue<SendTicketEmailJob>`.
 - Luôn trả `200 OK` để VNPay không retry vô hạn.
 
 > [!IMPORTANT]
@@ -497,16 +493,11 @@ private async Task ReleaseAndAllocateAsync(CancellationToken ct)
 > [!IMPORTANT]
 > `sp_AllocateWaitlist` **bắt buộc nhận `@ConcertID`** làm tham số. Worker phải truy vấn danh sách Concert `OnSale` và gọi SP cho từng Concert riêng lẻ — không thể gọi 1 lần cho tất cả.
 
-### 8.2 SendTicketEmailJob (Hangfire)
+### 8.2 Hangfire Server
 
-```csharp
-// Enqueue ngay sau khi sp_ConfirmPayment thành công
-BackgroundJob.Enqueue<SendTicketEmailJob>(j => j.ExecuteAsync(bookingId, CancellationToken.None));
-```
-
-- Hangfire dùng SQL Server storage (schema `HangFire`), `PrepareSchemaIfNecessary = false`.
-- Retry với Exponential Backoff nếu SendGrid timeout.
-- Dashboard tại `/hangfire` — bảo vệ bởi `HangfireAdminAuthFilter` (chỉ role Admin).
+- Hangfire đã được tích hợp bằng SQL Server storage (schema `HangFire`), `PrepareSchemaIfNecessary = false`.
+- Dashboard hoạt động tại `/hangfire` — bảo vệ bởi `HangfireAdminAuthFilter` (chỉ role Admin).
+- Hiện tại chưa có job (như SendTicketEmailJob) được implement trong source code API hiện hành.
 
 ---
 
