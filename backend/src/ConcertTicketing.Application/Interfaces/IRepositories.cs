@@ -39,3 +39,10 @@ public interface ICheckInRepository
 {
     Task<CheckInResponse> CheckInAsync(int staffUserId, CheckInRequest request);
 }
+
+public interface IPaymentRepository
+{
+    Task<InitiatePaymentResponse> InitiateAsync(int bookingId, int customerUserId);
+    Task ConfirmAsync(int bookingId, int paymentId, string? providerReference); // gọi sp_ConfirmPayment
+    Task<int> ProcessRefundAsync(int paymentId, decimal refundAmount, string reason, int actorUserId); // gọi sp_ProcessRefund
+}

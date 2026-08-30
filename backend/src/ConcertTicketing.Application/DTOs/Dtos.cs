@@ -23,12 +23,11 @@ public record ConcertListItem(
     string ConcertName,
     string ArtistName,
     string VenueName,
-    string City,
-    DateTime ConcertDate,
-    string Status,
+    string Address,
+    DateTime StartDatetime,
+    string ConcertStatus,
     bool SalesPaused,
-    DateTime? SaleStartDatetime,
-    string? ImageUrl);
+    DateTime? SaleStartDatetime);
 
 public record ConcertDetail(
     int ConcertID,
@@ -36,16 +35,12 @@ public record ConcertDetail(
     string ArtistName,
     string VenueName,
     string Address,
-    string City,
-    int Capacity,
-    DateTime ConcertDate,
-    string Status,
+    DateTime StartDatetime,
+    string ConcertStatus,
     bool SalesPaused,
     DateTime? SaleStartDatetime,
     DateTime? SaleEndDatetime,
-    int? PurchaseLimitPerCustomer,
-    string? Description,
-    string? ImageUrl);
+    int? PurchaseLimit);
 
 public record SeatDto(
     int SeatID,
@@ -76,12 +71,12 @@ public record BookingDetail(
     int ConcertID,
     string ConcertName,
     string BookingStatus,
-    DateTime BookingDatetime,
+    DateTime CreatedTimestamp,
     DateTime? HoldExpiryDatetime,
     decimal SubtotalAmount,
     decimal DiscountAmount,
     decimal FinalAmount,
-    string? BookingReference,
+    string BookingReference,
     List<BookingAllocationDto> Seats);
 
 public record BookingAllocationDto(
@@ -95,7 +90,7 @@ public record ApplyPromotionRequest(string DiscountCode);
 
 // ── Payment ───────────────────────────────────────────────────────────────────
 
-public record InitiatePaymentRequest(string PaymentMethod = "VNPay");
+public record InitiatePaymentRequest();
 
 public record InitiatePaymentResponse(
     int PaymentId,
