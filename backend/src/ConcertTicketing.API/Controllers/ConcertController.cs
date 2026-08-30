@@ -11,9 +11,9 @@ namespace ConcertTicketing.API.Controllers;
 public class ConcertController : ControllerBase
 {
     private readonly IConcertRepository _concertRepository;
-    private readonly SeatMapCache _seatMapCache;
+    private readonly ISeatMapCache _seatMapCache;
 
-    public ConcertController(IConcertRepository concertRepository, SeatMapCache seatMapCache)
+    public ConcertController(IConcertRepository concertRepository, ISeatMapCache seatMapCache)
     {
         _concertRepository = concertRepository;
         _seatMapCache      = seatMapCache;
