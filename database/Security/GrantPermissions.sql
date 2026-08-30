@@ -98,4 +98,37 @@ DENY SELECT  ON dbo.AuditRecord                 TO app_checkinstaff;
 DENY SELECT  ON dbo.Payment                     TO app_checkinstaff;
 DENY SELECT  ON dbo.UserAccount                 TO app_checkinstaff;
 
+-- ============================================================
+-- 5. api_service: Backend API Service Account
+--    Nguyen tac: chi EXECUTE SP + SELECT bang read-only.
+--    KHONG DUOC INSERT/UPDATE/DELETE truc tiep vao bang
+--    (ngoai tru RefreshToken).
+-- ============================================================
+
+-- 1. Quyen Thuc thi tat ca Stored Procedures (Bao gom 3 SP moi)
+GRANT EXECUTE ON SCHEMA::dbo TO api_service;
+
+-- 2. Quyen Doc (Cho phep Dapper queries)
+GRANT SELECT ON SCHEMA::dbo TO api_service;
+
+-- 3. Quyen Ghi Ngoại lệ (Operational Data)
+-- CHỈ cho phép C# thao tác trực tiếp trên bảng RefreshToken
+GRANT INSERT, UPDATE ON dbo.RefreshToken TO api_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::[HangFire] TO api_service;
+
+-- 4. VÙNG CẤM THUYỆT ĐỐI (Core Business Tables)
+-- Chan moi thao tac ghi truc tiep tu C#, bat buoc dung SP
+DENY INSERT, UPDATE, DELETE ON dbo.UserAccount                 TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.UserRoleAssignment          TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.Booking                     TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.BookingEventSeatAllocation  TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.BookingPromotionApplication TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.EventSeat                   TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.Payment                     TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.Ticket                      TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.Refund                      TO api_service;
+
+-- Cam doc AuditRecord (chi Admin duoc quyen)
+DENY SELECT ON dbo.AuditRecord TO api_service;
+
 GO

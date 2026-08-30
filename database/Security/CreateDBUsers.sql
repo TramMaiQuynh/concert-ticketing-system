@@ -1,12 +1,19 @@
 -- ============================================================
 -- CreateDBUsers.sql
--- Tao 4 SQL Server Logins va Database Users tuong ung
--- voi 4 vai tro trong he thong Concert Ticketing.
+-- Tao 5 SQL Server Logins va Database Users tuong ung
+-- voi 5 vai tro trong he thong Concert Ticketing.
 -- Ap dung nguyen tac Least Privilege (S20 / §23.7).
 -- ============================================================
 
 -- Luu y: Thay 'YourStrongPassword!' bang mat khau thuc te
 --        truoc khi chay script nay trong moi truong san xuat.
+
+-- --- Login & User: api_service (Backend Application Identity) ---
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = 'api_service')
+    CREATE LOGIN api_service WITH PASSWORD = 'YourStrongPassword!';
+
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'api_service')
+    CREATE USER api_service FOR LOGIN api_service;
 
 -- --- Login & User: app_admin ---
 IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = 'app_admin')
