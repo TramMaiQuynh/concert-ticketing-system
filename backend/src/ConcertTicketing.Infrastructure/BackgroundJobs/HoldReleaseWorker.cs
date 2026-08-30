@@ -71,11 +71,20 @@ public class HoldReleaseWorker : BackgroundService
         _logger.LogDebug("sp_ReleaseExpiredHolds hoàn thành.");
 
         // Bước 2: Ngay lập tức cấp ghế vừa nhả cho người trong Waitlist
-        await conn.ExecuteAsync(
+        var concertIds = await conn.QueryAsync<int>(
             new CommandDefinition(
-                "sp_AllocateWaitlist",
-                commandType: CommandType.StoredProcedure,
+                "SELECT ConcertID FROM Concert WHERE ConcertStatus = 'OnSale' AND SalesPaused = 0",
                 cancellationToken: ct));
+
+        foreach (var concertId in concertIds)
+        {
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    "sp_AllocateWaitlist",
+                    new { ConcertID = concertId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+        }
 
         _logger.LogDebug("sp_AllocateWaitlist hoàn thành.");
     }
