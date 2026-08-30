@@ -127,7 +127,7 @@ function Invoke-SqlQuery {
 # Xac dinh duong dan goc cua du an
 # ============================================================
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DbRoot    = Join-Path $ScriptDir "database"
+$DbRoot    = $ScriptDir
 
 # ============================================================
 # Kiem tra sqlcmd co san khong
@@ -185,7 +185,7 @@ Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Datab
 #   Layer 5 (phu thuoc Layer 4): Ticket, BookingPromotionApplication
 #   Layer 6 (phu thuoc Layer 5): CheckIn, AuditRecord
 # ============================================================
-Write-Phase "PHASE 1: TABLES (26 bang)"
+Write-Phase "PHASE 1: TABLES (27 bang)"
 
 $tablesDir = Join-Path $DbRoot "Tables"
 
@@ -200,6 +200,7 @@ Invoke-SqlFile "$tablesDir\SystemConfiguration.sql"
 Invoke-SqlFile "$tablesDir\Zone.sql"                   # -> Venue
 Invoke-SqlFile "$tablesDir\UserRoleAssignment.sql"     # -> UserAccount, Role
 Invoke-SqlFile "$tablesDir\Concert.sql"                # -> UserAccount, Artist, Venue
+Invoke-SqlFile "$tablesDir\RefreshToken.sql"           # -> UserAccount
 
 # Layer 2 -- Phu thuoc Layer 1
 Invoke-SqlFile "$tablesDir\Seat.sql"                   # -> Zone, Venue
@@ -230,7 +231,7 @@ Invoke-SqlFile "$tablesDir\CheckIn.sql"                     # -> Ticket, Concert
 Invoke-SqlFile "$tablesDir\AuditRecord.sql"                 # -> UserAccount
 
 Write-Host ""
-Write-Host "  Tong cong: 26 bang da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: 27 bang da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 2: INDEXES
@@ -304,16 +305,22 @@ Invoke-SqlFile "$trgDir\TRG_SystemActorGuard.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (7 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (10 SP)"
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
 Invoke-SqlFile "$spDir\sp_CreateBooking.sql"
 Invoke-SqlFile "$spDir\sp_ConfirmPayment.sql"
 Invoke-SqlFile "$spDir\sp_ProcessRefund.sql"
+Invoke-SqlFile "$spDir\sp_CheckInTicket.sql"
 Invoke-SqlFile "$spDir\sp_ReleaseExpiredHolds.sql"
 Invoke-SqlFile "$spDir\sp_AllocateWaitlist.sql"
 Invoke-SqlFile "$spDir\sp_ApplyPromotion.sql"
-Invoke-SqlFile "$spDir\sp_CheckInTicket.sql"
+Invoke-SqlFile "$spDir\sp_RegisterUser.sql"
+Invoke-SqlFile "$spDir\sp_CancelBooking.sql"
+Invoke-SqlFile "$spDir\sp_InitiatePayment.sql"
+
+Write-Host ""
+Write-Host "  Tong cong: 10 Stored Procedures da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 6: VIEWS
@@ -328,10 +335,18 @@ Invoke-SqlFile "$viewDir\VW_Others.sql"   # Chua 5 view: ActiveInventoryStatus,
                                            # WaitlistQueue, AuditTrail
 
 # ============================================================
-# PHASE 7: SECURITY (RBAC)
+# PHASE 7: HANGFIRE SCHEMA
+# ============================================================
+Write-Phase "PHASE 7: HANGFIRE SCHEMA"
+
+$scriptsDir = Join-Path $DbRoot "Scripts"
+Invoke-SqlFile "$scriptsDir\HangfireSchema.sql"
+
+# ============================================================
+# PHASE 7.5: SECURITY (RBAC)
 # Tao DB Users truoc, sau do moi Grant Permissions.
 # ============================================================
-Write-Phase "PHASE 7: SECURITY (RBAC)"
+Write-Phase "PHASE 7.5: SECURITY (RBAC)"
 
 $secDir = Join-Path $DbRoot "Security"
 Invoke-SqlFile "$secDir\CreateDBUsers.sql"
