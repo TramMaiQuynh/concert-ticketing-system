@@ -12,9 +12,13 @@ public class HangfireAdminAuthFilter : IDashboardAuthorizationFilter
     public bool Authorize(DashboardContext context)
     {
         var httpContext = context.GetHttpContext();
+        return Authorize(httpContext);
+    }
 
+    public bool Authorize(HttpContext? httpContext)
+    {
         // Phải đăng nhập
-        if (httpContext.User?.Identity?.IsAuthenticated != true)
+        if (httpContext?.User?.Identity?.IsAuthenticated != true)
             return false;
 
         // Phải có role Admin
