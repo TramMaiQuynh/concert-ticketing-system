@@ -4,7 +4,7 @@
 -- da qua han HoldExpiryDatetime ma chua thanh toan.
 -- Duoc goi dinh ky boi SQL Agent Job (SIP1).
 -- ============================================================
-CREATE OR ALTER PROCEDURE dbo.sp_ReleaseExpiredHolds
+CREATE PROCEDURE dbo.sp_ReleaseExpiredHolds
 AS
 BEGIN
     SET NOCOUNT ON;

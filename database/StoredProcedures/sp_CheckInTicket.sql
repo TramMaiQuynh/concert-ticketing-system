@@ -8,7 +8,7 @@
 --   4. Neu hop le -> Ticket->Used, INSERT CheckIn, ghi Audit ADMISSION_SUCCESS.
 --   5. Neu khong hop le -> ghi Audit ADMISSION_ATTEMPT (that bai).
 -- ============================================================
-CREATE OR ALTER PROCEDURE dbo.sp_CheckInTicket
+CREATE PROCEDURE dbo.sp_CheckInTicket
 (
     @TicketCode          VARCHAR(64),
     @ConcertID           INT,

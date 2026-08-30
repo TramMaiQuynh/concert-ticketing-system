@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- sp_ProcessRefund (BP8 / BR31-BR34 / CT-06)
 -- Xu ly hoan tien cho mot Payment da duoc Confirmed.
 -- Transaction bao gom:
@@ -7,7 +7,7 @@
 --   3. INSERT Refund (trang thai Pending hoac Confirmed).
 --   4. Ghi AuditRecord.
 -- ============================================================
-CREATE OR ALTER PROCEDURE dbo.sp_ProcessRefund
+CREATE PROCEDURE dbo.sp_ProcessRefund
 (
     @PaymentID       INT,
     @RefundAmount    DECIMAL(18,0),

@@ -9,7 +9,7 @@
 --   5. Ghi AuditRecord.
 -- @SeatList: chuoi EventSeatID phan cach bang dau phay.
 -- ============================================================
-CREATE OR ALTER PROCEDURE dbo.sp_CreateBooking
+CREATE PROCEDURE dbo.sp_CreateBooking
 (
     @CustomerUserID  INT,
     @ConcertID       INT,

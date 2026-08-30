@@ -10,7 +10,7 @@
 --   6. Chuyen EventSeat -> Booked.
 --   7. Ghi AuditRecord.
 -- ============================================================
-CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPayment
+CREATE PROCEDURE dbo.sp_ConfirmPayment
 (
     @BookingID         INT,
     @PaymentID         INT,
