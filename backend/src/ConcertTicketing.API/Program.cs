@@ -18,6 +18,7 @@ using ConcertTicketing.API.Middleware;
 using ConcertTicketing.Application.Interfaces;
 using ConcertTicketing.Application.Services;
 using ConcertTicketing.Application.Validators;
+using ConcertTicketing.Application.Interfaces;
 using ConcertTicketing.Infrastructure.BackgroundJobs;
 using ConcertTicketing.Infrastructure.Cache;
 using ConcertTicketing.Infrastructure.Repositories;
@@ -179,7 +180,7 @@ try
 
     // ── Cache ─────────────────────────────────────────────────────────────────
     var seatMapTtl = builder.Configuration.GetValue<int>("Redis:SeatMapTtlSeconds", 15);
-    builder.Services.AddSingleton(sp =>
+    builder.Services.AddSingleton<ISeatMapCache>(sp =>
         new SeatMapCache(
             sp.GetRequiredService<IConnectionMultiplexer>(),
             sp.GetRequiredService<IConcertRepository>(),
