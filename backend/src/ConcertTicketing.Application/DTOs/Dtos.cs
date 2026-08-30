@@ -8,13 +8,13 @@ public record RegisterRequest(
     string Username,
     string Email,
     string Password,
-    string FullName);
+    string DisplayName);  // DB column: DisplayName
 
+// RefreshToken KHÔNG trả trong body — được set qua HttpOnly Cookie
 public record AuthResponse(
     string AccessToken,
     string TokenType,
-    int ExpiresIn,      // seconds
-    string RefreshToken);
+    int ExpiresIn);     // seconds
 
 // ── Concert ───────────────────────────────────────────────────────────────────
 
