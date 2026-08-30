@@ -55,7 +55,7 @@ public class RegisterValidator : AbstractValidator<RegisterRequest>
             .Matches("[A-Z]").WithMessage("Password phải có ít nhất 1 chữ hoa.")
             .Matches("[0-9]").WithMessage("Password phải có ít nhất 1 chữ số.");
 
-        RuleFor(x => x.FullName)
+        RuleFor(x => x.DisplayName)
             .NotEmpty()
             .MaximumLength(200);
     }
