@@ -13,5 +13,8 @@ CREATE TABLE Promotion (
     CONSTRAINT PK_Promotion PRIMARY KEY CLUSTERED (PromotionID),
     CONSTRAINT FK_Promotion_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
     CONSTRAINT CHK_Promotion_Status CHECK (PromotionStatus IN ('Draft', 'Active', 'Expired', 'Disabled')),
-    CONSTRAINT CHK_Promotion_Dates CHECK (EndDatetime > StartDatetime)
+    CONSTRAINT CHK_Promotion_Dates CHECK (EndDatetime > StartDatetime),
+    -- Phong thu: DiscountValue phai > 0; UsageLimit neu co phai > 0
+    CONSTRAINT CHK_Promotion_DiscountValue CHECK (DiscountValue > 0),
+    CONSTRAINT CHK_Promotion_UsageLimit CHECK (UsageLimit IS NULL OR UsageLimit > 0)
 );
