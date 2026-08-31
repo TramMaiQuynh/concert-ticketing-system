@@ -159,23 +159,25 @@ EXEC sp_RunTest @Suite,'CheckIn_Duplicate_ALREADYUSED','SUCCESS',NULL,@SQL;
 -- sp_ProcessRefund
 -- Signature: @PaymentID, @RefundAmount, @RefundReason, @ActorUserID, @RefundReference, @NewRefundID OUT
 -- ============================================================
--- 53002: Payment khong Confirmed
+-- 53002: Payment khong Confirmed (Actor: Organizer co quyen - C2)
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @bid INT, @pid INT, @rid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
     EXEC sp_ProcessRefund @PaymentID=@pid, @RefundAmount=500000,
-         @RefundReason=''Test'', @ActorUserID=@uid, @NewRefundID=@rid OUT;';
+         @RefundReason=''Test'', @ActorUserID=@org, @NewRefundID=@rid OUT;';
 EXEC sp_RunTest @Suite,'ProcessRefund_PaymentNotConfirmed_Fail53002','ERROR',53002,@SQL;
 
--- 53004: Refund vuot qua Payment.Amount
+-- 53004: Refund vuot qua Payment.Amount (Actor: Organizer co quyen - C2)
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @bid INT, @pid INT, @rid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
     SET @bid = SCOPE_IDENTITY();
@@ -183,13 +185,30 @@ SET @SQL = N'
     SET @pid = SCOPE_IDENTITY();
     -- Refund 1: 300k ok
     EXEC sp_ProcessRefund @PaymentID=@pid, @RefundAmount=300000,
-         @RefundReason=''Partial'', @ActorUserID=@uid, @NewRefundID=@rid OUT;
+         @RefundReason=''Partial'', @ActorUserID=@org, @NewRefundID=@rid OUT;
     -- Refund 2: them 300k -> tong 600k > 500k -> phai loi
     EXEC sp_ProcessRefund @PaymentID=@pid, @RefundAmount=300000,
-         @RefundReason=''Exceed'', @ActorUserID=@uid, @NewRefundID=@rid OUT;';
+         @RefundReason=''Exceed'', @ActorUserID=@org, @NewRefundID=@rid OUT;';
 EXEC sp_RunTest @Suite,'ProcessRefund_ExceedAmount_Fail53004','ERROR',53004,@SQL;
 
--- Happy Path sp_ProcessRefund
+-- Happy Path sp_ProcessRefund (Actor: Organizer co quyen - C2)
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @bid INT, @pid INT, @rid INT;
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
+    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Confirmed'',1000000,''REF-TEST'');
+    SET @pid = SCOPE_IDENTITY();
+    EXEC sp_ProcessRefund @PaymentID=@pid, @RefundAmount=500000,
+         @RefundReason=''Partial refund'', @ActorUserID=@org, @NewRefundID=@rid OUT;
+    IF @rid IS NULL THROW 50000, ''RefundID is NULL'', 1;
+    IF (SELECT RefundAmount FROM Refund WHERE RefundID=@rid) <> 500000
+        THROW 50000, ''RefundAmount sai'', 1;';
+EXEC sp_RunTest @Suite,'ProcessRefund_HappyPath','SUCCESS',NULL,@SQL;
+
+-- 53005 (C2 security): Khach hang (Customer) khong co quyen hoan tien
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
@@ -199,11 +218,8 @@ SET @SQL = N'
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Confirmed'',1000000,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
     EXEC sp_ProcessRefund @PaymentID=@pid, @RefundAmount=500000,
-         @RefundReason=''Partial refund'', @ActorUserID=@uid, @NewRefundID=@rid OUT;
-    IF @rid IS NULL THROW 50000, ''RefundID is NULL'', 1;
-    IF (SELECT RefundAmount FROM Refund WHERE RefundID=@rid) <> 500000
-        THROW 50000, ''RefundAmount sai'', 1;';
-EXEC sp_RunTest @Suite,'ProcessRefund_HappyPath','SUCCESS',NULL,@SQL;
+         @RefundReason=''Should fail'', @ActorUserID=@uid, @NewRefundID=@rid OUT;';
+EXEC sp_RunTest @Suite,'ProcessRefund_CustomerActor_Fail53005','ERROR',53005,@SQL;
 
 -- ============================================================
 -- sp_ReleaseExpiredHolds

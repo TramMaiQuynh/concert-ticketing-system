@@ -48,7 +48,7 @@ SET @SQL = N'
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid,@esid,''Active'',1000000);
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus)
     VALUES (@bid,@esid,@cid2,''TCK_WRONGCID'',''Issued'');';
-EXEC sp_RunTest @Suite,'Ticket_ConcertID_Mismatch_Fail','ERROR',50010,@SQL;
+EXEC sp_RunTest @Suite,'Ticket_ConcertID_Mismatch_Fail','ERROR',50012,@SQL;
 
 -- ===== TRG_CheckInConcertConsistency: CheckIn.ConcertID != Ticket.ConcertID =====
 SET @SQL = N'
@@ -69,7 +69,7 @@ SET @SQL = N'
     SET @cid2 = SCOPE_IDENTITY();
     INSERT INTO CheckIn (TicketID,ConcertID,CheckInStaffUserID,CheckInTimestamp,ValidationResult)
     VALUES (@tid,@cid2,@staff,SYSDATETIME(),''SUCCESS'');';
-EXEC sp_RunTest @Suite,'CheckIn_ConcertID_Mismatch_Fail','ERROR',50011,@SQL;
+EXEC sp_RunTest @Suite,'CheckIn_ConcertID_Mismatch_Fail','ERROR',50013,@SQL;
 
 -- ===== TRG_InventoryAllocationConsistency: Active Alloc tren ghe Available =====
 SET @SQL = N'
@@ -128,6 +128,69 @@ SET @SQL = N'
     INSERT INTO Refund (PaymentID,RefundStatus,RefundAmount) VALUES (@pid,''Pending'',300000);
     INSERT INTO Refund (PaymentID,RefundStatus,RefundAmount) VALUES (@pid,''Pending'',300000);';
 EXEC sp_RunTest @Suite,'RefundLimits_ExceedPaymentAmount_Fail','ERROR',NULL,@SQL;
+
+-- ===== TRG_ConcertVenueChangeGuard: doi VenueID Concert khi da co EventSeat -> 50130 =====
+SET @SQL = N'
+    DECLARE @vid2 INT;
+    INSERT INTO Venue (VenueName,Address,VenueStatus) VALUES (''Guard Venue C'',''Addr'',''Active'');
+    SET @vid2 = SCOPE_IDENTITY();
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert WHERE EXISTS (SELECT 1 FROM EventSeat WHERE ConcertID = Concert.ConcertID) ORDER BY ConcertID);
+    UPDATE Concert SET VenueID = @vid2 WHERE ConcertID = @cid;';
+EXEC sp_RunTest @Suite,'ConcertVenueChangeGuard_Fail','ERROR',50130,@SQL;
+
+-- ===== TRG_SeatVenueChangeGuard: doi VenueID Seat khi da co EventSeat -> 50131 =====
+SET @SQL = N'
+    DECLARE @vid2 INT;
+    INSERT INTO Venue (VenueName,Address,VenueStatus) VALUES (''Guard Venue S'',''Addr'',''Active'');
+    SET @vid2 = SCOPE_IDENTITY();
+    DECLARE @sid INT = (SELECT TOP 1 SeatID FROM Seat WHERE EXISTS (SELECT 1 FROM EventSeat WHERE SeatID = Seat.SeatID) ORDER BY SeatID);
+    UPDATE Seat SET VenueID = @vid2 WHERE SeatID = @sid;';
+EXEC sp_RunTest @Suite,'SeatVenueChangeGuard_Fail','ERROR',50131,@SQL;
+
+-- ===== TRG_EventSeatVenue (UPDATE): doi EventSeat sang concert khac venue -> 50020 =====
+SET @SQL = N'
+    DECLARE @vid2 INT;
+    INSERT INTO Venue (VenueName,Address,VenueStatus) VALUES (''Guard Venue ES'',''Addr'',''Active'');
+    SET @vid2 = SCOPE_IDENTITY();
+    DECLARE @cat2 INT;
+    INSERT INTO TicketCategory (ConcertID,CategoryName,CategoryStatus) VALUES ((SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID),''GuardCat'',''Active'');
+    INSERT INTO TicketCategory (ConcertID,CategoryName,CategoryStatus) VALUES ((SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID),''GuardCat2'',''Active'');
+    -- Tao concert moi o venue moi
+    DECLARE @cid2 INT;
+    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
+    VALUES ((SELECT UserID FROM UserAccount WHERE Username=''test_org''),(SELECT TOP 1 ArtistID FROM Artist),@vid2,''Guard Concert'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
+    SET @cid2 = SCOPE_IDENTITY();
+    DECLARE @cat3 INT;
+    INSERT INTO TicketCategory (ConcertID,CategoryName,CategoryStatus) VALUES (@cid2,''GuardCat3'',''Active'');
+    SET @cat3 = SCOPE_IDENTITY();
+    DECLARE @es INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE ConcertID = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID) ORDER BY EventSeatID);
+    UPDATE EventSeat SET ConcertID = @cid2, TicketCategoryID = @cat3 WHERE EventSeatID = @es;';
+EXEC sp_RunTest @Suite,'EventSeatVenue_UpdateConcert_Fail','ERROR',50020,@SQL;
+
+-- ===== FK_BPA_DiscountCode (composite): code thuoc promotion khac -> loi FK =====
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    -- Promotion 1 co code
+    DECLARE @p1 INT, @code1 INT;
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag,UsageLimit)
+    VALUES (@cid,''Composite P1'',''FIXED'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',1,100);
+    SET @p1 = SCOPE_IDENTITY();
+    INSERT INTO DiscountCode (PromotionID,CodeValue,ValidFromDatetime,ValidToDatetime,CodeStatus)
+    VALUES (@p1,''CP1'',SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'');
+    SET @code1 = SCOPE_IDENTITY();
+    -- Promotion 2 khong code
+    DECLARE @p2 INT;
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag,UsageLimit)
+    VALUES (@cid,''Composite P2'',''FIXED'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',0,100);
+    SET @p2 = SCOPE_IDENTITY();
+    DECLARE @bid INT;
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
+    SET @bid = SCOPE_IDENTITY();
+    -- Dung code cua P1 nhung bo vao P2 -> FK composite phai chan
+    INSERT INTO BookingPromotionApplication (BookingID,PromotionID,DiscountCodeID,DiscountAmount,AppliedTimestamp)
+    VALUES (@bid,@p2,@code1,5000,SYSDATETIME());';
+EXEC sp_RunTest @Suite,'BPA_CompositeFK_WrongPromotion_Fail','ERROR',NULL,@SQL;
 
 PRINT '== Integrity Tests Done ==';
 GO

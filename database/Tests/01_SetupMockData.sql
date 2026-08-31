@@ -15,6 +15,9 @@ GO
 DISABLE TRIGGER TRG_AuditLog ON AuditRecord;
 
 -- Xoa theo thu tu FK (child truoc parent)
+-- RefreshToken la child cua UserAccount; phai xoa truoc UserAccount, neu khong se
+-- vi pham FK_RefreshToken_User (loi 547) khi DB da tung luu refresh token.
+DELETE FROM RefreshToken;
 DELETE FROM CheckIn;
 DELETE FROM AuditRecord;
 DELETE FROM BookingPromotionApplication;

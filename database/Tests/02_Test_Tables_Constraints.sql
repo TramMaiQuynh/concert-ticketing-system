@@ -123,5 +123,48 @@ SET @SQL = N'
     VALUES (@bid2,@esid,''Active'',1000000);';
 EXEC sp_RunTest @Suite,'UIX_Allocation_1Active_1Released_OK','SUCCESS',NULL,@SQL;
 
+-- ===== CHK_Concert_PurchaseLimit: PurchaseLimit <= 0 -> ERROR =====
+SET @SQL = N'
+    DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+        StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
+    VALUES (@uid,@aid,@vid,''PL0'',''Draft'',
+        DATEADD(d,1,SYSDATETIME()),DATEADD(d,2,SYSDATETIME()),0,0,0,0);';
+EXEC sp_RunTest @Suite,'CHK_Concert_PurchaseLimit_Positive','ERROR',NULL,@SQL;
+
+-- ===== CHK_Promotion_DiscountValue: DiscountValue <= 0 -> ERROR =====
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag)
+    VALUES (@cid,''PV0'',''FIXED'',0,SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),''Active'',0);';
+EXEC sp_RunTest @Suite,'CHK_Promotion_DiscountValue_Positive','ERROR',NULL,@SQL;
+
+-- ===== CHK_Queue_Capacity: AdmissionCapacity <= 0 -> ERROR =====
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
+    INSERT INTO Queue (ConcertID,QueueStatus,AdmissionCapacity,FairAccessPolicy)
+    VALUES (@cid,''Open'',0,''FIFO'');';
+EXEC sp_RunTest @Suite,'CHK_Queue_Capacity_Positive','ERROR',NULL,@SQL;
+
+-- ===== CHK_DiscountCode_ValidDates: ValidTo < ValidFrom -> ERROR =====
+SET @SQL = N'
+    DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion);
+    INSERT INTO DiscountCode (PromotionID,CodeValue,ValidFromDatetime,ValidToDatetime,CodeStatus)
+    VALUES (@pid,''BAD_DATE'',DATEADD(d,10,SYSDATETIME()),SYSDATETIME(),''Active'');';
+EXEC sp_RunTest @Suite,'CHK_DiscountCode_ValidDates','ERROR',NULL,@SQL;
+
+-- ===== UIX_Payment_PendingPerBooking: 2 Payment Pending/booking -> ERROR =====
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @bid INT;
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
+    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-PEND-1'');
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-PEND-2'');';
+EXEC sp_RunTest @Suite,'UIX_Payment_PendingPerBooking','ERROR',NULL,@SQL;
+
 PRINT '== Constraints Tests Done ==';
 GO
