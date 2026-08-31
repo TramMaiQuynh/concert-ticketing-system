@@ -20,3 +20,10 @@ CREATE TABLE Payment (
 CREATE UNIQUE NONCLUSTERED INDEX UIX_Payment_ConfirmedPerBooking 
 ON Payment (BookingID)
 WHERE PaymentStatus = 'Confirmed';
+
+-- Tang bao ve vat ly (song hanh voi check trong sp_InitiatePayment):
+-- moi Booking chi duoc toi da 1 Payment dang Pending. Bao ve ca truong hop
+-- 2 luong dong thoi cung goi sp_InitiatePayment cho cung Booking.
+CREATE UNIQUE NONCLUSTERED INDEX UIX_Payment_PendingPerBooking 
+ON Payment (BookingID)
+WHERE PaymentStatus = 'Pending';
