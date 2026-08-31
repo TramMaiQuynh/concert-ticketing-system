@@ -179,3 +179,31 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[JobQueue]') AND name = N'IX_HangFire_JobQueue_QueueAndFetchedAt')
 CREATE NONCLUSTERED INDEX [IX_HangFire_JobQueue_QueueAndFetchedAt] ON [HangFire].[JobQueue] ([Queue] ASC, [FetchedAt] ASC)
 GO
+
+-- Set: UNIQUE (Key, Score) + filtered ExpireAt — bắt buộc bởi Hangfire 1.8
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[Set]') AND name = N'UX_HangFire_Set_Key_Score')
+CREATE UNIQUE NONCLUSTERED INDEX [UX_HangFire_Set_Key_Score] ON [HangFire].[Set] ([Key] ASC, [Score] ASC)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[Set]') AND name = N'IX_HangFire_Set_ExpireAt')
+CREATE NONCLUSTERED INDEX [IX_HangFire_Set_ExpireAt] ON [HangFire].[Set] ([ExpireAt] ASC) INCLUDE ([Value]) WHERE ([ExpireAt] IS NOT NULL)
+GO
+
+-- Hash: UNIQUE (Key, Field) + filtered ExpireAt
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[Hash]') AND name = N'UX_HangFire_Hash_Key_Field')
+CREATE UNIQUE NONCLUSTERED INDEX [UX_HangFire_Hash_Key_Field] ON [HangFire].[Hash] ([Key] ASC, [Field] ASC)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[Hash]') AND name = N'IX_HangFire_Hash_ExpireAt')
+CREATE NONCLUSTERED INDEX [IX_HangFire_Hash_ExpireAt] ON [HangFire].[Hash] ([ExpireAt] ASC) WHERE ([ExpireAt] IS NOT NULL)
+GO
+
+-- List: filtered ExpireAt
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[List]') AND name = N'IX_HangFire_List_ExpireAt')
+CREATE NONCLUSTERED INDEX [IX_HangFire_List_ExpireAt] ON [HangFire].[List] ([ExpireAt] ASC) WHERE ([ExpireAt] IS NOT NULL)
+GO
+
+-- AggregatedCounter: filtered ExpireAt
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[AggregatedCounter]') AND name = N'IX_HangFire_AggregatedCounter_ExpireAt')
+CREATE NONCLUSTERED INDEX [IX_HangFire_AggregatedCounter_ExpireAt] ON [HangFire].[AggregatedCounter] ([ExpireAt] ASC) WHERE ([ExpireAt] IS NOT NULL)
+GO
