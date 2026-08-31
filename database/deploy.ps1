@@ -66,12 +66,18 @@ function Invoke-SqlFile {
     Write-Host "  >> $fileName" -NoNewline
 
     # Xay dung argument list cho sqlcmd
+    # LUU Y: KHONG dung "-r1" (redirect toan bo output ra stderr). Neu dung,
+    # nhung message thong thuong cua sqlcmd ("Changed database context to ...")
+    # se di vao stderr; trong PowerShell 5.1 voi $ErrorActionPreference="Stop",
+    # stderr cua native command bi dich lai thanh ErrorRecord -> gap Stop -> script
+    # that bai ngay tu file dau tien mac du khong co loi SQL that su.
+    # Viec bat loi da duoc dam bao boi "-b" (sqlcmd tra ve exit code khac 0) +
+    # kiem tra $LASTEXITCODE ben duoi.
     $args = @(
         "-S", $ServerInstance,
         "-d", $Database,
         "-i", $FilePath,
         "-b",         # Exit on error
-        "-r1",        # Print errors to stderr
         "-I"          # SET QUOTED_IDENTIFIER ON (bat buoc cho Filtered Indexes)
     )
 
@@ -270,7 +276,7 @@ Invoke-SqlFile "$fnDir\fn_GetCustomerTicketCount.sql"
 # ngoai tru TRG_StateTransition chua nhieu trigger tren
 # nhieu bang -> chay truoc.
 # ============================================================
-Write-Phase "PHASE 4: TRIGGERS (23 trigger)"
+Write-Phase "PHASE 4: TRIGGERS (26 trigger)"
 
 $trgDir = Join-Path $DbRoot "Triggers"
 
@@ -281,6 +287,8 @@ Invoke-SqlFile "$trgDir\TRG_StateTransition.sql"
 # Referential integrity triggers
 Invoke-SqlFile "$trgDir\TRG_SeatVenueConsistency.sql"
 Invoke-SqlFile "$trgDir\TRG_EventSeatVenue.sql"
+Invoke-SqlFile "$trgDir\TRG_ConcertVenueChangeGuard.sql"   # bo sung: chan doi VenueID khi Concert co EventSeat
+Invoke-SqlFile "$trgDir\TRG_SeatVenueChangeGuard.sql"      # bo sung: chan doi VenueID khi Seat co EventSeat
 Invoke-SqlFile "$trgDir\TRG_AllocationConcert.sql"
 Invoke-SqlFile "$trgDir\TRG_TicketConcertConsistency.sql"
 
@@ -305,9 +313,10 @@ Invoke-SqlFile "$trgDir\TRG_SystemActorGuard.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (10 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (26 SP)"
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
+# --- Core transaction SPs ---
 Invoke-SqlFile "$spDir\sp_CreateBooking.sql"
 Invoke-SqlFile "$spDir\sp_ConfirmPayment.sql"
 Invoke-SqlFile "$spDir\sp_ProcessRefund.sql"
@@ -319,8 +328,30 @@ Invoke-SqlFile "$spDir\sp_RegisterUser.sql"
 Invoke-SqlFile "$spDir\sp_CancelBooking.sql"
 Invoke-SqlFile "$spDir\sp_InitiatePayment.sql"
 
+# --- Admin/Organizer management SPs (feature completion) ---
+Invoke-SqlFile "$spDir\sp_CreateConcert.sql"
+Invoke-SqlFile "$spDir\sp_UpdateConcert.sql"
+Invoke-SqlFile "$spDir\sp_UpdateConcertStatus.sql"
+Invoke-SqlFile "$spDir\sp_CreateVenue.sql"
+Invoke-SqlFile "$spDir\sp_CreateZone.sql"
+Invoke-SqlFile "$spDir\sp_CreateSeat.sql"
+Invoke-SqlFile "$spDir\sp_ConfigureTicketCategory.sql"
+Invoke-SqlFile "$spDir\sp_AddEventSeats.sql"
+Invoke-SqlFile "$spDir\sp_CreatePromotion.sql"
+Invoke-SqlFile "$spDir\sp_AssignRole.sql"
+
+# --- Customer self-service SPs ---
+Invoke-SqlFile "$spDir\sp_JoinWaitlist.sql"
+Invoke-SqlFile "$spDir\sp_JoinQueue.sql"
+
+# --- Admin extended management SPs ---
+Invoke-SqlFile "$spDir\sp_CreateDiscountCode.sql"
+Invoke-SqlFile "$spDir\sp_SetEventSeatUnavailable.sql"
+Invoke-SqlFile "$spDir\sp_AdminUpdateUserStatus.sql"
+Invoke-SqlFile "$spDir\sp_AddCheckinStaffAssignment.sql"
+
 Write-Host ""
-Write-Host "  Tong cong: 10 Stored Procedures da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: 26 Stored Procedures da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 6: VIEWS
