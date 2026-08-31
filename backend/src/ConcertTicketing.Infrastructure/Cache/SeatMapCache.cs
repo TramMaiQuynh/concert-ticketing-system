@@ -3,6 +3,8 @@ using StackExchange.Redis;
 using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Application.Interfaces;
 
+using Microsoft.Extensions.DependencyInjection;
+
 namespace ConcertTicketing.Infrastructure.Cache;
 
 /// <summary>
@@ -15,15 +17,15 @@ namespace ConcertTicketing.Infrastructure.Cache;
 public class SeatMapCache : ISeatMapCache
 {
     private readonly IDatabase _redis;
-    private readonly IConcertRepository _concertRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly int _ttlSeconds;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public SeatMapCache(IConnectionMultiplexer redis, IConcertRepository concertRepository, int ttlSeconds = 15)
+    public SeatMapCache(IConnectionMultiplexer redis, IServiceScopeFactory scopeFactory, int ttlSeconds = 15)
     {
-        _redis             = redis.GetDatabase();
-        _concertRepository = concertRepository;
-        _ttlSeconds        = ttlSeconds;
+        _redis        = redis.GetDatabase();
+        _scopeFactory = scopeFactory;
+        _ttlSeconds   = ttlSeconds;
     }
 
     public async Task<IEnumerable<SeatDto>> GetSeatsAsync(int concertId, CancellationToken ct = default)
@@ -44,8 +46,12 @@ public class SeatMapCache : ISeatMapCache
             if (cached.HasValue)
                 return JsonSerializer.Deserialize<IEnumerable<SeatDto>>(cached!)!;
 
+            // Tạo một Scope mới để resolve các Scoped Dependencies (IConcertRepository) đúng chuẩn DI
+            using var scope = _scopeFactory.CreateScope();
+            var concertRepository = scope.ServiceProvider.GetRequiredService<IConcertRepository>();
+
             // Chỉ 1 luồng duy nhất chạm DB
-            var seats = (await _concertRepository.GetSeatsAsync(concertId)).ToList();
+            var seats = (await concertRepository.GetSeatsAsync(concertId)).ToList();
 
             var json = JsonSerializer.Serialize(seats);
             await _redis.StringSetAsync(
