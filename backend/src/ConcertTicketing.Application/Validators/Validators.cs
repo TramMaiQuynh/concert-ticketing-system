@@ -83,3 +83,156 @@ public class ApplyPromotionValidator : AbstractValidator<ApplyPromotionRequest>
             .MaximumLength(50);
     }
 }
+
+public class RefundRequestValidator : AbstractValidator<RefundRequest>
+{
+    public RefundRequestValidator()
+    {
+        RuleFor(x => x.RefundAmount)
+            .GreaterThan(0).WithMessage("Số tiền hoàn phải lớn hơn 0.");
+
+        RuleFor(x => x.Reason)
+            .MaximumLength(500);
+    }
+}
+
+public class CreateConcertValidator : AbstractValidator<CreateConcertRequest>
+{
+    public CreateConcertValidator()
+    {
+        RuleFor(x => x.ArtistId).GreaterThan(0);
+        RuleFor(x => x.VenueId).GreaterThan(0);
+        RuleFor(x => x.ConcertName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.StartDatetime).NotEmpty();
+        RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
+            .WithMessage("EndDatetime phải sau StartDatetime.");
+        RuleFor(x => x.PurchaseLimit).GreaterThan(0);
+        RuleFor(x => x.ConcertStatus)
+            .Must(s => s is "Draft" or "Published" or "OnSale" or "SaleClosed" or "Completed" or "Cancelled")
+            .When(x => x.ConcertStatus is not null)
+            .WithMessage("ConcertStatus không hợp lệ.");
+    }
+}
+
+public class UpdateConcertValidator : AbstractValidator<UpdateConcertRequest>
+{
+    public UpdateConcertValidator()
+    {
+        RuleFor(x => x.ConcertName).MaximumLength(255).When(x => x.ConcertName is not null);
+        RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
+            .When(x => x.EndDatetime is not null && x.StartDatetime is not null)
+            .WithMessage("EndDatetime phải sau StartDatetime.");
+        RuleFor(x => x.PurchaseLimit)
+            .GreaterThan(0).When(x => x.PurchaseLimit is not null);
+    }
+}
+
+public class UpdateConcertStatusValidator : AbstractValidator<UpdateConcertStatusRequest>
+{
+    public UpdateConcertStatusValidator()
+    {
+        RuleFor(x => x.Status)
+            .NotEmpty()
+            .Must(s => s is "Draft" or "Published" or "OnSale" or "SaleClosed" or "Completed" or "Cancelled")
+            .WithMessage("ConcertStatus không hợp lệ.");
+    }
+}
+
+public class CreateVenueValidator : AbstractValidator<CreateVenueRequest>
+{
+    public CreateVenueValidator() =>
+        RuleFor(x => x.VenueName).NotEmpty().MaximumLength(255);
+}
+
+public class CreateZoneValidator : AbstractValidator<CreateZoneRequest>
+{
+    public CreateZoneValidator() =>
+        RuleFor(x => x.ZoneCode).NotEmpty().MaximumLength(64);
+}
+
+public class CreateSeatValidator : AbstractValidator<CreateSeatRequest>
+{
+    public CreateSeatValidator() =>
+        RuleFor(x => x.SeatCode).NotEmpty().MaximumLength(64);
+}
+
+public class ConfigureTicketCategoryValidator : AbstractValidator<ConfigureTicketCategoryRequest>
+{
+    public ConfigureTicketCategoryValidator() =>
+        RuleFor(x => x.CategoryName).NotEmpty().MaximumLength(255);
+}
+
+public class AddEventSeatsValidator : AbstractValidator<AddEventSeatsRequest>
+{
+    public AddEventSeatsValidator()
+    {
+        RuleFor(x => x.TicketCategoryId).GreaterThan(0);
+        RuleFor(x => x.SalePrice).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.SeatIds).NotEmpty()
+            .Must(ids => ids.Distinct().Count() == ids.Count)
+            .WithMessage("Danh sách ghế không được trùng.");
+        RuleForEach(x => x.SeatIds).GreaterThan(0);
+    }
+}
+
+public class CreatePromotionValidator : AbstractValidator<CreatePromotionRequest>
+{
+    public CreatePromotionValidator()
+    {
+        RuleFor(x => x.PromotionName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.DiscountType)
+            .Must(t => t is "PERCENTAGE" or "FIXED")
+            .WithMessage("DiscountType phải là PERCENTAGE hoặc FIXED.");
+        RuleFor(x => x.DiscountValue).GreaterThan(0);
+        RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
+            .WithMessage("EndDatetime phải sau StartDatetime.");
+        RuleFor(x => x.UsageLimit).GreaterThan(0).When(x => x.UsageLimit is not null);
+    }
+}
+
+public class AssignRoleValidator : AbstractValidator<AssignRoleRequest>
+{
+    public AssignRoleValidator()
+    {
+        RuleFor(x => x.TargetUserId).GreaterThan(0);
+        RuleFor(x => x.RoleName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.GrantOrRevoke)
+            .Must(x => x is "Grant" or "Revoke")
+            .WithMessage("GrantOrRevoke phải là Grant hoặc Revoke.");
+    }
+}
+public class CreateDiscountCodeValidator : AbstractValidator<CreateDiscountCodeRequest>
+{
+    public CreateDiscountCodeValidator() =>
+        RuleFor(x => x.CodeValue).NotEmpty().MaximumLength(64);
+}
+
+public class SetEventSeatUnavailableValidator : AbstractValidator<SetEventSeatUnavailableRequest>
+{
+    public SetEventSeatUnavailableValidator() =>
+        RuleFor(x => x.Reason)
+            .NotEmpty().MaximumLength(500)
+            .When(x => x.Unavailable);
+}
+
+public class UpdateUserStatusValidator : AbstractValidator<UpdateUserStatusRequest>
+{
+    public UpdateUserStatusValidator() =>
+        RuleFor(x => x.Status)
+            .NotEmpty()
+            .Must(s => s is "Active" or "Locked" or "Disabled")
+            .WithMessage("UserStatus không hợp lệ.");
+}
+
+public class AddCheckinStaffAssignmentValidator : AbstractValidator<AddCheckinStaffAssignmentRequest>
+{
+    public AddCheckinStaffAssignmentValidator()
+    {
+        RuleFor(x => x.StaffUserId).GreaterThan(0);
+        RuleFor(x => x.ConcertIds)
+            .NotEmpty()
+            .Must(ids => ids.Distinct().Count() == ids.Count)
+            .WithMessage("Danh sách Concert không được trùng.");
+        RuleForEach(x => x.ConcertIds).GreaterThan(0);
+    }
+}
