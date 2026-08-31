@@ -2,6 +2,15 @@
 -- VW_ConcertSalesSummary (BO9 / FR55-FR57)
 -- Bao cao doanh thu va ban ve tong hop theo Concert.
 -- Cung cap: tong doanh thu, so ve ban, so Booking, ti le huy.
+--
+-- LUU Y (fix loi - A1):
+-- Truoc day view dung 3 LEFT JOIN doc lap (EventSeat, Booking, Payment)
+-- tren cung ConcertID -> tao phep nhan Cartesian giua cac tuyen doc:
+--   - TotalRevenue = SUM(p.Amount) bi nhan len theo so EventSeat cua Concert
+--     (vd: 1 booking 2 ghe thanh toan 2 trieu nhung concert co 6 ghe -> bao 12 trieu)
+--   - AvailableSeats/BookedSeats/OnHoldSeats cung bi nhan theo so Booking/Payment.
+-- Fix: moi chi so duoc tinh RIENG tren bang phu thach cua no bang CROSS APPLY,
+-- ket qua khong con bi sai lech boi so dong cua cac bang khac.
 -- ============================================================
 CREATE OR ALTER VIEW dbo.VW_ConcertSalesSummary
 AS
@@ -13,43 +22,48 @@ SELECT
     c.ConcertStatus,
     c.StartDatetime,
 
-    -- Tong so EventSeat trong inventory
-    COUNT(DISTINCT es.EventSeatID)                               AS TotalInventorySeats,
+    -- --- Inventory: tinh tren EventSeat cua Concert ---
+    inv.TotalInventorySeats,
+    inv.AvailableSeats,
+    inv.BookedSeats,
+    inv.OnHoldSeats,
 
-    -- So seat dang Available
-    SUM(CASE WHEN es.InventoryStatus = 'Available'  THEN 1 ELSE 0 END) AS AvailableSeats,
+    -- --- Doanh thu: tinh tren Payment Confirmed cua Booking Confirmed ---
+    rev.TotalRevenue,
 
-    -- So seat da ban (Booked)
-    SUM(CASE WHEN es.InventoryStatus = 'Booked'     THEN 1 ELSE 0 END) AS BookedSeats,
+    -- --- So Booking theo trang thai: tinh tren Booking cua Concert ---
+    st.ConfirmedBookings,
+    st.CancelledBookings,
+    st.ExpiredBookings
 
-    -- So seat dang giu (OnHold)
-    SUM(CASE WHEN es.InventoryStatus = 'OnHold'
-          OR es.InventoryStatus = 'OnHoldForWaitlist' THEN 1 ELSE 0 END) AS OnHoldSeats,
+FROM       Concert c
+JOIN       Artist  a ON a.ArtistID = c.ArtistID
+JOIN       Venue   v ON v.VenueID  = c.VenueID
 
-    -- Tong doanh thu tu Payment Confirmed
-    ISNULL(SUM(CASE WHEN b.BookingStatus = 'Confirmed'
-                    THEN p.Amount END), 0)                       AS TotalRevenue,
+CROSS APPLY (
+    SELECT COUNT(*)                                                          AS TotalInventorySeats,
+           SUM(CASE WHEN es.InventoryStatus = 'Available'                THEN 1 ELSE 0 END) AS AvailableSeats,
+           SUM(CASE WHEN es.InventoryStatus = 'Booked'                   THEN 1 ELSE 0 END) AS BookedSeats,
+           SUM(CASE WHEN es.InventoryStatus IN ('OnHold', 'OnHoldForWaitlist')
+                                                                    THEN 1 ELSE 0 END) AS OnHoldSeats
+    FROM   dbo.EventSeat es
+    WHERE  es.ConcertID = c.ConcertID
+) inv
 
-    -- Tong so Booking Confirmed
-    COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Confirmed'
-                        THEN b.BookingID END)                    AS ConfirmedBookings,
+CROSS APPLY (
+    SELECT ISNULL(SUM(p.Amount), 0) AS TotalRevenue
+    FROM   dbo.Payment p
+    JOIN   dbo.Booking b ON b.BookingID = p.BookingID
+    WHERE  b.ConcertID     = c.ConcertID
+      AND  b.BookingStatus = 'Confirmed'
+      AND  p.PaymentStatus = 'Confirmed'
+) rev
 
-    -- Tong so Booking Cancelled
-    COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Cancelled'
-                        THEN b.BookingID END)                    AS CancelledBookings,
-
-    -- Tong so Booking Expired
-    COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Expired'
-                        THEN b.BookingID END)                    AS ExpiredBookings
-
-FROM       Concert      c
-JOIN       Artist       a   ON a.ArtistID  = c.ArtistID
-JOIN       Venue        v   ON v.VenueID   = c.VenueID
-LEFT JOIN  EventSeat    es  ON es.ConcertID = c.ConcertID
-LEFT JOIN  Booking      b   ON b.ConcertID  = c.ConcertID
-LEFT JOIN  Payment      p   ON p.BookingID  = b.BookingID
-                            AND p.PaymentStatus = 'Confirmed'
-GROUP BY
-    c.ConcertID, c.ConcertName, a.ArtistName,
-    v.VenueName, c.ConcertStatus, c.StartDatetime;
+CROSS APPLY (
+    SELECT COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Confirmed' THEN b.BookingID END) AS ConfirmedBookings,
+           COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Cancelled' THEN b.BookingID END) AS CancelledBookings,
+           COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Expired'  THEN b.BookingID END) AS ExpiredBookings
+    FROM   dbo.Booking b
+    WHERE  b.ConcertID = c.ConcertID
+) st;
 GO
