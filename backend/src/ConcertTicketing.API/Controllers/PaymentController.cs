@@ -27,51 +27,51 @@ public class PaymentController : ControllerBase
         if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out int userId))
             return Unauthorized();
 
-        try
-        {
-            var response = await _paymentRepository.InitiateAsync(bookingId, userId);
-            return Ok(response);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        var response = await _paymentRepository.InitiateAsync(bookingId, userId);
+        return Ok(response);
     }
 
+    /// <summary>
+    /// Callback webhook xác nhận thanh toán. Phải kèm <c>signature</c> (HMAC-SHA256)
+    /// do backend tạo khi InitiatePayment; nếu không có chữ ký hợp lệ → 401.
+    /// Idempotent: nếu Payment đã Confirmed → trả 200 mà không xử lý lại.
+    /// </summary>
     [HttpPost("api/payments/confirm")]
-    [AllowAnonymous] // Usually webhooks don't use JWT, they use signature verification (skipped here for simplicity)
-    public async Task<IActionResult> ConfirmPayment([FromQuery] int bookingId, [FromQuery] int paymentId, [FromQuery] string? vnp_TransactionNo)
+    [AllowAnonymous] // Webhook callback — xác thực bằng chữ ký, không cần JWT
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmPayment(
+        [FromQuery] int bookingId,
+        [FromQuery] int paymentId,
+        [FromQuery] string? signature,
+        [FromQuery] string? vnp_TransactionNo)
     {
-        try
-        {
-            await _paymentRepository.ConfirmAsync(bookingId, paymentId, vnp_TransactionNo);
-            _logger.LogInformation("Payment {PaymentId} for Booking {BookingId} confirmed.", paymentId, bookingId);
-            return Ok(new { Message = "Payment confirmed successfully." });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to confirm payment {PaymentId}.", paymentId);
-            return BadRequest(new { Message = "Failed to confirm payment." });
-        }
+        // Không nuốt exception — ErrorHandlingMiddleware map sang HTTP chuẩn.
+        // UnauthorizedAccessException → 401 (chữ ký sai)
+        // ArgumentException        → 400 (payment không tồn tại/sai booking)
+        // SqlException (52001-52005) → 404/409/400 theo MapSqlException
+        await _paymentRepository.ConfirmAsync(bookingId, paymentId, signature, vnp_TransactionNo);
+        _logger.LogInformation("Payment {PaymentId} for Booking {BookingId} confirmed.", paymentId, bookingId);
+        return Ok(new { Message = "Payment confirmed successfully." });
     }
 
     [HttpPost("api/payments/{paymentId:int}/refund")]
     [Authorize(Roles = "Admin,Organizer")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> RefundPayment(int paymentId, [FromBody] RefundRequest request)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out int userId))
             return Unauthorized();
 
-        try
-        {
-            var newRefundId = await _paymentRepository.ProcessRefundAsync(paymentId, request.RefundAmount, request.Reason, userId);
-            return Ok(new { Message = "Refund processed successfully.", RefundId = newRefundId });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process refund for payment {PaymentId}.", paymentId);
-            return BadRequest(new { Message = "Failed to process refund. " + ex.Message });
-        }
+        var newRefundId = await _paymentRepository.ProcessRefundAsync(paymentId, request.RefundAmount, request.Reason, userId);
+        _logger.LogInformation("Refund {RefundId} for Payment {PaymentId} created by {Actor}.", newRefundId, paymentId, userId);
+        return Ok(new { Message = "Refund processed successfully.", RefundId = newRefundId });
     }
 }
