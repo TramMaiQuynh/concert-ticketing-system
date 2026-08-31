@@ -3397,7 +3397,7 @@ Bảng dưới đây xác định Cardinality và Participation của từng qua
 20. Entity–Relationship Diagram (ERD)
 Các Entity, Attribute chính, Key và Relationship đã xác định được biểu diễn như thế nào trong một ERD hoàn chỉnh, bao gồm Cardinality và Participation của từng Relationship?
 
-20.1. Danh sách 26 thực thể (theo §13), nhóm theo miền dữ liệu §12.2:
+20.1. Danh sách 26 thực thể (theo §13) + 1 bảng mở rộng RefreshToken (§24.1) — tổng 27 bảng vật lý trong dbo, nhóm theo miền dữ liệu §12.2:
 - Định danh & Phân quyền: User Account, Role, User–Role Assignment, Check-in Staff Assignment (§12.13.2).
 - Concert & Nghệ sĩ: Artist, Concert. (Organizer là Vai trò — không phải entity; Concert.OrganizerUserID tham chiếu User Account.)
 - Cấu trúc địa điểm: Venue, Zone, Seat.
@@ -3520,10 +3520,10 @@ R21. Promotion (PromotionID NN PK, ConcertID NN FK→Concert, PromotionName NN, 
      PK = PromotionID (§12.16.1).
 
 R22. DiscountCode (DiscountCodeID NN PK, PromotionID NN FK→Promotion, CodeValue NN, CodeStatus NN, ValidFromDatetime, ValidToDatetime)
-     PK = DiscountCodeID; UQ = (PromotionID, CodeValue) (§12.16.2).
+     PK = DiscountCodeID; UQ = (PromotionID, CodeValue) và (PromotionID, DiscountCodeID) — mục tiêu composite FK từ BookingPromotionApplication → DiscountCode (§12.16.2, §17.17).
 
 R23. BookingPromotionApplication (BookingID NN FK→Booking, PromotionID NN FK→Promotion, DiscountCodeID FK→DiscountCode, DiscountAmount NN, AppliedTimestamp NN)
-     PK = (BookingID, PromotionID) (§12.16.3).
+     PK = (BookingID, PromotionID) (§12.16.3); FK composite (PromotionID, DiscountCodeID) → DiscountCode(PromotionID, DiscountCodeID) — DiscountCodeID (nếu có) phải thuộc đúng PromotionID của hàng (FK-03, CHK_BPA_DiscountAmount ≥ 0).
 
 R24. AuditRecord (AuditID NN PK, ActorUserID NN FK→UserAccount, EventType NN, EntityType NN, EntityID NN, Action NN, EventTimestamp NN, PreviousValue, NewValue, TransactionReference)
      PK = AuditID; EntityType+EntityID là tham chiếu đa hình, không phải FK (§12.17.1).
@@ -3596,7 +3596,7 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
 - ConfigValue: NVARCHAR(500) (các khóa thời lượng như Waitlist_Opportunity_Duration lưu theo đơn vị thống nhất do hệ thống quy định — không trái đặc tả).
 
 23.2. Khóa và chỉ mục (bảng → khóa):
-- PRIMARY KEY clustered trên cả 26 bảng theo §16.2/§21.
+- PRIMARY KEY clustered trên cả 26 bảng nghiệp vụ (theo §16.2/§21) + bảng RefreshToken (§24.1) — tổng 27 bảng vật lý.
 - UNIQUE (các alternate/UNIQUE key — theo §16.2 và §18.13):
   * Username (UserAccount), RoleName (Role)
   * (VenueID, ZoneCode) — Zone
@@ -3606,21 +3606,24 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
   * TicketCode (Ticket), CheckIn.TicketID
   * Waitlist.ConcertID, Queue.ConcertID (1:1)
   * SystemConfiguration.ConfigurationKey
-  * DiscountCode: (PromotionID, CodeValue)
+  * DiscountCode: (PromotionID, CodeValue) — khóa thay thế chính; và (PromotionID, DiscountCodeID) — khóa thay thế phục vụ làm mục tiêu cho composite FK từ BookingPromotionApplication (bắt buộc DiscountCodeID áp dụng phải thuộc đúng PromotionID của hàng).
   * Payment: (BookingID, PaymentReference) — idempotency (S15)
 - Filtered UNIQUE index (theo §18.6/CI04, B2, B1 — cơ chế được Microsoft xác nhận, S2):
   * UIX_Allocation_ActiveEventSeat: UNIQUE (EventSeatID) WHERE AllocationStatus = 'Active' — triển khai DR-11.
   * UIX_Payment_ConfirmedPerBooking: UNIQUE (BookingID) WHERE PaymentStatus = 'Confirmed' — "≤1 Payment Confirmed/Booking" (B2).
+  * UIX_Payment_PendingPerBooking: UNIQUE (BookingID) WHERE PaymentStatus = 'Pending' — "≤1 Payment Pending/Booking", lớp bảo vệ vật lý song hành với kiểm tra trong sp_InitiatePayment khi hai luồng đồng thời gọi cho cùng Booking.
   * UIX_WaitlistEntry_ActivePerCustomer: UNIQUE (WaitlistID, CustomerUserID) WHERE EntryStatus = 'Active' — áp dụng cho chính sách đơn-entry mặc định (B1); khi Concert bật đa-entry, phải bỏ index này và chuyển sang kiểm soát bằng SP/trigger.
-- Chỉ mục hỗ trợ truy vấn vận hành: (EventSeatID) có WHERE TicketStatus='Issued' trên Ticket; (BookingID) trên Payment; (ConcertID) trên Ticket/Check-in để truy vấn theo Concert (BO9/FR55).
+- Chỉ mục hỗ trợ truy vấn vận hành: IX_Ticket_Issued_EventSeat — (EventSeatID) có WHERE TicketStatus='Issued' trên Ticket; IX_Payment_Booking — (BookingID) trên Payment; IX_Ticket_Concert và IX_CheckIn_Concert — (ConcertID) trên Ticket/Check-in để truy vấn theo Concert (BO9/FR55).
   * Lưu ý: Yêu cầu đánh chỉ mục "(ConcertID, EventSeatID) trên Allocation" là một lỗi đặc tả cũ và đã được gỡ bỏ vì cột ConcertID không tồn tại trên bảng BookingEventSeatAllocation (theo §12.9.2 và §17.10). Để thực thi CI03, hệ thống sẽ thực hiện truy vấn thay thế bằng cách JOIN với bảng Booking qua chỉ mục IX_Booking_Concert_Status.
 - Chỉ mục hỗ trợ báo cáo vận hành (phục vụ FR55–FR57, BO9, A16):
   * IX_Booking_Concert_Status: (ConcertID, BookingStatus) trên Booking — đếm vé bán/pending theo Concert.
+  * IX_Booking_Customer_Concert_Status: (CustomerUserID, ConcertID, BookingStatus) trên Booking — covering index cho fn_GetCustomerTicketCount (kiểm tra Purchase Limit theo Customer+Concert).
   * IX_Ticket_Concert_Status: (ConcertID, TicketStatus) trên Ticket — báo cáo tình trạng sử dụng vé theo Concert.
   * IX_CheckIn_Concert_Timestamp: (ConcertID, CheckInTimestamp) trên CheckIn — admission reporting và phát hiện bất thường.
   * IX_Payment_Status_Timestamp: (PaymentStatus, ConfirmationTimestamp) trên Payment — báo cáo doanh thu theo thời gian và trạng thái.
-  * IX_WaitlistEntry_Waitlist_Status: (WaitlistID, EntryStatus) trên WaitlistEntry — truy vấn nhanh active entries của Waitlist.
+  * IX_WaitlistEntry_Waitlist_Status_Joined: (WaitlistID, EntryStatus, JoinedTimestamp) trên WaitlistEntry — truy vấn nhanh active entries của Waitlist theo thứ tự FIFO.
   * IX_QueueEntry_Queue_Status: (QueueID, QueueStatus) trên QueueEntry — admission control và capacity check.
+- Chỉ mục hỗ trợ bảo trì phiên đăng nhập: IX_RefreshToken_Expiry — (ExpiryDatetime) có WHERE IsRevoked = 0 trên RefreshToken — phục vụ cleanup job xóa token hết hạn (chi tiết §24.1).
 
 23.3. CHECK constraints (theo §18.5 AI01–AI05 và §18.13):
 - NOT NULL (AI01): mọi cột PK và mọi thuộc tính bắt buộc theo §12 (BookingID/EventSeatID/ConcertID/TicketCode…; composite FK có các cột tham gia NOT NULL).
@@ -3628,10 +3631,22 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
 - Monetary (AI03): CHECK (Amount >= 0) cho EventSeat.SalePrice, Booking.SubtotalAmount, Booking.FinalAmount, BookingPromotionApplication.DiscountAmount, Payment.Amount, Refund.RefundAmount; CHECK (Currency = 'VND').
 - Status domains (§18.4.1, 15 domain): CHECK trên mỗi cột status theo đúng tập giá trị (Concert/Booking/Payment/Ticket/EventSeat(bao gồm OnHoldForWaitlist)/Refund/Allocation/Role/Account/Promotion/DiscountCode/Waitlist/WaitlistEntry/Queue/QueueEntry).
 - Status–Timestamp (AI05): tối đa 1 trong các timestamp trạng thái khác NULL (Booking: Confirmed/Cancelled/Expired; Ticket: Used/Cancelled), viết tường minh (CASE khi cột NULL-able) để tránh UNKNOWN; kết hợp trigger khi trạng thái thay đổi (BR49).
+- Giá trị dương / bắt buộc khi có giá trị: Concert.PurchaseLimit > 0 (BR20); Concert.TemporaryHoldDuration IS NULL OR > 0 (BR53); Promotion.DiscountValue > 0; Promotion.UsageLimit IS NULL OR > 0 (BR35); Queue.AdmissionCapacity > 0 (BR47); DiscountCode.ValidFromDatetime/ValidToDatetime — ValidToDatetime >= ValidFromDatetime khi cả hai có giá trị.
 
 23.4. Triggers (các bất biến không thể CHECK/FK — theo §18.6–§18.13 và các resolution):
-- TRG_StateTransition (BR49): AFTER UPDATE kiểm tra OLD→NEW hợp lệ theo §10.1 cho Concert, EventSeat, Booking, Payment, Ticket, Refund, Waitlist, WaitlistEntry, Queue, QueueEntry.
-- TRG_TicketConcertConsistency (FK-06): Ticket.ConcertID = Booking.ConcertID và CheckIn.ConcertID = Ticket.ConcertID (INSERT/UPDATE).
+- State machine (BR49, §10.1): mỗi entity có một trigger riêng AFTER UPDATE — chỉ kích hoạt khi cột trạng thái thay đổi (IF NOT UPDATE(...) RETURN); chuyển trạng thái không hợp lệ → ROLLBACK transaction + THROW (50001–50010):
+  * TRG_Concert_StateTransition: ConcertStatus — Draft→Published→OnSale→SaleClosed→Completed; hủy từ Published/OnSale/SaleClosed; no-op cho phép.
+  * TRG_EventSeat_StateTransition: InventoryStatus — Available→OnHold/OnHoldForWaitlist/Unavailable; OnHold→Available/Booked; OnHoldForWaitlist→Available/OnHold; Booked→Available; no-op cho phép.
+  * TRG_Booking_StateTransition: BookingStatus — Pending→Confirmed/Expired/Cancelled; Confirmed→Cancelled; no-op cho phép.
+  * TRG_Payment_StateTransition: PaymentStatus — Pending→Confirmed/Failed; Confirmed→Refunded; no-op cho phép.
+  * TRG_Ticket_StateTransition: TicketStatus — Issued→Used/Cancelled; no-op cho phép.
+  * TRG_Refund_StateTransition: RefundStatus — Pending→Confirmed/Failed/Cancelled; no-op cho phép.
+  * TRG_Waitlist_StateTransition: WaitlistStatus — Open→Closed (Closed là trạng thái cuối); no-op cho phép.
+  * TRG_WaitlistEntry_StateTransition: EntryStatus — Active→Granted/Expired; Granted→Fulfilled/Expired; no-op cho phép.
+  * TRG_Queue_StateTransition: QueueStatus — Open→Closed (Closed là trạng thái cuối); no-op cho phép.
+  * TRG_QueueEntry_StateTransition: QueueStatus — Waiting→Admitted/Expired; Admitted→Exited; no-op cho phép.
+- TRG_TicketConcertConsistency (FK-06): Ticket.ConcertID = Booking.ConcertID (INSERT/UPDATE).
+- TRG_CheckInConcertConsistency (FK-06): CheckIn.ConcertID = Ticket.ConcertID của Ticket được check-in.
 - TRG_EventSeatVenue (DR-07): Seat của EventSeat thuộc Venue của Concert (kiểm tra chéo khi INSERT EventSeat).
 - TRG_AllocationConcert (DR-10): EventSeat của Allocation thuộc Concert của Booking.
 - TRG_InventoryAllocationConsistency (CONSTR-04): khi Allocation đang Active, EventSeat.InventoryStatus ∈ {OnHold, Booked}.
@@ -3644,8 +3659,11 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
 - TRG_AuditLog (BP15): tự ghi INSERT/UPDATE/DELETE thuộc phạm vi audit; AuditRecord bất biến (chặn UPDATE/DELETE).
 - TRG_SystemActorGuard (D14): sự kiện hệ thống (SIP1–SIP3) ghi ActorUserID = tài khoản dự trữ "System".
 - TRG_SeatVenueConsistency (§14, BR05): AFTER INSERT, UPDATE ON Seat — kiểm tra Seat.VenueID = Zone.VenueID của Zone tương ứng (JOIN Zone ON Zone.ZoneID = inserted.ZoneID); vi phạm → ROLLBACK. Đảm bảo bất biến denormalization VenueID trên Seat luôn nhất quán với chuỗi Seat→Zone→Venue.
+- TRG_ConcertVenueChangeGuard (DR-07): chặn đổi VenueID của Concert khi Concert đã có EventSeat — các ghế hiện tại thuộc Venue cũ sẽ trở nên không hợp lệ.
+- TRG_SeatVenueChangeGuard (DR-07): chặn đổi VenueID của Seat khi Seat đang được EventSeat tham chiếu — các EventSeat đó sẽ trỏ vào ghế sai Venue.
+- Tổng cộng 26 trigger: 10 trigger state machine (50001–50010), 14 trigger bất biến/integrity, 2 trigger venue-change guard (50130, 50131).
 
-23.5. Stored procedures (tầng orchestration giao dịch — theo BP5–BP11, BR22–BR24, §18.13):
+23.5. Stored procedures (tầng orchestration giao dịch và quản trị — mọi thao tác ghi nghiệp vụ đều qua SP, theo BP1–BP15, BR22–BR24, §18.13):
 - sp_CreateBooking: kiểm tra trạng thái Concert (OnSale, SalesPaused), purchase limit (FR19 — đếm Pending+Confirmed theo D2), nếu là luồng Waitlist, bỏ qua danh sách ghế (SeatList) từ client, bắt buộc sử dụng OfferedEventSeatID từ DB; giữ chỗ nguyên tử theo pattern conditional UPDATE (CI04); sinh HoldStart/HoldExpiry từ cấu hình Concert hoặc toàn cục (BR53); ghi Allocation + Audit.
 - sp_ConfirmPayment: đối chiếu Payment.Amount = Booking.FinalAmount (DR-12/§12.20), kiểm tra ≤1 Payment Confirmed (B2), chuyển Payment→Confirmed, Booking→Confirmed, phát hành Ticket đúng số Allocation Active (B3), cập nhật EventSeat→Booked.
 - sp_ReleaseExpiredHolds (BP7/SIP1): tìm Booking Pending quá hạn, chuyển Expired, giải phóng Allocation/EventSeat→Available. Đối với Waitlist, dùng conditional update (AND EntryStatus='Granted') để thu hồi an toàn tránh transaction crash; sử dụng JOIN lại bảng gốc để ghi AuditRecord chính xác.
@@ -3653,16 +3671,36 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
 - sp_ProcessRefund (BP8/BR31–BR34): kiểm tra policy hoàn trên Concert (D3), giới hạn Σ Refund ≤ Payment.Amount, cập nhật Refund/Payment.
 - sp_ApplyPromotion (BP13/FR53, FR53b): kiểm tra hiệu lực, discount code, điều kiện; ghi Booking–Promotion Application với DiscountAmount snapshot.
 - sp_CheckInTicket (BP9/FR41–FR45): xác thực Ticket theo TicketCode + Concert + trạng thái; thành công → Check-in + Ticket→Used; thất bại → Audit EventType=ADMISSION_ATTEMPT (D6).
+- Các SP quản trị và vận hành (BP1–BP4, BP9, BP12–BP13; FR01–FR16, FR46–FR51, FR60–FR67):
+  * sp_CreateConcert (BP1/FR01–FR03): tạo Concert ở trạng thái Draft với Artist, Venue, thời gian bắt đầu/kết thúc, PurchaseLimit và các policy; kiểm tra ConcertStatus hợp lệ, EndDatetime > StartDatetime, PurchaseLimit > 0; ghi AuditRecord.
+  * sp_UpdateConcert (BP1/FR02): cập nhật thông tin Concert trong phạm vi quyền của Organizer sở hữu.
+  * sp_UpdateConcertStatus (BP1, BP4/FR04, FR16): chuyển trạng thái Concert (Draft→Published→OnSale, tạm dừng/kết thúc bán vé); mọi chuyển trạng thái không hợp lệ bị chặn bởi TRG_Concert_StateTransition.
+  * sp_CreateVenue (BP2/FR07), sp_CreateZone (BP2/FR08), sp_CreateSeat (BP2/FR09–FR10): quản lý cấu trúc vật lý Venue→Zone→Seat (chỉ Admin); Seat lưu trực tiếp VenueID theo BR05, bất biến nhất quán do TRG_SeatVenueConsistency đảm bảo.
+  * sp_ConfigureTicketCategory (BP3/FR12), sp_AddEventSeats (BP3/FR11, FR13): cấu hình ticket category và đưa các Seat vào ticket inventory của Concert (EventSeat); ràng buộc chéo EventSeat–Venue do TRG_EventSeatVenue đảm bảo.
+  * sp_SetEventSeatUnavailable (BP3/BR08–BR09): đánh dấu EventSeat Unavailable/Available theo vận hành, kèm Reason.
+  * sp_CreatePromotion (BP13/FR52), sp_CreateDiscountCode (BP13/FR53b): cấu hình chương trình khuyến mãi và mã giảm giá cho Concert; điều kiện CodeRequired và hiệu lực do TRG_DiscountCodeConditional/TRG_PromotionValidity kiểm soát.
+  * sp_AssignRole (BP12/FR47, BR52): gán/thu hồi Role cho User (chỉ Admin); chặn tác động lên tài khoản dự trữ 'system'.
+  * sp_AdminUpdateUserStatus (BP12/FR46, BR52): khóa/mở khóa/disable tài khoản User (chỉ Admin); ghi Audit.
+  * sp_AddCheckinStaffAssignment (BP9/FR51, BR39): phân công Check-in Staff cho danh sách Concert (chỉ Admin).
+  * sp_JoinWaitlist (BP10/FR60–FR63), sp_JoinQueue (BP11/FR64–FR67): Customer đăng ký Waitlist và tham gia Virtual Queue khi Concert bật FairAccess; duy trì QueuePosition theo policy.
+- Tổng cộng danh mục này gồm 23 stored procedures; thêm 3 SP giao dịch tài khoản/thanh toán/hủy tại §24.2 tạo thành tổng số **26 stored procedures** cho toàn tầng DB.
 
 23.6. Giao dịch và cô lập (chống oversell — §18.6 CI04, S6/S7):
 - Giữ chỗ: `UPDATE EventSeat SET InventoryStatus='OnHold' WHERE EventSeatID=@id AND InventoryStatus='Available';` nếu @@ROWCOUNT=0 → mất seat, ROLLBACK; thực hiện trong một transaction cùng việc tạo Booking/Allocation (BR15 — toàn bộ hoặc không gì).
 - Cô lập cao hơn khi cần: khi tải concurrent đòi hỏi bổ sung, dùng mức cô lập SERIALIZABLE hoặc SNAPSHOT kèm optimistic retry dựa trên rowversion (S14); table hints (UPDLOCK…) chỉ được dùng khi cơ chế conditional UPDATE không đạt và phải ghi lý do cụ thể trong implementation notes.
-- Xác nhận Booking/Payment: toàn bộ trong một transaction (Payment Confirmed → Booking Confirmed → phát hành Ticket), có TRG_StateTransition và TRG_TicketCountOnConfirm làm nút bảo vệ.
+- Xác nhận Booking/Payment: toàn bộ trong một transaction (Payment Confirmed → Booking Confirmed → phát hành Ticket), có các trigger TRG_Payment_StateTransition, TRG_Booking_StateTransition, TRG_Ticket_StateTransition và TRG_TicketCountOnConfirm làm nút bảo vệ.
 - Retry thanh toán: nhờ UNIQUE (BookingID, PaymentReference) + idempotency (S15) — không sinh bản ghi trùng.
 
 23.7. Bảo mật, phân quyền và ghi chú triển khai:
 - Phân quyền dữ liệu (BR37–BR39, FR48–FR51): Organizer theo Concert.OrganizerUserID; Customer theo dữ liệu của chính mình; Check-in Staff theo bảng CheckinStaffAssignment (org-scoped RBAC — S20, D5); Admin toàn hệ thống.
 - Least privilege: quyền DB cấp tối thiểu theo vai trò (S20); không cấp quyền trực tiếp ghi vào bảng ngoài stored procedures quy định.
+- Các database principal được tạo theo từng vai trò (ứng với ACT1–ACT4 trong §9 và backend API):
+  * app_admin — GRANT SELECT/INSERT/UPDATE/DELETE + EXECUTE ON SCHEMA::dbo: quản trị toàn hệ thống.
+  * app_organizer — SELECT trên Concert, Venue, Zone, Seat, Artist, EventSeat, TicketCategory, Booking, Payment, Ticket, Promotion, DiscountCode, CheckIn, Waitlist, WaitlistEntry + EXECUTE sp_ProcessRefund, sp_ApplyPromotion + SELECT các view báo cáo (VW_ConcertSalesSummary, VW_ActiveInventoryStatus, VW_CheckInReport, VW_WaitlistQueue); DENY SELECT trên AuditRecord.
+  * app_customer — SELECT trên dữ liệu công khai (Concert, Venue, Artist, EventSeat, TicketCategory, Promotion, DiscountCode) + EXECUTE sp_CreateBooking, sp_ApplyPromotion, sp_ProcessRefund + SELECT VW_CustomerBookingHistory; DENY SELECT trực tiếp trên Booking/Payment/Ticket (phải qua SP/view để lọc đúng dữ liệu của chính mình — FR50).
+  * app_checkinstaff — SELECT trên Concert, Ticket, UserAccount, CheckIn, CheckinStaffAssignment + EXECUTE sp_CheckInTicket (FR51).
+  * api_service (backend API) — EXECUTE toàn bộ 26 stored procedures + SELECT các bảng nền tảng mà backend đọc trực tiếp qua Dapper (UserAccount, UserRoleAssignment, Role, RefreshToken, Concert, Artist, Venue, EventSeat, Seat, Zone, TicketCategory, Booking, BookingEventSeatAllocation, BookingPromotionApplication, DiscountCode, Promotion, Waitlist, WaitlistEntry, Queue, QueueEntry, Payment) + SELECT 4 view báo cáo + INSERT/UPDATE RefreshToken + SCHEMA::HangFire.
+- DENY tuyệt đối cho api_service trên các bảng core (UserAccount, UserRoleAssignment, Booking, BookingEventSeatAllocation, BookingPromotionApplication, EventSeat, Payment, Ticket, Refund): INSERT/UPDATE/DELETE — mọi thao tác ghi nghiệp vụ buộc phải qua stored procedure; đồng thời DENY SELECT trên AuditRecord (chỉ Admin được đọc — FR59) và không cấp VW_AuditTrail cho api_service để tránh bypass DENY qua ownership chaining.
 - Seat unique theo Venue (BR05): Seat lưu trực tiếp VenueID (denormalization có kiểm soát — đã chốt, phản ánh tại §14 và §21 R8) để SQL Server enforce UNIQUE(VenueID, SeatCode) tại DB level mà không cần computed column hay trigger phức tạp. Bất biến Seat.VenueID = Zone.VenueID của ZoneID tương ứng được duy trì bằng TRG_SeatVenueConsistency (§23.4). Đây là pattern chuẩn production cho venue/seat hierarchy.
 - Tiền tệ: toàn bộ DECIMAL(18,0) VND (A19); không lưu tỷ giá/đa tiền tệ.
 - Phạm vi triển khai: single SQL Server instance, không HA/replication/multi-region (A22).
@@ -3671,6 +3709,22 @@ R26. CheckinStaffAssignment (UserID NN FK→UserAccount, ConcertID NN FK→Conce
   * Bảng Role: 4 bản ghi — Admin, Organizer, Customer, Check-in Staff (§12.3.2, BR52).
   * Bảng UserAccount: 1 bản ghi dự trữ Username='system', AccountStatus='Active', PasswordHash=NULL — dùng làm ActorUserID cho SIP1–SIP3; không được gán Role; không cho phép đăng nhập (§12.17.1, dòng 992).
   * Bảng SystemConfiguration: 3 bản ghi — Default_Temporary_Hold_Duration (BR53), Waitlist_Opportunity_Duration (D4), Queue_Admission_Validity (D4); giá trị do triển khai xác định theo chính sách vận hành (§12.18).
+
+23.8. User-defined Functions (các hàm tính toán nghiệp vụ dùng chung — theo §12.9.1, §12.20, FR19, BR20–BR21):
+- fn_GetCustomerTicketCount(@CustomerUserID, @ConcertID) → INT: đếm tổng số vé (Pending + Confirmed) của một Customer cho một Concert; dùng để kiểm tra Purchase Limit trong sp_CreateBooking.
+- fn_CalculateBookingSubtotal(@BookingID) → DECIMAL(18,0): tính SubtotalAmount = Σ SalePrice của các EventSeat có Allocation đang Active trong Booking, theo PriceSnapshot được lưu tại thời điểm giữ chỗ (§12.20); dùng trong sp_CreateBooking.
+- fn_CalculateFinalAmount(@BookingID) → DECIMAL(18,0): tính FinalAmount = SubtotalAmount − Σ DiscountAmount từ các BookingPromotionApplication của Booking; FinalAmount ≥ 0 được bảo đảm bởi CHECK constraint trên Booking.
+- Các tính toán này được đóng gói thành function thay vì procedure vì chúng trả về một giá trị đơn (scalar), có thể gọi trong biểu thức/câu lệnh SELECT và được dùng lại làm nguồn kiểm tra trong nhiều stored procedure.
+
+23.9. Reporting Views (trực tiếp phục vụ BO8–BO10, FR55–FR59):
+Dữ liệu báo cáo luôn được suy ra từ các bản ghi giao dịch/trạng thái đã xác nhận (§12.2, §18.11), không duy trì dữ liệu báo cáo độc lập:
+- VW_ConcertSalesSummary (BO9/FR55–FR57): doanh thu + số vé bán theo Concert; mỗi chỉ số tính trên bảng phụ trách riêng bằng CROSS APPLY để tránh phép nhân Cartesian giữa các tuyến LEFT JOIN độc lập.
+- VW_ActiveInventoryStatus (BO9/FR15): trạng thái kho vé theo Concert theo thời gian thực (Available/OnHold/Booked/Unavailable) kèm Zone, Seat, Category, SalePrice.
+- VW_CustomerBookingHistory (BO5/FR50): lịch sử đặt vé của từng Customer (Booking + các ghế + Payment Confirmed).
+- VW_CheckInReport (BO8–BO9): báo cáo check-in theo Concert: số vé phát hành, đã vào cổng, tỷ lệ check-in.
+- VW_WaitlistQueue (BO11–BO12): danh sách chờ theo Concert (Waitlist + các Entry kèm QueuePosition, trạng thái, cơ hội được cấp).
+- VW_AuditTrail (BO10/FR59): nhật ký kiểm toán toàn hệ thống — chỉ Admin được đọc; api_service bị DENY (chống bypass qua ownership chaining).
+- Tổng cộng 6 view (kiểm chứng `SELECT COUNT(*) FROM sys.views WHERE is_ms_shipped=0`).
 
 24. Mở rộng Kiến trúc và Hệ thống (Architectural & System Extensions)
 
@@ -3681,10 +3735,11 @@ Trong quá trình ánh xạ thiết kế logic sang thiết kế vật lý và �
 - Mục đích: Lưu trữ, xác thực và thu hồi các mã làm mới (refresh tokens) của người dùng.
 - Liên kết: Tham chiếu khóa ngoại đến UserAccount(UserID).
 - Các thuộc tính chính: TokenID (PK), UserID (FK), TokenHash (UNIQUE), ExpiryDatetime, IsRevoked.
+- Chỉ mục hỗ trợ bảo trì: IX_RefreshToken_Expiry — (ExpiryDatetime) WHERE IsRevoked = 0 — cleanup job xóa token hết hạn tránh table scan.
 - Lưu ý: Bảng này chỉ phục vụ lớp bảo mật của API, không tham gia vào luồng nghiệp vụ vé.
 
 24.2. Bổ sung các Stored Procedures giao dịch (Thick Database Enforcement)
-Để đảm bảo lớp API không có quyền tự do ghi dữ liệu vào các bảng core, tất cả các tác vụ thay đổi trạng thái đều phải thông qua Stored Procedures (kể cả những tác vụ cơ bản). Bổ sung thêm 3 SPs vào danh sách giao dịch chính (ngoài 7 SPs tại mục 23.5):
+Để đảm bảo lớp API không có quyền tự do ghi dữ liệu vào các bảng core, tất cả các tác vụ thay đổi trạng thái đều phải thông qua Stored Procedures (kể cả những tác vụ cơ bản). Bổ sung thêm 3 SP giao dịch cho lớp API (cùng 23 SP tại mục 23.5 tạo thành tổng số 26 stored procedures của toàn bộ tầng DB):
 - sp_RegisterUser: Quản lý việc tạo tài khoản mới và cấp phát Role Customer (đảm bảo tính nhất quán của bảng UserAccount và UserRoleAssignment trong cùng một giao dịch).
 - sp_InitiatePayment: Tạo bản ghi Payment ở trạng thái Pending một cách an toàn trước khi gọi cổng thanh toán bên thứ ba, gắn với Payment Reference.
 - sp_CancelBooking: Xử lý hủy Booking an toàn, cập nhật trạng thái Booking -> Cancelled và giải phóng (Release) toàn bộ Allocation/EventSeat liên quan về Available trong cùng một transaction.
