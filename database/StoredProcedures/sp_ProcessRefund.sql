@@ -3,11 +3,12 @@
 -- Xu ly hoan tien cho mot Payment da duoc Confirmed.
 -- Transaction bao gom:
 --   1. Kiem tra Payment o trang thai Confirmed.
---   2. Kiem tra tong Refund hien tai + so tien moi <= Payment.Amount.
---   3. INSERT Refund (trang thai Pending hoac Confirmed).
---   4. Ghi AuditRecord.
+--   2. Kiem tra quyen cua Actor (Admin, hoac Organizer cua Concert ma Payment thuoc Booking).
+--   3. Kiem tra tong Refund hien tai + so tien moi <= Payment.Amount.
+--   4. INSERT Refund (trang thai Pending hoac Confirmed).
+--   5. Ghi AuditRecord.
 -- ============================================================
-CREATE PROCEDURE dbo.sp_ProcessRefund
+CREATE OR ALTER PROCEDURE dbo.sp_ProcessRefund
 (
     @PaymentID       INT,
     @RefundAmount    DECIMAL(18,0),
@@ -26,16 +27,31 @@ BEGIN
         -- 1. Kiem tra Payment ton tai va da Confirmed
         DECLARE @PaymentAmount  DECIMAL(18,0);
         DECLARE @PaymentStatus  VARCHAR(32);
+        DECLARE @BookingConcertOrganizer INT;
 
         SELECT @PaymentAmount = Amount,
-               @PaymentStatus = PaymentStatus
-        FROM   Payment WITH (UPDLOCK)
-        WHERE  PaymentID = @PaymentID;
+               @PaymentStatus = PaymentStatus,
+               @BookingConcertOrganizer = c.OrganizerUserID
+        FROM   Payment p
+        JOIN   Booking b ON b.BookingID = p.BookingID
+        JOIN   Concert c  ON c.ConcertID = b.ConcertID
+        WHERE  p.PaymentID = @PaymentID;
 
         IF @PaymentAmount IS NULL
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 53001, 'sp_ProcessRefund: PaymentID khong ton tai.', 1;
+        END
+
+        -- 2. Kiem tra quyen: Actor phai la Admin hoac Organizer cua Concert cua Booking
+        IF NOT (
+            @ActorUserID = @BookingConcertOrganizer
+            OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+        )
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 53005, 'sp_ProcessRefund: Actor khong co quyen hoan tien cho Payment nay.', 1;
         END
 
         IF @PaymentStatus NOT IN ('Confirmed')
