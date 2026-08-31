@@ -43,6 +43,44 @@ public interface ICheckInRepository
 public interface IPaymentRepository
 {
     Task<InitiatePaymentResponse> InitiateAsync(int bookingId, int customerUserId);
-    Task ConfirmAsync(int bookingId, int paymentId, string? providerReference); // gọi sp_ConfirmPayment
+    Task ConfirmAsync(int bookingId, int paymentId, string? signature, string? providerReference); // gọi sp_ConfirmPayment (xác thực chữ ký)
     Task<int> ProcessRefundAsync(int paymentId, decimal refundAmount, string reason, int actorUserId); // gọi sp_ProcessRefund
+}
+
+// ── Admin / Organizer management ──────────────────────────────────────────────
+
+public interface IAdminRepository
+{
+    Task<int> CreateConcertAsync(int actorUserId, CreateConcertRequest request);
+    Task UpdateConcertAsync(int concertId, int actorUserId, UpdateConcertRequest request);
+    Task UpdateConcertStatusAsync(int concertId, int actorUserId, string status);
+    Task<int> CreateVenueAsync(int actorUserId, CreateVenueRequest request);
+    Task<int> CreateZoneAsync(int actorUserId, int venueId, CreateZoneRequest request);
+    Task<int> CreateSeatAsync(int actorUserId, int zoneId, CreateSeatRequest request);
+    Task<int> ConfigureTicketCategoryAsync(int actorUserId, int concertId, ConfigureTicketCategoryRequest request);
+    Task AddEventSeatsAsync(int actorUserId, int concertId, AddEventSeatsRequest request);
+    Task<int> CreatePromotionAsync(int actorUserId, int concertId, CreatePromotionRequest request);
+    Task AssignRoleAsync(int actorUserId, AssignRoleRequest request);
+
+    // Admin/Organizer extended management (BP3/BP9/BP12/BP13)
+    Task<int> CreateDiscountCodeAsync(int actorUserId, int promotionId, CreateDiscountCodeRequest request);
+    Task SetEventSeatUnavailableAsync(int actorUserId, int eventSeatId, SetEventSeatUnavailableRequest request);
+    Task UpdateUserStatusAsync(int actorUserId, int targetUserId, UpdateUserStatusRequest request);
+    Task AddCheckinStaffAssignmentAsync(int actorUserId, AddCheckinStaffAssignmentRequest request);
+}
+
+// ── Waitlist ──────────────────────────────────────────────────────────────────
+
+public interface IWaitlistRepository
+{
+    Task<WaitlistJoinResponse> JoinAsync(int customerUserId, int concertId);
+    Task<WaitlistEntryStatusDto?> GetMyEntryAsync(int customerUserId, int concertId);
+}
+
+// ── Fair Access Queue (BP11 / FR64) ───────────────────────────────────────────
+
+public interface IQueueRepository
+{
+    Task<JoinQueueResponse> JoinAsync(int customerUserId, int concertId);
+    Task<QueueEntryStatusDto?> GetMyEntryAsync(int customerUserId, int concertId);
 }
