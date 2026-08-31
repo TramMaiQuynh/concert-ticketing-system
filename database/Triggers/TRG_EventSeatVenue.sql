@@ -1,12 +1,17 @@
-﻿-- ============================================================
+-- ============================================================
 -- TRG_EventSeatVenue (DR-07)
 -- Dam bao Seat duoc tham chieu boi EventSeat phai thuoc
 -- chinh Venue ma Concert su dung (BR07).
--- Kiem tra khi INSERT mot EventSeat moi vao inventory Concert.
+-- Kiem tra khi INSERT/UPDATE EventSeat vao inventory Concert:
+--   - INSERT: mot EventSeat moi phai dung Seat/Venue cua Concert.
+--   - UPDATE: neu EventSeat bi doi ConcertID hoac SeatID sang doi
+--     tuong khac, cac gia tri moi phai giu dinh Venue nhat quan.
+-- Chieu nguoc lai (doi VenueID cua Concert/Seat) duoc bao ve boi
+-- TRG_ConcertVenueChangeGuard va TRG_SeatVenueChangeGuard.
 -- ============================================================
 CREATE OR ALTER TRIGGER TRG_EventSeatVenue
 ON EventSeat
-AFTER INSERT
+AFTER INSERT, UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
