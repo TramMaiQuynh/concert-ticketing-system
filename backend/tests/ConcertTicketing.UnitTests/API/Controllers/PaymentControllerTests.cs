@@ -40,7 +40,7 @@ public class PaymentControllerTests
     public async Task InitiatePayment_Returns200()
     {
         var request = new InitiatePaymentRequest();
-        var response = new InitiatePaymentResponse(1, "http://url", "REF-123", 100);
+        var response = new InitiatePaymentResponse(1, "http://url", "REF-123", 100, "sig-abc");
         _mockRepo.Setup(r => r.InitiateAsync(10, 42)).ReturnsAsync(response);
 
         var result = await _controller.InitiatePayment(10, request);
@@ -63,21 +63,21 @@ public class PaymentControllerTests
     [Fact]
     public async Task ConfirmPayment_Success_Returns200()
     {
-        var result = await _controller.ConfirmPayment(10, 1, "PROVIDER-REF");
+        var result = await _controller.ConfirmPayment(10, 1, "SIG-ABC", "PROVIDER-REF");
 
-        _mockRepo.Verify(r => r.ConfirmAsync(10, 1, "PROVIDER-REF"), Times.Once);
+        _mockRepo.Verify(r => r.ConfirmAsync(10, 1, "SIG-ABC", "PROVIDER-REF"), Times.Once);
         result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
-    public async Task ConfirmPayment_RepoThrows_Returns400()
+    public async Task ConfirmPayment_InvalidSignature_ThrowsUnauthorized()
     {
-        _mockRepo.Setup(r => r.ConfirmAsync(10, 1, "PROVIDER-REF"))
-            .ThrowsAsync(new ArgumentException("Invalid state"));
+        _mockRepo.Setup(r => r.ConfirmAsync(10, 1, "WRONG", "PROVIDER-REF"))
+            .ThrowsAsync(new UnauthorizedAccessException("Chữ ký thanh toán không hợp lệ."));
 
-        var result = await _controller.ConfirmPayment(10, 1, "PROVIDER-REF");
-        
-        result.Should().BeOfType<BadRequestObjectResult>();
+        var act = async () => await _controller.ConfirmPayment(10, 1, "WRONG", "PROVIDER-REF");
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
     [Fact]
@@ -89,7 +89,6 @@ public class PaymentControllerTests
         var result = await _controller.RefundPayment(1, request);
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        // In the controller it returns new { RefundId = refundId }
         okResult.Value.Should().BeEquivalentTo(new { RefundId = 99 });
     }
 }
