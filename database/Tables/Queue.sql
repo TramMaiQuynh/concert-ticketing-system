@@ -7,5 +7,6 @@ CREATE TABLE Queue (
     CONSTRAINT PK_Queue PRIMARY KEY CLUSTERED (QueueID),
     CONSTRAINT UQ_Queue_Concert UNIQUE (ConcertID),
     CONSTRAINT FK_Queue_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
-    CONSTRAINT CHK_Queue_Status CHECK (QueueStatus IN ('Open', 'Closed'))
+    CONSTRAINT CHK_Queue_Status CHECK (QueueStatus IN ('Open', 'Closed')),
+    CONSTRAINT CHK_Queue_Capacity CHECK (AdmissionCapacity > 0)
 );
