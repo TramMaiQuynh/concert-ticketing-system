@@ -9,7 +9,7 @@ namespace ConcertTicketing.API.Controllers;
 
 [ApiController]
 [Route("api/checkin")]
-[Authorize(Roles = "Staff")]
+[Authorize(Roles = "Check-in Staff")]
 public class CheckInController : ControllerBase
 {
     private readonly ICheckInRepository _checkInRepository;
