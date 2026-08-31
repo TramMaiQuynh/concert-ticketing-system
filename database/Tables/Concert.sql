@@ -22,5 +22,8 @@ CREATE TABLE Concert (
     CONSTRAINT FK_Concert_Venue FOREIGN KEY (VenueID) REFERENCES Venue(VenueID),
     CONSTRAINT CHK_Concert_Status CHECK (ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed', 'Completed', 'Cancelled')),
     CONSTRAINT CHK_Concert_Dates CHECK (EndDatetime > StartDatetime),
-    CONSTRAINT CHK_Concert_SaleDates CHECK (SaleEndDatetime >= SaleStartDatetime)
+    CONSTRAINT CHK_Concert_SaleDates CHECK (SaleEndDatetime >= SaleStartDatetime),
+    -- Phong thu: PurchaseLimit phai > 0 (BR20); TemporaryHoldDuration neu co phai > 0
+    CONSTRAINT CHK_Concert_PurchaseLimit CHECK (PurchaseLimit > 0),
+    CONSTRAINT CHK_Concert_HoldDuration CHECK (TemporaryHoldDuration IS NULL OR TemporaryHoldDuration > 0)
 );
