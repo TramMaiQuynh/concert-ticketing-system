@@ -108,8 +108,54 @@ DENY SELECT  ON dbo.UserAccount                 TO app_checkinstaff;
 -- 1. Quyen Thuc thi tat ca Stored Procedures (Bao gom 3 SP moi)
 GRANT EXECUTE ON SCHEMA::dbo TO api_service;
 
--- 2. Quyen Doc (Cho phep Dapper queries)
-GRANT SELECT ON SCHEMA::dbo TO api_service;
+-- 2. Quyen Doc TRUC TIEP (Cho phep Dapper queries)
+--    Chi cap SELECT tren nhung bang ma backend thuc su doc truc tiep
+--    (xac dinh bang cach quet cac *Repository trong
+--     backend/src/ConcertTicketing.Infrastructure/Repositories):
+--      UserRepository    -> UserAccount, UserRoleAssignment, Role, RefreshToken
+--      ConcertRepository -> Concert, Artist, Venue, EventSeat, Seat, Zone, TicketCategory
+--      BookingRepository -> Booking, Concert, BookingEventSeatAllocation, Seat, Zone,
+--                           TicketCategory, EventSeat, BookingPromotionApplication,
+--                           DiscountCode, Promotion
+--      HoldReleaseWorker -> Concert
+--    KHONG cap SELECT toan schema: bang nao khong nam trong list tren,
+--    api_service chi doc duoc qua SP/View nho ownership chaining.
+--    (Truoc day dung GRANT SELECT ON SCHEMA::dbo; doi thanh explicit list
+--     de:  (a) chi mo dung luong quyen can thiet (least privilege),
+--          (b) khong tu dong mo quyen cho BANG MOI them vao dbo sau nay,
+--          (c) tranh phai DENY tung bang nhanh cam moi. Luu y: GRANT SCHEMA
+--              KHONG bypass duoc DENY object-level, nhung mo qua rong.)
+GRANT SELECT ON dbo.UserAccount                TO api_service;  -- Auth: Username/Email/PasswordHash
+GRANT SELECT ON dbo.UserRoleAssignment         TO api_service;  -- Auth: Roles
+GRANT SELECT ON dbo.Role                       TO api_service;  -- Auth: JOIN Roles
+GRANT SELECT ON dbo.RefreshToken               TO api_service;  -- Auth: validate refresh token
+GRANT SELECT ON dbo.Concert                    TO api_service;  -- /concerts
+GRANT SELECT ON dbo.Artist                     TO api_service;  -- JOIN
+GRANT SELECT ON dbo.Venue                      TO api_service;  -- JOIN
+GRANT SELECT ON dbo.EventSeat                  TO api_service;  -- /seats
+GRANT SELECT ON dbo.Seat                       TO api_service;  -- JOIN
+GRANT SELECT ON dbo.Zone                       TO api_service;  -- JOIN
+GRANT SELECT ON dbo.TicketCategory             TO api_service;  -- JOIN
+GRANT SELECT ON dbo.Booking                    TO api_service;  -- Booking detail
+GRANT SELECT ON dbo.BookingEventSeatAllocation TO api_service;  -- Booking detail
+GRANT SELECT ON dbo.BookingPromotionApplication TO api_service; -- Booking detail
+GRANT SELECT ON dbo.DiscountCode               TO api_service;  -- ApplyPromotion lookup
+GRANT SELECT ON dbo.Promotion                  TO api_service;  -- ApplyPromotion JOIN
+GRANT SELECT ON dbo.Waitlist                   TO api_service;  -- Waitlist: GetMyEntry JOIN
+GRANT SELECT ON dbo.WaitlistEntry              TO api_service;  -- Waitlist: Join/GetMyEntry đọc trực tiếp
+GRANT SELECT ON dbo.Queue                      TO api_service;  -- Queue: GetMyEntry JOIN
+GRANT SELECT ON dbo.QueueEntry                 TO api_service;  -- Queue: Join/GetMyEntry đọc trực tiếp
+GRANT SELECT ON dbo.Payment                    TO api_service;  -- Payment: HMAC verify (đọc Amount/PaymentStatus)
+
+-- Quyen doc cac View bao cao (neu sau nay backend doc truc tiep).
+-- KHONG grant VW_AuditTrail: view nay doc AuditRecord (chi Admin duoc doc,
+-- theo FR59). Grant VIEW se cho phep doc qua ownership chaining, vo hieu hoa
+-- DENY tren bang AuditRecord -> do do phai loai tru va REVOKE neu dang co.
+GRANT SELECT ON dbo.VW_ConcertSalesSummary     TO api_service;
+GRANT SELECT ON dbo.VW_CheckInReport           TO api_service;
+GRANT SELECT ON dbo.VW_CustomerBookingHistory  TO api_service;
+GRANT SELECT ON dbo.VW_WaitlistQueue           TO api_service;
+REVOKE SELECT ON dbo.VW_AuditTrail FROM api_service;
 
 -- 3. Quyen Ghi Ngoại lệ (Operational Data)
 -- CHỈ cho phép C# thao tác trực tiếp trên bảng RefreshToken
