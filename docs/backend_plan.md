@@ -590,9 +590,33 @@ Toàn bộ queries dùng Parameterized Query. Không có string concatenation SQ
 `api_service` được cấu hình trong `database/Security/GrantPermissions.sql`:
 
 ```sql
--- GRANT: Thực thi toàn bộ SPs + SELECT toàn bộ schema dbo
+-- GRANT: Thực thi toàn bộ SPs + SELECT explicit các bảng backend cần đọc
 GRANT EXECUTE ON SCHEMA::dbo TO api_service;
-GRANT SELECT  ON SCHEMA::dbo TO api_service;
+
+-- SELECT trực tiếp: CHỈ các bảng cụ thể (Dapper queries), KHÔNG dùng GRANT
+-- SELECT ON SCHEMA::dbo (tránh mở quyền cho các bảng mới thêm sau này;
+-- danh sách bảng được xác định bằng cách quét các *Repository).
+GRANT SELECT ON dbo.UserAccount                TO api_service;
+GRANT SELECT ON dbo.UserRoleAssignment         TO api_service;
+GRANT SELECT ON dbo.Role                       TO api_service;
+GRANT SELECT ON dbo.RefreshToken               TO api_service;
+GRANT SELECT ON dbo.Concert                    TO api_service;
+GRANT SELECT ON dbo.Artist                     TO api_service;
+GRANT SELECT ON dbo.Venue                      TO api_service;
+GRANT SELECT ON dbo.EventSeat                  TO api_service;
+GRANT SELECT ON dbo.Seat                       TO api_service;
+GRANT SELECT ON dbo.Zone                       TO api_service;
+GRANT SELECT ON dbo.TicketCategory             TO api_service;
+GRANT SELECT ON dbo.Booking                    TO api_service;
+GRANT SELECT ON dbo.BookingEventSeatAllocation TO api_service;
+GRANT SELECT ON dbo.BookingPromotionApplication TO api_service;
+GRANT SELECT ON dbo.DiscountCode               TO api_service;
+GRANT SELECT ON dbo.Promotion                  TO api_service;
+GRANT SELECT ON dbo.Waitlist                   TO api_service;
+GRANT SELECT ON dbo.WaitlistEntry              TO api_service;
+GRANT SELECT ON dbo.Queue                      TO api_service;
+GRANT SELECT ON dbo.QueueEntry                 TO api_service;
+GRANT SELECT ON dbo.Payment                    TO api_service;
 
 -- GRANT ngoại lệ: RefreshToken (C# thao tác trực tiếp cho Auth)
 GRANT INSERT, UPDATE ON dbo.RefreshToken TO api_service;
@@ -609,6 +633,12 @@ DENY INSERT, UPDATE, DELETE ON dbo.Ticket                      TO api_service;
 DENY INSERT, UPDATE, DELETE ON dbo.Refund                      TO api_service;
 DENY SELECT ON dbo.AuditRecord TO api_service;
 ```
+
+> Ghi chú an toàn: **KHÔNG** cấp `SELECT` trên `VW_AuditTrail` cho `api_service`. Vì view này đọc
+> `AuditRecord` (chỉ Admin được đọc theo FR59), nếu GRANT view sẽ cho phép đọc qua ownership
+> chaining và vô hiệu hóa DENY ở mức bảng. Các view báo cáo khác
+> (`VW_ConcertSalesSummary`, `VW_CheckInReport`, `VW_CustomerBookingHistory`, `VW_WaitlistQueue`)
+> được GRANT SELECT khi backend có nhu cầu đọc trực tiếp.
 
 > [!CAUTION]
 > Bảng `RefreshToken` là ngoại lệ duy nhất được C# thao tác trực tiếp (không qua SP). Lý do: SHA-256 hash tính trong C# từ raw token chỉ tồn tại trong memory của backend — không thể ủy quyền hợp lý cho SP.
@@ -664,6 +694,28 @@ Thứ tự trong `Program.cs` (quan trọng — sai thứ tự gây lỗi tinh v
 | 56003 | sp_InitiatePayment | Đã có Payment Pending cho Booking này | 409 |
 | 57001 | sp_RegisterUser | Username đã tồn tại | 409 |
 | 57002 | sp_RegisterUser | Role Customer không tồn tại hoặc không Active | 500 |
+| 53005 | sp_ProcessRefund | Actor không có quyền hoàn tiền (không phải Admin/Organizer của Concert) | 403 |
+| 50001 | TRG_Concert_StateTransition | Chuyển trạng thái Concert không hợp lệ (BR49) | 409 |
+| 50002 | TRG_Booking_StateTransition | Chuyển trạng thái Booking không hợp lệ (BR49) | 409 |
+| 50003 | TRG_Payment_StateTransition | Chuyển trạng thái Payment không hợp lệ (BR49) | 409 |
+| 50004 | TRG_Ticket_StateTransition | Chuyển trạng thái Ticket không hợp lệ (BR49) | 409 |
+| 50005 | TRG_EventSeat_StateTransition | Chuyển trạng thái EventSeat không hợp lệ (BR49) | 409 |
+| 50006 | TRG_Refund_StateTransition | Chuyển trạng thái Refund không hợp lệ (BR49) | 409 |
+| 50007 | TRG_WaitlistEntry_StateTransition | Chuyển trạng thái WaitlistEntry không hợp lệ (BR49) | 409 |
+| 50008 | TRG_QueueEntry_StateTransition | Chuyển trạng thái QueueEntry không hợp lệ (BR49) | 409 |
+| 50009 | TRG_Waitlist_StateTransition | Chuyển trạng thái Waitlist không hợp lệ (BR49) | 409 |
+| 50010 | TRG_Queue_StateTransition | Chuyển trạng thái Queue không hợp lệ (BR49) | 409 |
+| 58001-58022 | sp_CreateConcert/UpdateConcert/UpdateConcertStatus | Quản trị Concert (400/403/404/409 theo ý nghĩa) | 400/403/404/409 |
+| 58101-58123 | sp_CreateVenue/CreateZone/CreateSeat | Quản trị Venue/Zone/Seat (chỉ Admin) | 400/403 |
+| 58201-58217 | sp_ConfigureTicketCategory/AddEventSeats | Quản trị hạng vé / EventSeat | 400/403/404/409 |
+| 58301-58305 | sp_CreatePromotion | Quản trị Promotion | 400/403/404 |
+| 58401-58404 | sp_AssignRole | Gán/Thu hồi Role | 400/403 |
+| 58501-58503 | sp_JoinWaitlist | Waitlist | 404/409 |
+| 58601-58603 | sp_CreateDiscountCode | Mã giảm giá | 400/403 |
+| 58701-58703 | sp_JoinQueue | Fair Access Queue | 404/409 |
+| 58801-58804 | sp_SetEventSeatUnavailable | Khả dụng EventSeat | 400/403/404 |
+| 58901-58904 | sp_AdminUpdateUserStatus | Trạng thái User (chỉ Admin) | 400/403/404 |
+| 59001-59004 | sp_AddCheckinStaffAssignment | Gán Check-in Staff (chỉ Admin) | 400/403/404 |
 | **2627** | DB Constraint | Duplicate Key — Webhook đã xử lý | **409** |
 | *(khác)* | — | Lỗi DB không xác định | 500 |
 
