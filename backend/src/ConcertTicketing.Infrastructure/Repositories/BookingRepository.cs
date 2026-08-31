@@ -81,13 +81,18 @@ public class BookingRepository : IBookingRepository
 
         var allocations = (await multi.ReadAsync<BookingAllocationDto>()).ToList();
 
+        // Chuyển đổi an toàn: HoldExpiryDatetime có thể NULL (booking không giữ)
+        DateTime? holdExpiry = null;
+        if (row.HoldExpiryDatetime != null)
+            holdExpiry = (DateTime)row.HoldExpiryDatetime;
+
         return new BookingDetail(
             (int)row.BookingID,
             (int)row.ConcertID,
             (string)row.ConcertName,
             (string)row.BookingStatus,
             (DateTime)row.CreatedTimestamp,
-            (DateTime?)row.HoldExpiryDatetime,
+            holdExpiry,
             (decimal)row.SubtotalAmount,
             (decimal)row.DiscountAmount,
             (decimal)row.FinalAmount,
@@ -117,6 +122,7 @@ public class BookingRepository : IBookingRepository
             JOIN Promotion p ON p.PromotionID = dc.PromotionID
             WHERE dc.CodeValue = @DiscountCode
               AND dc.CodeStatus = 'Active'
+              AND p.PromotionStatus = 'Active'
               AND p.ConcertID = (SELECT ConcertID FROM Booking WHERE BookingID = @BookingID AND CustomerUserID = @CustomerUserID)";
               
         var codeInfo = await conn.QuerySingleOrDefaultAsync<dynamic>(sqlLookup, 
