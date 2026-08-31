@@ -39,7 +39,16 @@ BEGIN
         END
 
         -- 2. Kiem tra chua co Payment Pending nao
-        IF EXISTS (SELECT 1 FROM Payment WHERE BookingID = @BookingID AND PaymentStatus = 'Pending')
+        --    UPDLOCK + HOLDLOCK: giu range lock tren Payment cua Booking nay den
+        --    het transaction de chan truong hop 2 luong dong thoi cung INSERT
+        --    Payment Pending (so vo cung voi UIX_Payment_PendingPerBooking -
+        --    tang bao ve vat ly, chan moi kha nang tao 2 pending/booking).
+        IF EXISTS (
+            SELECT 1
+            FROM   Payment WITH (UPDLOCK, HOLDLOCK)
+            WHERE  BookingID     = @BookingID
+              AND  PaymentStatus = 'Pending'
+        )
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 56003, 'sp_InitiatePayment: Đã có giao dịch thanh toán đang chờ xử lý cho Booking này.', 1;
