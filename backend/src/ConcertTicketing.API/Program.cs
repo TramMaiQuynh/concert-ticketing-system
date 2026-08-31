@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -18,7 +19,6 @@ using ConcertTicketing.API.Middleware;
 using ConcertTicketing.Application.Interfaces;
 using ConcertTicketing.Application.Services;
 using ConcertTicketing.Application.Validators;
-using ConcertTicketing.Application.Interfaces;
 using ConcertTicketing.Infrastructure.BackgroundJobs;
 using ConcertTicketing.Infrastructure.Cache;
 using ConcertTicketing.Infrastructure.Repositories;
@@ -38,6 +38,18 @@ try
               .ReadFrom.Services(services));
 
     var connectionString = builder.Configuration.GetConnectionString("Default")!;
+
+    // ── CORS ─────────────────────────────────────────────────────────────────
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AllowFrontend", policy =>
+        {
+            policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials(); // Required for HttpOnly Cookies (Refresh Token)
+        });
+    });
 
     // ── Controllers + FluentValidation ────────────────────────────────────────
     builder.Services.AddControllers();
@@ -71,6 +83,10 @@ try
     var jwtIssuer   = builder.Configuration["Jwt:Issuer"]!;
     var jwtAudience = builder.Configuration["Jwt:Audience"]!;
 
+    // C3 fix: Từ chối khởi động nếu JWT Secret không đủ mạnh/bị bỏ trống.
+    if (string.IsNullOrEmpty(jwtSecret) || jwtSecret.Length < 32)
+        throw new InvalidOperationException("Jwt:Secret phải được cấu hình hợp lệ với độ dài >= 32 ký tự (256-bit).");
+
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
@@ -96,32 +112,41 @@ try
     builder.Services.AddRateLimiter(options =>
     {
         // Booking: 2 req/10s per UserID — chống double-click
-        options.AddSlidingWindowLimiter("booking", opt =>
-        {
-            opt.Window               = TimeSpan.FromSeconds(10);
-            opt.PermitLimit          = 2;
-            opt.SegmentsPerWindow    = 2;
-            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            opt.QueueLimit           = 0;
-        });
+        options.AddPolicy("booking", httpContext =>
+            RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: GetClientPartitionKey(httpContext, useUserId: true),
+                factory: _ => new SlidingWindowRateLimiterOptions
+                {
+                    Window               = TimeSpan.FromSeconds(10),
+                    PermitLimit          = 2,
+                    SegmentsPerWindow    = 2,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit           = 0
+                }));
 
         // Auth login: 5 req/min per IP — chống Brute Force
-        options.AddFixedWindowLimiter("auth", opt =>
-        {
-            opt.Window               = TimeSpan.FromMinutes(1);
-            opt.PermitLimit          = 5;
-            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            opt.QueueLimit           = 0;
-        });
+        options.AddPolicy("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientPartitionKey(httpContext, useUserId: false),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window               = TimeSpan.FromMinutes(1),
+                    PermitLimit          = 5,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit           = 0
+                }));
 
         // Check-in: 100 req/min per StaffUserID
-        options.AddFixedWindowLimiter("checkin", opt =>
-        {
-            opt.Window               = TimeSpan.FromMinutes(1);
-            opt.PermitLimit          = 100;
-            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            opt.QueueLimit           = 0;
-        });
+        options.AddPolicy("checkin", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientPartitionKey(httpContext, useUserId: true),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window               = TimeSpan.FromMinutes(1),
+                    PermitLimit          = 100,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit           = 0
+                }));
 
         // Response khi bị rate limit
         options.OnRejected = async (ctx, _) =>
@@ -164,6 +189,9 @@ try
     builder.Services.AddHangfireServer();
 
     // ── Repositories (Dapper-based) ───────────────────────────────────────────
+    var paymentSignatureSecret = builder.Configuration["PaymentSignature:Secret"]
+        ?? throw new InvalidOperationException("PaymentSignature:Secret phải được cấu hình.");
+
     builder.Services.AddScoped<IBookingRepository>(_ =>
         new BookingRepository(connectionString));
     builder.Services.AddScoped<IConcertRepository>(_ =>
@@ -173,7 +201,13 @@ try
     builder.Services.AddScoped<IUserRepository>(_ =>
         new UserRepository(connectionString));
     builder.Services.AddScoped<IPaymentRepository>(_ =>
-        new PaymentRepository(connectionString));
+        new PaymentRepository(connectionString, paymentSignatureSecret));
+    builder.Services.AddScoped<IAdminRepository>(_ =>
+        new AdminRepository(connectionString));
+    builder.Services.AddScoped<IWaitlistRepository>(_ =>
+        new WaitlistRepository(connectionString));
+    builder.Services.AddScoped<IQueueRepository>(_ =>
+        new QueueRepository(connectionString));
 
     // ── Application Services ──────────────────────────────────────────────────
     builder.Services.AddScoped<IAuthService, AuthService>();
@@ -183,7 +217,8 @@ try
     builder.Services.AddSingleton<ISeatMapCache>(sp =>
         new SeatMapCache(
             sp.GetRequiredService<IConnectionMultiplexer>(),
-            sp.GetRequiredService<IConcertRepository>(),
+
+            sp.GetRequiredService<IServiceScopeFactory>(),
             seatMapTtl));
 
     // ── Background Worker: HoldRelease + Waitlist Allocation (IHostedService) ─
@@ -218,6 +253,9 @@ try
     // 3. HTTPS Redirect
     if (!app.Environment.IsDevelopment())
         app.UseHttpsRedirection();
+
+    // 3.5 CORS (phải TRƯỚC Routing/Auth)
+    app.UseCors("AllowFrontend");
 
     // 4. Routing
     app.UseRouting();
@@ -258,6 +296,21 @@ try
     app.MapHealthChecks("/healthz");
 
     app.Run();
+
+    // ── Local Helper: partition key cho Rate Limiter ───────────────────────────
+    static string GetClientPartitionKey(HttpContext httpContext, bool useUserId)
+    {
+        // UserID từ JWT nếu có (rate limit theo user); fallback theo IP.
+        if (useUserId)
+        {
+            var sub = httpContext.User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)
+                   ?? httpContext.User.FindFirstValue("sub");
+            if (!string.IsNullOrEmpty(sub))
+                return "u:" + sub;
+        }
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return "ip:" + ip;
+    }
 }
 catch (Exception ex)
 {
