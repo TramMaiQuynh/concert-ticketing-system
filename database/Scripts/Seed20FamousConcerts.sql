@@ -106,6 +106,21 @@ INSERT INTO #ConcertMap (ArtistName, VenueName, ConcertName, StartDate, EndDate)
 ('Adele', 'Royal Albert Hall', 'Live at the Royal Albert Hall', '2027-05-22 19:30:00', '2027-05-22 21:30:00'),
 ('Coldplay', 'Tokyo Dome', 'Music of the Spheres', '2027-06-15 18:00:00', '2027-06-15 21:00:00');
 
+-- DR-01 / BR01: Concert.OrganizerUserID phai la User co Role Organizer.
+-- Seed tao mot Organizer user thay vi dung literal 1 (system user - khong co Role).
+IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE Username = 'seed_organizer')
+BEGIN
+    INSERT INTO UserAccount (Username, AccountStatus, Email, DisplayName)
+    VALUES ('seed_organizer', 'Active', 'seedorg@concert.test', 'Seed Organizer');
+    DECLARE @SeedOrgUserID INT = SCOPE_IDENTITY();
+
+    INSERT INTO UserRoleAssignment (UserID, RoleID, AssignmentStatus)
+    SELECT @SeedOrgUserID, RoleID, 'Active'
+    FROM   Role
+    WHERE  RoleName = 'Organizer' AND RoleStatus = 'Active';
+END
+DECLARE @SeedOrgID INT = (SELECT UserID FROM UserAccount WHERE Username = 'seed_organizer');
+
 DECLARE @cArtistID INT, @cVenueID INT, @cName NVARCHAR(255), @cStart DATETIME2, @cEnd DATETIME2;
 DECLARE @insertedConcerts TABLE (ConcertID INT, VenueID INT);
 DECLARE cur_concert CURSOR FOR 
@@ -121,7 +136,7 @@ BEGIN
     DECLARE @cID INT;
     
     INSERT INTO Concert (ArtistID, VenueID, OrganizerUserID, ConcertName, StartDatetime, EndDatetime, ConcertStatus, SaleStartDatetime, SaleEndDatetime, PurchaseLimit, TemporaryHoldDuration, FairAccessEnabled, WaitlistEnabled, SalesPaused, CancellationPolicy, RefundPolicy)
-    VALUES (@cArtistID, @cVenueID, 1, @cName, @cStart, @cEnd, 'OnSale', DATEADD(day, -30, @cStart), DATEADD(day, -1, @cStart), 4, 15, 0, 0, 0, 'No cancellation', 'Refund only if event cancelled');
+    VALUES (@cArtistID, @cVenueID, @SeedOrgID, @cName, @cStart, @cEnd, 'OnSale', DATEADD(day, -30, @cStart), DATEADD(day, -1, @cStart), 4, 15, 0, 0, 0, 'No cancellation', 'Refund only if event cancelled');
     
     SET @cID = SCOPE_IDENTITY();
     INSERT INTO @insertedConcerts (ConcertID, VenueID) VALUES (@cID, @cVenueID);
