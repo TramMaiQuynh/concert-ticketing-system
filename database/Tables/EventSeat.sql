@@ -7,6 +7,7 @@ CREATE TABLE EventSeat (
     InventoryStatus VARCHAR(32) NOT NULL,
     AddedTimestamp DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
     UnavailabilityReason NVARCHAR(500),
+    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_EventSeat PRIMARY KEY CLUSTERED (EventSeatID),
     CONSTRAINT UQ_EventSeat_Concert_Seat UNIQUE (ConcertID, SeatID),
     CONSTRAINT FK_EventSeat_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
