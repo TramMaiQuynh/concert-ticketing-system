@@ -2,6 +2,7 @@ CREATE TABLE BookingPromotionApplication (
     BookingID INT NOT NULL,
     PromotionID INT NOT NULL,
     DiscountCodeID INT,
+    ApplicationOrder INT NOT NULL,
     DiscountAmount DECIMAL(18,0) NOT NULL,
     AppliedTimestamp DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
     CONSTRAINT PK_BookingPromotionApplication PRIMARY KEY CLUSTERED (BookingID, PromotionID),
