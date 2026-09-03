@@ -29,7 +29,7 @@ SELECT
     inv.OnHoldSeats,
 
     -- --- Doanh thu: tinh tren Payment Confirmed cua Booking Confirmed ---
-    rev.TotalRevenue,
+    (rev.GrossRevenue - ref.TotalRefunds) AS TotalRevenue,
 
     -- --- So Booking theo trang thai: tinh tren Booking cua Concert ---
     st.ConfirmedBookings,
@@ -37,8 +37,8 @@ SELECT
     st.ExpiredBookings
 
 FROM       Concert c
-JOIN       Artist  a ON a.ArtistID = c.ArtistID
-JOIN       Venue   v ON v.VenueID  = c.VenueID
+LEFT JOIN  Artist  a ON a.ArtistID = c.ArtistID
+LEFT JOIN  Venue   v ON v.VenueID  = c.VenueID
 
 CROSS APPLY (
     SELECT COUNT(*)                                                          AS TotalInventorySeats,
@@ -48,16 +48,28 @@ CROSS APPLY (
                                                                     THEN 1 ELSE 0 END) AS OnHoldSeats
     FROM   dbo.EventSeat es
     WHERE  es.ConcertID = c.ConcertID
+      AND  es.IsDeleted = 0
 ) inv
 
 CROSS APPLY (
-    SELECT ISNULL(SUM(p.Amount), 0) AS TotalRevenue
+    SELECT ISNULL(SUM(p.Amount), 0) AS GrossRevenue
     FROM   dbo.Payment p
-    JOIN   dbo.Booking b ON b.BookingID = p.BookingID
-    WHERE  b.ConcertID     = c.ConcertID
-      AND  b.BookingStatus = 'Confirmed'
-      AND  p.PaymentStatus = 'Confirmed'
+    WHERE  p.BookingID IN (SELECT b.BookingID FROM dbo.Booking b WHERE b.ConcertID = c.ConcertID AND b.IsDeleted = 0)
+      AND  p.IsBookingConfirmingPayment = 1
+      AND  p.PaymentStatus IN ('Confirmed', 'PartiallyRefunded', 'Refunded')
+      AND  p.IsDeleted = 0
 ) rev
+
+CROSS APPLY (
+    SELECT ISNULL(SUM(r.RefundAmount), 0) AS TotalRefunds
+    FROM   dbo.Refund r
+    JOIN   dbo.Payment p ON p.PaymentID = r.PaymentID
+    JOIN   dbo.Booking b ON b.BookingID = p.BookingID
+    WHERE  b.ConcertID = c.ConcertID
+      AND  r.RefundStatus = 'Confirmed'
+      AND  p.IsDeleted = 0
+      AND  b.IsDeleted = 0
+) ref
 
 CROSS APPLY (
     SELECT COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Confirmed' THEN b.BookingID END) AS ConfirmedBookings,
@@ -65,5 +77,7 @@ CROSS APPLY (
            COUNT(DISTINCT CASE WHEN b.BookingStatus = 'Expired'  THEN b.BookingID END) AS ExpiredBookings
     FROM   dbo.Booking b
     WHERE  b.ConcertID = c.ConcertID
-) st;
+      AND  b.IsDeleted = 0
+) st
+WHERE c.IsDeleted = 0;
 GO
