@@ -10,11 +10,16 @@ CREATE TABLE Promotion (
     PromotionStatus VARCHAR(32) NOT NULL,
     UsageLimit INT,
     CodeRequiredFlag BIT NOT NULL,
+    MaxApplicableQuantity INT,
+    MaxDiscountAmount DECIMAL(18,0),
     CONSTRAINT PK_Promotion PRIMARY KEY CLUSTERED (PromotionID),
     CONSTRAINT FK_Promotion_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
     CONSTRAINT CHK_Promotion_Status CHECK (PromotionStatus IN ('Draft', 'Active', 'Expired', 'Disabled')),
+    CONSTRAINT CHK_Promotion_DiscountType CHECK (DiscountType IN ('Percentage', 'Fixed Amount')),
     CONSTRAINT CHK_Promotion_Dates CHECK (EndDatetime > StartDatetime),
     -- Phong thu: DiscountValue phai > 0; UsageLimit neu co phai > 0
     CONSTRAINT CHK_Promotion_DiscountValue CHECK (DiscountValue > 0),
-    CONSTRAINT CHK_Promotion_UsageLimit CHECK (UsageLimit IS NULL OR UsageLimit > 0)
+    CONSTRAINT CHK_Promotion_UsageLimit CHECK (UsageLimit IS NULL OR UsageLimit > 0),
+    CONSTRAINT CHK_Promotion_MaxQuantity CHECK (MaxApplicableQuantity IS NULL OR MaxApplicableQuantity > 0),
+    CONSTRAINT CHK_Promotion_MaxDiscount CHECK (MaxDiscountAmount IS NULL OR MaxDiscountAmount > 0)
 );
