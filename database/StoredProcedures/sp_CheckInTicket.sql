@@ -86,10 +86,11 @@ BEGIN
             SELECT 1 FROM CheckinStaffAssignment
             WHERE  UserID    = @CheckInStaffUserID
               AND  ConcertID = @ConcertID
+              AND  AssignmentStatus = 'Active'
         )
         BEGIN
             SET @ValidationResult = 'UNAUTHORIZED';
-            SET @ValidationInfo   = 'Staff khong co quyen check-in Concert nay.';
+            SET @ValidationInfo   = 'Staff khong co quyen hoac bi thu hoi quyen check-in Concert nay.';
             GOTO AuditAndExit;
         END
 
