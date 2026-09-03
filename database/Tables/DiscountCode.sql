@@ -5,6 +5,10 @@ CREATE TABLE DiscountCode (
     CodeStatus VARCHAR(32) NOT NULL,
     ValidFromDatetime DATETIME2(7),
     ValidToDatetime DATETIME2(7),
+    GlobalUsageLimit INT,
+    PerCustomerUsageLimit INT,
+    ReservedUsageCount INT NOT NULL DEFAULT 0,
+    ConsumedUsageCount INT NOT NULL DEFAULT 0,
     CONSTRAINT PK_DiscountCode PRIMARY KEY CLUSTERED (DiscountCodeID),
     CONSTRAINT FK_DiscountCode_Promotion FOREIGN KEY (PromotionID) REFERENCES Promotion(PromotionID),
     CONSTRAINT UQ_DiscountCode_Value UNIQUE (PromotionID, CodeValue),
@@ -15,5 +19,11 @@ CREATE TABLE DiscountCode (
     CONSTRAINT CHK_DiscountCode_Status CHECK (CodeStatus IN ('Active', 'Expired', 'Disabled')),
     CONSTRAINT CHK_DiscountCode_ValidDates CHECK (
         ValidFromDatetime IS NULL OR ValidToDatetime IS NULL OR ValidToDatetime >= ValidFromDatetime
+    ),
+    CONSTRAINT CHK_DiscountCode_GlobalLimit CHECK (GlobalUsageLimit IS NULL OR GlobalUsageLimit > 0),
+    CONSTRAINT CHK_DiscountCode_PerCustomerLimit CHECK (PerCustomerUsageLimit IS NULL OR PerCustomerUsageLimit > 0),
+    CONSTRAINT CHK_DiscountCode_UsageCounts CHECK (
+        ReservedUsageCount >= 0 AND ConsumedUsageCount >= 0
+        AND (GlobalUsageLimit IS NULL OR ReservedUsageCount + ConsumedUsageCount <= GlobalUsageLimit)
     )
 );
