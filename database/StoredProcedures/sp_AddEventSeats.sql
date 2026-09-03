@@ -10,7 +10,6 @@ CREATE OR ALTER PROCEDURE dbo.sp_AddEventSeats
     @ActorUserID  INT,
     @ConcertID    INT,
     @TicketCategoryID INT,
-    @SalePrice    DECIMAL(18,0),
     @SeatIDs      NVARCHAR(MAX)   -- CSV: '1,2,3,4'
 )
 AS
@@ -33,12 +32,14 @@ BEGIN
         )
             THROW 58212, 'sp_AddEventSeats: Actor khong co quyen.', 1;
 
-        IF NOT EXISTS (SELECT 1 FROM TicketCategory
-                       WHERE TicketCategoryID = @TicketCategoryID AND ConcertID = @ConcertID AND CategoryStatus = 'Active')
-            THROW 58213, 'sp_AddEventSeats: TicketCategory khong thuoc Concert hoac khong Active.', 1;
+        DECLARE @SalePrice DECIMAL(18,0);
 
-        IF @SalePrice < 0
-            THROW 58214, 'sp_AddEventSeats: SalePrice khong duoc am.', 1;
+        SELECT @SalePrice = BasePrice
+        FROM TicketCategory
+        WHERE TicketCategoryID = @TicketCategoryID AND ConcertID = @ConcertID AND CategoryStatus = 'Active';
+
+        IF @SalePrice IS NULL
+            THROW 58213, 'sp_AddEventSeats: TicketCategory khong thuoc Concert hoac khong Active.', 1;
 
         -- Parse CSV
         DECLARE @SeatRequests TABLE (SeatID INT NOT NULL PRIMARY KEY);
