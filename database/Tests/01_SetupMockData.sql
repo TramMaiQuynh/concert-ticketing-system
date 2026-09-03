@@ -138,7 +138,7 @@ INSERT INTO Promotion (
     StartDatetime, EndDatetime, UsageLimit, CodeRequiredFlag, PromotionStatus
 )
 VALUES (
-    @ConcertID, 'SUMMER_SALE_200K', 'FIXED', 200000,
+    @ConcertID, 'SUMMER_SALE_200K', 'Fixed Amount', 200000,
     SYSDATETIME(), DATEADD(DAY, 30, SYSDATETIME()),
     100, 1, 'Active'
 );
