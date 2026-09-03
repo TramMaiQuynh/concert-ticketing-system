@@ -9,17 +9,19 @@ CREATE TABLE Payment (
     ConfirmationTimestamp DATETIME2(7),
     FailureTimestamp DATETIME2(7),
     ProviderReference VARCHAR(64),
+    IsBookingConfirmingPayment BIT NOT NULL DEFAULT 0,
+    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_Payment PRIMARY KEY CLUSTERED (PaymentID),
     CONSTRAINT FK_Payment_Booking FOREIGN KEY (BookingID) REFERENCES Booking(BookingID),
     CONSTRAINT UQ_Payment_Idempotency UNIQUE (BookingID, PaymentReference),
-    CONSTRAINT CHK_Payment_Status CHECK (PaymentStatus IN ('Pending', 'Confirmed', 'Failed', 'Refunded')),
+    CONSTRAINT CHK_Payment_Status CHECK (PaymentStatus IN ('Pending', 'Confirmed', 'Failed', 'PartiallyRefunded', 'Refunded')),
     CONSTRAINT CHK_Payment_Amount CHECK (Amount >= 0),
     CONSTRAINT CHK_Payment_Currency CHECK (Currency = 'VND')
 );
 
-CREATE UNIQUE NONCLUSTERED INDEX UIX_Payment_ConfirmedPerBooking 
+CREATE UNIQUE NONCLUSTERED INDEX UIX_Payment_EffectivePerBooking 
 ON Payment (BookingID)
-WHERE PaymentStatus = 'Confirmed';
+WHERE IsBookingConfirmingPayment = 1;
 
 -- Tang bao ve vat ly (song hanh voi check trong sp_InitiatePayment):
 -- moi Booking chi duoc toi da 1 Payment dang Pending. Bao ve ca truong hop
