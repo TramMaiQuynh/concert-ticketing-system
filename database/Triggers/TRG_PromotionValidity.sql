@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- TRG_PromotionValidity (PI04 / CT-17)
 -- Dam bao AppliedTimestamp nam trong khoang hieu luc cua Promotion.
 -- Dam bao DiscountCode (neu co) con hieu luc tai thoi diem ap dung.
@@ -16,7 +16,7 @@ BEGIN
         FROM   inserted   bpa
         JOIN   Promotion  p   ON p.PromotionID = bpa.PromotionID
         WHERE  bpa.AppliedTimestamp < p.StartDatetime
-           OR  bpa.AppliedTimestamp > p.EndDatetime
+           OR  bpa.AppliedTimestamp >= p.EndDatetime
     )
     BEGIN
         ROLLBACK TRANSACTION;
@@ -31,7 +31,7 @@ BEGIN
         WHERE  bpa.DiscountCodeID IS NOT NULL
           AND  (
                    (dc.ValidFromDatetime IS NOT NULL AND bpa.AppliedTimestamp < dc.ValidFromDatetime)
-                OR (dc.ValidToDatetime   IS NOT NULL AND bpa.AppliedTimestamp > dc.ValidToDatetime)
+                OR (dc.ValidToDatetime   IS NOT NULL AND bpa.AppliedTimestamp >= dc.ValidToDatetime)
                 OR dc.CodeStatus <> 'Active'
                )
     )
