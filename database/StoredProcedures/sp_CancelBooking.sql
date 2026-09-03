@@ -46,9 +46,15 @@ BEGIN
                ReleaseTimestamp = SYSDATETIME()
         WHERE  BookingID = @BookingID;
 
-        -- 4. Cap nhat EventSeat -> Available
-        UPDATE EventSeat
-        SET    InventoryStatus = 'Available'
+        -- 4. Cap nhat EventSeat
+        -- BR33a: Neu Concert co Waitlist Open -> OnHoldForWaitlist, nguoc lai -> Available
+        UPDATE es
+        SET    InventoryStatus = CASE
+                                 WHEN (SELECT WaitlistStatus FROM Waitlist WHERE ConcertID = es.ConcertID) = 'Open'
+                                 THEN 'OnHoldForWaitlist'
+                                 ELSE 'Available'
+                                 END
+        FROM   EventSeat es
         WHERE  EventSeatID IN (
             SELECT EventSeatID 
             FROM   BookingEventSeatAllocation 
