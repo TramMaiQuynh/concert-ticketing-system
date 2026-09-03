@@ -60,7 +60,7 @@ SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag)
-    VALUES (@cid, ''TestPromo'', ''Fixed'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0);
+    VALUES (@cid, ''TestPromo'', ''Fixed Amount'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0);
     DECLARE @pid INT = SCOPE_IDENTITY();
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
     DECLARE @bid INT;
@@ -80,7 +80,7 @@ EXEC sp_RunTest @Suite,'fn_CalculateFinalAmount_Fixed200k','SUCCESS',NULL,@SQL;
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag) VALUES (@cid, ''TestPromo'', ''Fixed'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0); DECLARE @pid INT = SCOPE_IDENTITY();
+    INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag) VALUES (@cid, ''TestPromo'', ''Fixed Amount'', 200000, SYSDATETIME(), DATEADD(day, 1, SYSDATETIME()), ''Active'', 0); DECLARE @pid INT = SCOPE_IDENTITY();
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' ORDER BY EventSeatID);
     DECLARE @bid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount)
