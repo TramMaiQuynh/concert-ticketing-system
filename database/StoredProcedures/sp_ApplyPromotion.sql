@@ -31,11 +31,13 @@ BEGIN
         DECLARE @SubtotalAmount DECIMAL(18,0);
         DECLARE @FinalAmount    DECIMAL(18,0);
         DECLARE @ConcertID_B    INT;
+        DECLARE @CustomerID     INT;
 
         SELECT @BookingStatus  = BookingStatus,
                @SubtotalAmount = SubtotalAmount,
                @FinalAmount    = FinalAmount,
-               @ConcertID_B   = ConcertID
+               @ConcertID_B    = ConcertID,
+               @CustomerID     = CustomerUserID
         FROM   Booking WITH (UPDLOCK)
         WHERE  BookingID = @BookingID;
 
@@ -60,6 +62,8 @@ BEGIN
         DECLARE @UsageLimit      INT;
         DECLARE @CodeRequired    BIT;
         DECLARE @ConcertID_P     INT;
+        DECLARE @MaxApplicableQuantity INT;
+        DECLARE @MaxDiscountAmount     DECIMAL(18,0);
 
         SELECT @DiscountType    = DiscountType,
                @DiscountValue   = DiscountValue,
@@ -68,8 +72,10 @@ BEGIN
                @PromotionStatus = PromotionStatus,
                @UsageLimit      = UsageLimit,
                @CodeRequired    = CodeRequiredFlag,
-               @ConcertID_P     = ConcertID
-        FROM   Promotion
+               @ConcertID_P     = ConcertID,
+               @MaxApplicableQuantity = MaxApplicableQuantity,
+               @MaxDiscountAmount     = MaxDiscountAmount
+        FROM   Promotion WITH (UPDLOCK) -- CRIT-15: Khoa hang Promotion de ngan race condition
         WHERE  PromotionID = @PromotionID;
 
         IF @DiscountType IS NULL
@@ -91,7 +97,7 @@ BEGIN
             THROW 54005, 'sp_ApplyPromotion: Promotion khong o trang thai Active.', 1;
         END
 
-        IF @Now < @StartDatetime OR @Now > @EndDatetime
+        IF @Now < @StartDatetime OR @Now >= @EndDatetime -- Fix I-02: >= thay vi >
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 54006, 'sp_ApplyPromotion: Promotion chua hoac da het hieu luc.', 1;
@@ -101,8 +107,10 @@ BEGIN
         IF @UsageLimit IS NOT NULL
         BEGIN
             DECLARE @UsageCount INT;
+            -- I-06: Do da lock Promotion, viec dem thuc te tren bang cung duoc an toan hon.
+            -- De toi uu nhat phai them cot thong ke vao Promotion, nhung hien tai dem de nguyen voi lock.
             SELECT @UsageCount = COUNT(*)
-            FROM   BookingPromotionApplication
+            FROM   BookingPromotionApplication WITH (READCOMMITTEDLOCK)
             WHERE  PromotionID = @PromotionID;
 
             IF @UsageCount >= @UsageLimit
@@ -118,18 +126,55 @@ BEGIN
             IF @DiscountCodeID IS NULL
             BEGIN
                 ROLLBACK TRANSACTION;
-                THROW 54008, 'sp_ApplyPromotion: Promotion yeu cau Discount Code.', 1;
+                THROW 54008, 'sp_ApplyPromotion: Promotion yeuCode.', 1;
             END
 
-            IF NOT EXISTS (
-                SELECT 1 FROM DiscountCode
-                WHERE  DiscountCodeID = @DiscountCodeID
-                  AND  PromotionID    = @PromotionID
-                  AND  CodeStatus     = 'Active'
-            )
+            -- Lay va lock DiscountCode
+            DECLARE @DcStatus VARCHAR(32), @DcFrom DATETIME2(7), @DcTo DATETIME2(7);
+            DECLARE @DcGlobalLimit INT, @DcReserved INT, @DcConsumed INT, @DcPerCustomerLimit INT;
+            
+            SELECT @DcStatus = CodeStatus, @DcFrom = ValidFromDatetime, @DcTo = ValidToDatetime,
+                   @DcGlobalLimit = GlobalUsageLimit, @DcReserved = ReservedUsageCount, @DcConsumed = ConsumedUsageCount,
+                   @DcPerCustomerLimit = PerCustomerUsageLimit
+            FROM   DiscountCode WITH (UPDLOCK)
+            WHERE  DiscountCodeID = @DiscountCodeID
+              AND  PromotionID = @PromotionID;
+
+            IF @DcStatus IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                THROW 54009, 'sp_ApplyPromotion: Discount Code khong ton tai cho Promotion nay.', 1;
+            END
+            
+            IF @DcStatus <> 'Active' OR (@DcFrom IS NOT NULL AND @Now < @DcFrom) OR (@DcTo IS NOT NULL AND @Now >= @DcTo)
             BEGIN
                 ROLLBACK TRANSACTION;
                 THROW 54009, 'sp_ApplyPromotion: Discount Code khong hop le hoac da het hieu luc.', 1;
+            END
+            
+            -- Kiem tra limit cua DiscountCode (CRIT-15)
+            IF @DcGlobalLimit IS NOT NULL AND (@DcReserved + @DcConsumed) >= @DcGlobalLimit
+            BEGIN
+                ROLLBACK TRANSACTION;
+                THROW 54011, 'sp_ApplyPromotion: Discount Code da dat gioi han su dung toan cau.', 1;
+            END
+
+            -- CRIT-15: Kiem tra PerCustomerUsageLimit
+            IF @DcPerCustomerLimit IS NOT NULL
+            BEGIN
+                DECLARE @CustomerUsageCount INT;
+                SELECT @CustomerUsageCount = COUNT(*)
+                FROM BookingPromotionApplication bpa WITH (READCOMMITTEDLOCK)
+                JOIN Booking bk ON bk.BookingID = bpa.BookingID
+                WHERE bpa.DiscountCodeID = @DiscountCodeID
+                  AND bk.CustomerUserID = @CustomerID
+                  AND bk.BookingStatus IN ('Pending', 'Confirmed');
+
+                IF @CustomerUsageCount >= @DcPerCustomerLimit
+                BEGIN
+                    ROLLBACK TRANSACTION;
+                    THROW 54012, 'sp_ApplyPromotion: Discount Code da dat gioi han su dung cho khach hang nay.', 1;
+                END
             END
         END
 
@@ -143,26 +188,65 @@ BEGIN
             THROW 54010, 'sp_ApplyPromotion: Promotion nay da duoc ap dung cho Booking.', 1;
         END
 
-        -- 3. Tinh DiscountAmount
+        -- 3. Tinh DiscountAmount dua tren FinalAmount hien tai
         DECLARE @DiscountAmount DECIMAL(18,0);
+        DECLARE @DiscountBaseAmount DECIMAL(18,0) = @FinalAmount;
 
-        IF @DiscountType = 'PERCENTAGE'
-            SET @DiscountAmount = CAST(@SubtotalAmount * @DiscountValue / 100 AS DECIMAL(18,0));
-        ELSE IF @DiscountType = 'FIXED'
+        -- Tinh toan MaxApplicableQuantity (N-03)
+        IF @MaxApplicableQuantity IS NOT NULL
+        BEGIN
+            DECLARE @TotalSeats INT;
+            SELECT @TotalSeats = COUNT(*) FROM BookingEventSeatAllocation WHERE BookingID = @BookingID AND AllocationStatus = 'Active';
+            
+            IF @TotalSeats > @MaxApplicableQuantity AND @TotalSeats > 0
+            BEGIN
+                -- Binh quan gia tri DiscountBaseAmount theo so luong ghe cho phep
+                SET @DiscountBaseAmount = CAST(@FinalAmount * CAST(@MaxApplicableQuantity AS DECIMAL(18,4)) / CAST(@TotalSeats AS DECIMAL(18,4)) AS DECIMAL(18,0));
+            END
+        END
+
+        -- Chuan hoa DiscountType (data co the luu dang legacy 'PERCENTAGE'/'FIXED')
+        SET @DiscountType = CASE
+            WHEN UPPER(@DiscountType) IN ('PERCENTAGE', 'PERCENT')       THEN 'Percentage'
+            WHEN UPPER(@DiscountType) IN ('FIXED', 'FIXED AMOUNT')      THEN 'Fixed Amount'
+            ELSE @DiscountType
+        END;
+
+        IF @DiscountType = 'Percentage'
+            -- BR36d: Tinh discount tren "running hien tai" (sau khi da gioi han MaxApplicableQuantity)
+            SET @DiscountAmount = CAST(@DiscountBaseAmount * @DiscountValue / 100 AS DECIMAL(18,0));
+        ELSE IF @DiscountType = 'Fixed Amount'
             SET @DiscountAmount = @DiscountValue;
         ELSE
             SET @DiscountAmount = 0;
 
-        -- Dam bao discount khong lon hon FinalAmount hien tai
+        -- Dam bao discount khong lon hon FinalAmount hien tai (BR36e)
         IF @DiscountAmount > @FinalAmount SET @DiscountAmount = @FinalAmount;
 
-        -- 4. INSERT BookingPromotionApplication
-        INSERT INTO BookingPromotionApplication
-            (BookingID, PromotionID, DiscountCodeID, DiscountAmount, AppliedTimestamp)
-        VALUES
-            (@BookingID, @PromotionID, @DiscountCodeID, @DiscountAmount, @Now);
+        -- Ap dung MaxDiscountAmount (N-03)
+        IF @MaxDiscountAmount IS NOT NULL AND @DiscountAmount > @MaxDiscountAmount
+        BEGIN
+            SET @DiscountAmount = @MaxDiscountAmount;
+        END
 
-        -- 5. Cap nhat Booking.FinalAmount
+        -- 4. INSERT BookingPromotionApplication
+        -- Xac dinh ApplicationOrder
+        DECLARE @NextOrder INT = ISNULL((SELECT MAX(ApplicationOrder) FROM BookingPromotionApplication WITH (UPDLOCK) WHERE BookingID = @BookingID), 0) + 1;
+
+        INSERT INTO BookingPromotionApplication
+            (BookingID, PromotionID, DiscountCodeID, ApplicationOrder, DiscountAmount, AppliedTimestamp)
+        VALUES
+            (@BookingID, @PromotionID, @DiscountCodeID, @NextOrder, @DiscountAmount, @Now);
+
+        -- Cap nhat current usage count cho DiscountCode neu co (CRIT-02)
+        IF @DiscountCodeID IS NOT NULL
+        BEGIN
+            UPDATE DiscountCode
+            SET ReservedUsageCount = ReservedUsageCount + 1
+            WHERE DiscountCodeID = @DiscountCodeID;
+        END
+
+        -- 5. Cap nhat Booking.FinalAmount bang Inline TVF
         UPDATE b
         SET    b.FinalAmount = fa.FinalAmount
         FROM   Booking b
