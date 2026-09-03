@@ -1,16 +1,13 @@
 -- ============================================================
 -- sp_ConfirmPayment (BP6 / BR22-BR27 / FR24-FR30)
--- Xac nhan Payment va phat hanh Ticket sau khi thanh toan thanh cong.
--- Transaction bao gom:
---   1. Kiem tra Booking con hieu luc (Pending) va Payment hop le.
---   2. Payment.Amount = Booking.FinalAmount.
---   3. Chuyen Payment -> Confirmed.
---   4. Chuyen Booking -> Confirmed.
---   5. Phat hanh Ticket cho moi Active Allocation.
---   6. Chuyen EventSeat -> Booked.
---   7. Ghi AuditRecord.
+-- Thuat toan 5 buoc xu ly thanh toan + Race condition handling:
+--   1. UPDATE Payment -> Confirmed vo dieu kien (ghi nhan su that tai chinh).
+--   2. SELECT Booking voi UPDLOCK, HOLDLOCK de tuan tu hoa.
+--   3. Thu xac lap IsBookingConfirmingPayment=1; neu vi pham UIX -> auto Refund.
+--   4. Kiem tra Booking Pending & con han (HoldExpiry); neu het han -> auto Refund.
+--   5. Phat hanh Ticket, chuyen Booking -> Confirmed, EventSeat -> Booked.
 -- ============================================================
-CREATE PROCEDURE dbo.sp_ConfirmPayment
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPayment
 (
     @BookingID         INT,
     @PaymentID         INT,
@@ -23,16 +20,59 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        -- --------------------------------------------------------
-        -- 1. Lay thong tin Booking
-        -- --------------------------------------------------------
-        DECLARE @BookingStatus  VARCHAR(32);
-        DECLARE @FinalAmount    DECIMAL(18,0);
-        DECLARE @ConcertID      INT;
-        DECLARE @CustomerID     INT;
+        -- CRIT-14: Dung AppLock theo Booking de dam bao tuan tu, tranh deadlock khi update
+        DECLARE @LockResource NVARCHAR(128) = 'ConfirmPayment_Booking_' + CAST(@BookingID AS NVARCHAR(20));
+        DECLARE @LockResult INT;
+        EXEC @LockResult = sp_getapplock
+            @Resource = @LockResource,
+            @LockMode = 'Exclusive',
+            @LockOwner = 'Transaction',
+            @LockTimeout = 5000;
+
+        IF @LockResult < 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 52006, 'sp_ConfirmPayment: He thong dang xu ly yeu cau cho Booking nay.', 1;
+        END
+
+        -- 1. Kiem tra Payment va Idempotency (CRIT-10)
+        DECLARE @PaymentAmount DECIMAL(18,0);
+        DECLARE @CustomerID INT;
+        DECLARE @PaymentStatus VARCHAR(32);
+
+        SELECT @PaymentAmount = Amount,
+               @PaymentStatus = PaymentStatus
+        FROM   Payment WITH (UPDLOCK)
+        WHERE  PaymentID = @PaymentID AND BookingID = @BookingID;
+
+        IF @PaymentAmount IS NULL
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 52001, 'sp_ConfirmPayment: Payment khong ton tai hoac khong thuoc Booking nay.', 1;
+        END
+
+        -- CRIT-10: Idempotency check
+        IF @PaymentStatus = 'Confirmed'
+        BEGIN
+            COMMIT TRANSACTION;
+            RETURN; -- Thanh cong, khong lam gi them (Idempotent)
+        END
+
+        UPDATE Payment
+        SET    PaymentStatus         = 'Confirmed',
+               ConfirmationTimestamp = SYSDATETIME(),
+               ProviderReference     = @ProviderReference
+        WHERE  PaymentID = @PaymentID;
+
+        -- 2. SELECT Booking WITH (UPDLOCK) de lay thong tin
+        DECLARE @BookingStatus VARCHAR(32);
+        DECLARE @FinalAmount   DECIMAL(18,0);
+        DECLARE @HoldExpiry    DATETIME2(7);
+        DECLARE @ConcertID     INT;
 
         SELECT @BookingStatus = BookingStatus,
                @FinalAmount   = FinalAmount,
+               @HoldExpiry    = HoldExpiryDatetime,
                @ConcertID     = ConcertID,
                @CustomerID    = CustomerUserID
         FROM   Booking WITH (UPDLOCK)
@@ -41,104 +81,98 @@ BEGIN
         IF @BookingStatus IS NULL
         BEGIN
             ROLLBACK TRANSACTION;
-            THROW 52001, 'sp_ConfirmPayment: BookingID khong ton tai.', 1;
+            THROW 52002, 'sp_ConfirmPayment: Booking khong ton tai.', 1;
         END
 
-        IF @BookingStatus <> 'Pending'
+        -- 3. Thu UPDATE IsBookingConfirmingPayment = 1
+        BEGIN TRY
+            UPDATE Payment
+            SET    IsBookingConfirmingPayment = 1
+            WHERE  PaymentID = @PaymentID;
+        END TRY
+        BEGIN CATCH
+            IF ERROR_NUMBER() = 2601 OR ERROR_NUMBER() = 2627 -- Vi pham Unique Index
+            BEGIN
+                -- Da co mot Payment khac xac nhan thanh cong cho Booking nay.
+                -- Auto Refund 100% cho Payment hien tai (BR24b, LI02b)
+                DECLARE @RefundID1 INT;
+                INSERT INTO Refund (PaymentID, RefundAmount, RefundStatus, RefundRequestTimestamp, RefundReason, RefundConfirmationTimestamp)
+                VALUES (@PaymentID, @PaymentAmount, 'Confirmed', SYSDATETIME(), 'Duplicate payment for booking', SYSDATETIME());
+                
+                UPDATE Payment SET PaymentStatus = 'Refunded' WHERE PaymentID = @PaymentID;
+                COMMIT TRANSACTION;
+                RETURN;
+            END
+            ELSE
+            BEGIN
+                THROW;
+            END
+        END CATCH
+
+        -- 4. Kiem tra Booking hieu luc (BR22)
+        IF @BookingStatus <> 'Pending' OR @HoldExpiry <= SYSDATETIME()
         BEGIN
-            ROLLBACK TRANSACTION;
-            THROW 52002, 'sp_ConfirmPayment: Booking khong o trang thai Pending, khong the xac nhan Payment.', 1;
+            -- Booking da Expired, Cancelled hoac Confirmed do race condition
+            -- Giu nguyen Booking, auto Refund 100% cho Payment nay (BR22a, LI02a)
+            DECLARE @RefundID2 INT;
+            INSERT INTO Refund (PaymentID, RefundAmount, RefundStatus, RefundRequestTimestamp, RefundReason, RefundConfirmationTimestamp)
+            VALUES (@PaymentID, @PaymentAmount, 'Confirmed', SYSDATETIME(), 'Booking expired or no longer pending', SYSDATETIME());
+            
+            UPDATE Payment SET PaymentStatus = 'Refunded' WHERE PaymentID = @PaymentID;
+            COMMIT TRANSACTION;
+            RETURN;
         END
 
-        -- --------------------------------------------------------
-        -- 2. Kiem tra Payment ton tai va chua duoc Confirmed
-        -- --------------------------------------------------------
-        DECLARE @PaymentAmount  DECIMAL(18,0);
-        DECLARE @PaymentStatus  VARCHAR(32);
-
-        SELECT @PaymentAmount = Amount,
-               @PaymentStatus = PaymentStatus
-        FROM   Payment WITH (UPDLOCK)
-        WHERE  PaymentID  = @PaymentID
-          AND  BookingID  = @BookingID;
-
-        IF @PaymentAmount IS NULL
-        BEGIN
-            ROLLBACK TRANSACTION;
-            THROW 52003, 'sp_ConfirmPayment: PaymentID khong ton tai hoac khong thuoc Booking nay.', 1;
-        END
-
-        IF @PaymentStatus <> 'Pending'
-        BEGIN
-            ROLLBACK TRANSACTION;
-            THROW 52004, 'sp_ConfirmPayment: Payment khong o trang thai Pending.', 1;
-        END
-
-        -- --------------------------------------------------------
-        -- 3. Kiem tra Payment.Amount = Booking.FinalAmount (DR-12)
-        -- --------------------------------------------------------
+        -- 5. Doi chieu Amount va xac nhan Booking
         IF @PaymentAmount <> @FinalAmount
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 52005, 'sp_ConfirmPayment: Payment.Amount khong khop voi Booking.FinalAmount.', 1;
         END
 
-        -- --------------------------------------------------------
-        -- 4. Chuyen Payment -> Confirmed
-        -- --------------------------------------------------------
-        UPDATE Payment
-        SET    PaymentStatus          = 'Confirmed',
-               ConfirmationTimestamp  = SYSDATETIME(),
-               ProviderReference      = @ProviderReference
-        WHERE  PaymentID = @PaymentID;
+        -- Chuyen Booking -> Confirmed
+        UPDATE Booking
+        SET    BookingStatus      = 'Confirmed',
+               ConfirmedTimestamp = SYSDATETIME()
+        WHERE  BookingID = @BookingID;
 
-        -- --------------------------------------------------------
-        -- 5. Phat hanh Ticket cho moi Active Allocation (B3)
-        --    Moi Allocation nhan 1 Ticket voi TicketCode = NEWID()
-        -- --------------------------------------------------------
+        -- Phat hanh Ticket
         INSERT INTO Ticket
-            (BookingID, EventSeatID, ConcertID, TicketCode,
-             TicketStatus, IssuedTimestamp)
+            (BookingID, EventSeatID, ConcertID, TicketCode, TicketStatus, IssuedTimestamp)
         SELECT @BookingID,
                besa.EventSeatID,
                @ConcertID,
-               UPPER(REPLACE(CAST(NEWID() AS VARCHAR(36)), '-', '')),  -- 32 ky tu unique
+               LOWER(CAST(NEWID() AS VARCHAR(36))),
                'Issued',
                SYSDATETIME()
         FROM   BookingEventSeatAllocation besa
-        WHERE  besa.BookingID        = @BookingID
+        WHERE  besa.BookingID = @BookingID
           AND  besa.AllocationStatus = 'Active';
 
-        -- --------------------------------------------------------
-        -- 6. Chuyen Booking -> Confirmed
-        -- --------------------------------------------------------
-        UPDATE Booking
-        SET    BookingStatus         = 'Confirmed',
-               ConfirmedTimestamp    = SYSDATETIME()
-        WHERE  BookingID = @BookingID;
-
-        -- --------------------------------------------------------
-        -- 7. Chuyen EventSeat -> Booked
-        -- --------------------------------------------------------
+        -- Cap nhat EventSeat -> Booked
         UPDATE EventSeat
         SET    InventoryStatus = 'Booked'
         WHERE  EventSeatID IN (
                    SELECT EventSeatID
                    FROM   BookingEventSeatAllocation
-                   WHERE  BookingID        = @BookingID
+                   WHERE  BookingID = @BookingID
                      AND  AllocationStatus = 'Active'
                );
 
-        -- --------------------------------------------------------
-        -- 8. Ghi AuditRecord
-        -- --------------------------------------------------------
-        INSERT INTO AuditRecord
-            (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
-        VALUES
-            (@CustomerID, 'PAYMENT_CONFIRMED', 'Payment',
-             CAST(@PaymentID AS VARCHAR(64)), 'UPDATE',
-             SYSDATETIME(),
-             '{"PaymentStatus":"Confirmed","BookingStatus":"Confirmed"}');
+        -- Ghi AuditRecord (I-05: Them Audit cho Booking va Ticket)
+        DECLARE @Now DATETIME2(7) = SYSDATETIME();
+        
+        INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+        VALUES (@CustomerID, 'PAYMENT_CONFIRMED', 'Payment', CAST(@PaymentID AS VARCHAR(64)), 'UPDATE', @Now,
+                '{"PaymentStatus":"Confirmed"}');
+                
+        INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+        VALUES (@CustomerID, 'BOOKING_CONFIRMED', 'Booking', CAST(@BookingID AS VARCHAR(64)), 'UPDATE', @Now,
+                '{"BookingStatus":"Confirmed"}');
+                
+        INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+        VALUES (@CustomerID, 'TICKETS_ISSUED', 'Booking', CAST(@BookingID AS VARCHAR(64)), 'INSERT', @Now,
+                '{"Action":"Tickets Generated"}');
 
         COMMIT TRANSACTION;
 
