@@ -174,7 +174,7 @@ SET @SQL = N'
     -- Promotion 1 co code
     DECLARE @p1 INT, @code1 INT;
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag,UsageLimit)
-    VALUES (@cid,''Composite P1'',''FIXED'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',1,100);
+    VALUES (@cid,''Composite P1'',''Fixed Amount'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',1,100);
     SET @p1 = SCOPE_IDENTITY();
     INSERT INTO DiscountCode (PromotionID,CodeValue,ValidFromDatetime,ValidToDatetime,CodeStatus)
     VALUES (@p1,''CP1'',SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'');
@@ -182,7 +182,7 @@ SET @SQL = N'
     -- Promotion 2 khong code
     DECLARE @p2 INT;
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag,UsageLimit)
-    VALUES (@cid,''Composite P2'',''FIXED'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',0,100);
+    VALUES (@cid,''Composite P2'',''Fixed Amount'',10000,SYSDATETIME(),DATEADD(d,10,SYSDATETIME()),''Active'',0,100);
     SET @p2 = SCOPE_IDENTITY();
     DECLARE @bid INT;
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
