@@ -44,26 +44,28 @@ BEGIN
         -- --------------------------------------------------------
         CREATE TABLE #SeatRequests (EventSeatID INT NOT NULL);
 
-        DECLARE @OfferedEventSeatID INT;
-
         IF @WaitlistEntryID IS NOT NULL
         BEGIN
             -- Luong Waitlist: Khach hang dang dung co hoi Waitlist de mua ve
-            SELECT @OfferedEventSeatID = OfferedEventSeatID
-            FROM   WaitlistEntry
-            WHERE  WaitlistEntryID = @WaitlistEntryID
-              AND  CustomerUserID  = @CustomerUserID
-              AND  EntryStatus     = 'Granted'
-              AND  OpportunityExpiryTimestamp >= SYSDATETIME();
-
-            IF @OfferedEventSeatID IS NULL
+            IF NOT EXISTS (
+                SELECT 1
+                FROM   WaitlistEntry
+                WHERE  WaitlistEntryID = @WaitlistEntryID
+                  AND  CustomerUserID  = @CustomerUserID
+                  AND  EntryStatus     = 'Granted'
+                  AND  OpportunityExpiryTimestamp >= SYSDATETIME()
+            )
             BEGIN
                 ROLLBACK TRANSACTION;
                 THROW 51005, 'sp_CreateBooking: WaitlistEntry khong hop le, khong thuoc ve Customer, hoac da het han.', 1;
             END
 
-            -- Bo qua @SeatList cua client, chi book dung cai ghe duoc offer
-            INSERT INTO #SeatRequests (EventSeatID) VALUES (@OfferedEventSeatID);
+            -- Bo qua @SeatList cua client, chi book dung cac ghe duoc cap phat
+            INSERT INTO #SeatRequests (EventSeatID)
+            SELECT EventSeatID
+            FROM   WaitlistEntryEventSeatAllocation
+            WHERE  WaitlistEntryID = @WaitlistEntryID
+              AND  AllocationStatus = 'Active';
         END
         ELSE
         BEGIN
@@ -100,6 +102,21 @@ BEGIN
             FROM   SystemConfiguration
             WHERE  ConfigurationKey = 'Default_Temporary_Hold_Duration';
             SET @HoldDuration = ISNULL(@GlobalHoldDur, 900);
+        END
+
+        -- CRIT-06: Lock theo Customer + Concert de ngan race condition khi tao nhieu booking cung luc
+        DECLARE @CustomerLockResource NVARCHAR(128) = 'BookingLimit_' + CAST(@CustomerUserID AS NVARCHAR(20)) + '_' + CAST(@ConcertID AS NVARCHAR(20));
+        DECLARE @CustomerLockResult INT;
+        EXEC @CustomerLockResult = sp_getapplock
+            @Resource = @CustomerLockResource,
+            @LockMode = 'Exclusive',
+            @LockOwner = 'Transaction',
+            @LockTimeout = 5000;
+
+        IF @CustomerLockResult < 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 51006, 'sp_CreateBooking: He thong dang xu ly mot yeu cau khac cua ban. Vui long thu lai sau.', 1;
         END
 
         DECLARE @ExistingCount INT;
@@ -167,7 +184,16 @@ BEGIN
         JOIN   #SeatRequests sr ON sr.EventSeatID = es.EventSeatID;
 
         -- --------------------------------------------------------
-        -- 8. Ghi AuditRecord
+        -- 8. Cap nhat lai FinalAmount thong qua fn_CalculateFinalAmount (I-05)
+        -- --------------------------------------------------------
+        UPDATE b
+        SET    b.FinalAmount = fa.FinalAmount
+        FROM   Booking b
+        CROSS APPLY dbo.fn_CalculateFinalAmount(b.BookingID) fa
+        WHERE  b.BookingID = @NewBookingID;
+
+        -- --------------------------------------------------------
+        -- 9. Ghi AuditRecord
         -- --------------------------------------------------------
         INSERT INTO AuditRecord
             (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
@@ -178,7 +204,7 @@ BEGIN
              '{"Status":"Pending","SeatCount":' + CAST(@RequestedCount AS VARCHAR) + '}');
 
         -- --------------------------------------------------------
-        -- 9. Cap nhat WaitlistEntry neu co
+        -- 10. Cap nhat WaitlistEntry neu co
         -- --------------------------------------------------------
         IF @WaitlistEntryID IS NOT NULL
         BEGIN
