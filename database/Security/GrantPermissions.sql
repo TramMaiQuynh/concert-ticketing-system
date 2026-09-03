@@ -25,9 +25,15 @@ GRANT SELECT ON dbo.Seat                 TO app_organizer;
 GRANT SELECT ON dbo.Artist               TO app_organizer;
 GRANT SELECT ON dbo.EventSeat            TO app_organizer;
 GRANT SELECT ON dbo.TicketCategory       TO app_organizer;
-GRANT SELECT ON dbo.Booking              TO app_organizer;
-GRANT SELECT ON dbo.Payment              TO app_organizer;
-GRANT SELECT ON dbo.Ticket               TO app_organizer;
+-- Quyen xem du lieu qua RLS View (CRIT-20)
+GRANT SELECT ON dbo.VW_OrganizerBooking  TO app_organizer;
+GRANT SELECT ON dbo.VW_OrganizerPayment  TO app_organizer;
+GRANT SELECT ON dbo.VW_OrganizerTicket   TO app_organizer;
+
+-- KHONG doc truc tiep bang giao dich
+DENY SELECT ON dbo.Booking TO app_organizer;
+DENY SELECT ON dbo.Payment TO app_organizer;
+DENY SELECT ON dbo.Ticket TO app_organizer;
 GRANT SELECT ON dbo.Promotion            TO app_organizer;
 GRANT SELECT ON dbo.DiscountCode         TO app_organizer;
 GRANT SELECT ON dbo.CheckIn              TO app_organizer;
@@ -58,8 +64,11 @@ GRANT SELECT ON dbo.Venue            TO app_customer;
 GRANT SELECT ON dbo.Artist           TO app_customer;
 GRANT SELECT ON dbo.EventSeat        TO app_customer;
 GRANT SELECT ON dbo.TicketCategory   TO app_customer;
-GRANT SELECT ON dbo.Promotion        TO app_customer;
-GRANT SELECT ON dbo.DiscountCode     TO app_customer;
+GRANT SELECT ON dbo.VW_ActivePromotions TO app_customer;
+
+-- Chan doc bang khuyen mai goc
+DENY SELECT ON dbo.Promotion TO app_customer;
+DENY SELECT ON dbo.DiscountCode TO app_customer;
 
 -- Quyen xem lich su cua chinh minh qua View
 GRANT SELECT ON dbo.VW_CustomerBookingHistory TO app_customer;
@@ -86,17 +95,21 @@ DENY SELECT ON dbo.UserAccount TO app_customer;
 GRANT SELECT ON dbo.Ticket                  TO app_checkinstaff;
 GRANT SELECT ON dbo.Concert                 TO app_checkinstaff;
 GRANT SELECT ON dbo.CheckinStaffAssignment  TO app_checkinstaff;
+GRANT SELECT ON dbo.CheckIn                 TO app_checkinstaff;
+GRANT SELECT ON dbo.VW_CheckInStaffUserAccount TO app_checkinstaff;
 GRANT SELECT ON dbo.VW_CheckInReport        TO app_checkinstaff;
 
 -- Quyen thuc thi SP check-in
 GRANT EXECUTE ON dbo.sp_CheckInTicket TO app_checkinstaff;
+
+-- Chan doc bang UserAccount goc
+DENY SELECT ON dbo.UserAccount TO app_checkinstaff;
 
 -- Chan moi quyen ghi truc tiep khac
 DENY INSERT, UPDATE, DELETE ON dbo.Ticket       TO app_checkinstaff;
 DENY INSERT, UPDATE, DELETE ON dbo.Booking      TO app_checkinstaff;
 DENY SELECT  ON dbo.AuditRecord                 TO app_checkinstaff;
 DENY SELECT  ON dbo.Payment                     TO app_checkinstaff;
-DENY SELECT  ON dbo.UserAccount                 TO app_checkinstaff;
 
 -- ============================================================
 -- 5. api_service: Backend API Service Account
@@ -146,6 +159,10 @@ GRANT SELECT ON dbo.WaitlistEntry              TO api_service;  -- Waitlist: Joi
 GRANT SELECT ON dbo.Queue                      TO api_service;  -- Queue: GetMyEntry JOIN
 GRANT SELECT ON dbo.QueueEntry                 TO api_service;  -- Queue: Join/GetMyEntry đọc trực tiếp
 GRANT SELECT ON dbo.Payment                    TO api_service;  -- Payment: HMAC verify (đọc Amount/PaymentStatus)
+GRANT SELECT ON dbo.Ticket                     TO api_service;
+GRANT SELECT ON dbo.Refund                     TO api_service;
+GRANT SELECT ON dbo.CheckIn                    TO api_service;
+GRANT SELECT ON dbo.WaitlistEntryEventSeatAllocation TO api_service;
 
 -- Quyen doc cac View bao cao (neu sau nay backend doc truc tiep).
 -- KHONG grant VW_AuditTrail: view nay doc AuditRecord (chi Admin duoc doc,
@@ -173,6 +190,7 @@ DENY INSERT, UPDATE, DELETE ON dbo.EventSeat                   TO api_service;
 DENY INSERT, UPDATE, DELETE ON dbo.Payment                     TO api_service;
 DENY INSERT, UPDATE, DELETE ON dbo.Ticket                      TO api_service;
 DENY INSERT, UPDATE, DELETE ON dbo.Refund                      TO api_service;
+DENY INSERT, UPDATE, DELETE ON dbo.WaitlistEntryEventSeatAllocation TO api_service;
 
 -- Cam doc AuditRecord (chi Admin duoc quyen)
 DENY SELECT ON dbo.AuditRecord TO api_service;
