@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- TRG_SystemActorGuard (D14)
 -- Dam bao: khi AuditRecord duoc tao boi tien trinh tu dong
 -- (SIP1, SIP2, SIP3), ActorUserID phai la tai khoan 'system'
@@ -22,7 +22,7 @@ BEGIN
         SELECT 1
         FROM   inserted
         WHERE  EventType LIKE 'SYSTEM_%'
-          AND  ActorUserID <> @SystemUserID
+          AND  (ActorUserID <> @SystemUserID OR @SystemUserID IS NULL)
     )
     BEGIN
         ROLLBACK TRANSACTION;
