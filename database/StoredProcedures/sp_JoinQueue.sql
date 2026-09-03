@@ -1,8 +1,10 @@
 -- ============================================================
 -- sp_JoinQueue (BP11 / FR64 / BR45-BR46)
 -- Customer tham gia Virtual Queue cua Concert khi Fair Access bat.
--- Neu Queue chua ton tai -> tao moi (Open). So Customer dong thoi
--- trong Booking Flow duoc gioi han boi AdmissionCapacity (BR47).
+-- Neu Queue chua ton tai -> tao moi (Open) voi AdmissionCapacity va
+-- FairAccessPolicy lay tu cau hinh Concert/SystemConfiguration
+-- (khong hardcode - §12.15.1, §12.18).
+-- Ghi AdmissionPosition (FR65) theo thu tu JoinedTimestamp (FIFO).
 -- ============================================================
 CREATE OR ALTER PROCEDURE dbo.sp_JoinQueue
 (
@@ -32,10 +34,17 @@ BEGIN
 
         IF @QueueID IS NULL
         BEGIN
+            -- Cau hinh mac dinh toan cuc (khong hardcode): §12.18
+            DECLARE @DefaultCapacity INT;
+            SELECT @DefaultCapacity = CAST(ConfigurationValue AS INT)
+            FROM   SystemConfiguration
+            WHERE  ConfigurationKey = 'Queue_Default_Admission_Capacity';
+            SET @DefaultCapacity = ISNULL(@DefaultCapacity, 1000);
+
             INSERT INTO Queue (ConcertID, QueueStatus, AdmissionCapacity, FairAccessPolicy)
-            VALUES (@ConcertID, 'Open', 1000, 'FIFO');
+            VALUES (@ConcertID, 'Open', @DefaultCapacity, 'FIFO');
             SET @QueueID = SCOPE_IDENTITY();
-            SET @Capacity = 1000;
+            SET @Capacity = @DefaultCapacity;
         END
 
         -- Khong cho trung lap entry dang Waiting/Admitted cho cung Customer/Concert
@@ -44,15 +53,18 @@ BEGIN
                      AND QueueStatus IN ('Waiting', 'Admitted'))
             THROW 58703, 'sp_JoinQueue: Customer da co entry trong Queue nay.', 1;
 
-        INSERT INTO QueueEntry (QueueID, CustomerUserID, JoinedTimestamp, QueueStatus)
-        VALUES (@QueueID, @CustomerUserID, SYSDATETIME(), 'Waiting');
+        -- FR65: ghi AdmissionPosition theo thu tu JoinedTimestamp (FIFO)
+        DECLARE @Pos INT = ISNULL((SELECT MAX(AdmissionPosition) FROM QueueEntry WHERE QueueID = @QueueID), 0) + 1;
+
+        INSERT INTO QueueEntry (QueueID, CustomerUserID, JoinedTimestamp, AdmissionPosition, QueueStatus)
+        VALUES (@QueueID, @CustomerUserID, SYSDATETIME(), @Pos, 'Waiting');
 
         SET @NewQueueEntryID = SCOPE_IDENTITY();
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@CustomerUserID, 'QUEUE_JOINED', 'QueueEntry',
                 CAST(@NewQueueEntryID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
-                '{"QueueStatus":"Waiting"}');
+                '{"QueueStatus":"Waiting","AdmissionPosition":' + CAST(@Pos AS VARCHAR) + '}');
 
         COMMIT TRANSACTION;
     END TRY
