@@ -1,10 +1,12 @@
 -- ============================================================
 -- sp_AllocateWaitlist (BP10 / SIP2 / BR42-BR44)
 -- Phan bo co hoi Booking cho Customer trong Waitlist theo
--- FIFO (JoinedTimestamp tang dan - BR43).
+-- AllocationPolicy (FIFO hoac RANDOM).
 -- Xu ly cho mot Concert cu the khi EventSeat duoc giai phong.
+-- Tuan thu nghiem ngat all-or-nothing (RequestedQuantity) va
+-- khong skip-ahead trong cung TicketCategory (CI07).
 -- ============================================================
-CREATE PROCEDURE dbo.sp_AllocateWaitlist
+CREATE OR ALTER PROCEDURE dbo.sp_AllocateWaitlist
 (
     @ConcertID INT
 )
@@ -12,21 +14,14 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- ----------------------------------------------------------------
-    -- Tất cả biến khai báo tại đây (không khai báo trong loop)
-    -- ----------------------------------------------------------------
     DECLARE @SystemUserID        INT;
     DECLARE @Now                 DATETIME2(7) = SYSDATETIME();
     DECLARE @OpportunityDuration INT;
     DECLARE @WaitlistID          INT;
     DECLARE @PurchaseLimit       INT;
+    DECLARE @FairAccessPolicy    VARCHAR(32);
     DECLARE @LockResource        NVARCHAR(128);
     DECLARE @LockResult          INT;
-    DECLARE @BatchSize           INT = 50;
-    DECLARE @MatchedCount        INT;
-    DECLARE @EligibleCount       INT;
-    DECLARE @OpportunityExpiry   DATETIME2(7);
-    DECLARE @GrantedThisBatch    INT;
 
     SELECT @SystemUserID = UserID FROM UserAccount WHERE Username = 'system';
 
@@ -43,16 +38,17 @@ BEGIN
           AND  SalesPaused   = 0
     ) RETURN;
 
-    SELECT @WaitlistID = WaitlistID FROM Waitlist
-    WHERE  ConcertID     = @ConcertID
+    SELECT @WaitlistID = WaitlistID, @FairAccessPolicy = ISNULL(AllocationPolicy, 'FIFO')
+    FROM   Waitlist
+    WHERE  ConcertID      = @ConcertID
       AND  WaitlistStatus = 'Open';
+
     IF @WaitlistID IS NULL RETURN;
 
     SELECT @PurchaseLimit = PurchaseLimit FROM Concert WHERE ConcertID = @ConcertID;
 
     -- ----------------------------------------------------------------
     -- Xin Application Lock cho Concert này
-    -- Timeout = 0: Không chờ. Nếu luồng khác đang xử lý -> ra về ngay.
     -- ----------------------------------------------------------------
     SET @LockResource = 'WaitlistAlloc_' + CAST(@ConcertID AS NVARCHAR(10));
 
@@ -62,128 +58,152 @@ BEGIN
         @LockOwner   = 'Session',
         @LockTimeout = 0;
 
-    IF @LockResult < 0 RETURN; -- Luồng khác đang lo rồi
+    IF @LockResult < 0 RETURN;
 
-    -- ----------------------------------------------------------------
-    -- Vòng lặp Batch Allocation (chỉ 1 luồng chạy tại mọi thời điểm)
-    -- ----------------------------------------------------------------
     BEGIN TRY
-        SET @GrantedThisBatch = 1; -- Khởi tạo > 0 để vào loop
+        -- Giai phong cac hold het han truoc khi cap phat (CRIT-12)
+        EXEC dbo.sp_ReleaseExpiredHolds @ConcertID = @ConcertID;
 
-        WHILE @GrantedThisBatch > 0
+        -- Dem so ghe Available theo tung Category hien tai
+        CREATE TABLE #CategoryState (
+            TicketCategoryID INT PRIMARY KEY,
+            AvailableCount INT,
+            IsBlocked BIT
+        );
+
+        INSERT INTO #CategoryState (TicketCategoryID, AvailableCount, IsBlocked)
+        SELECT TicketCategoryID, COUNT(*), 0
+        FROM EventSeat WITH (UPDLOCK, READPAST)
+        WHERE ConcertID = @ConcertID AND InventoryStatus = 'Available'
+        GROUP BY TicketCategoryID;
+
+        DECLARE @EntryID INT, @CustomerID INT, @CategoryID INT, @ReqQty INT;
+        DECLARE @AllocatedSeats TABLE (EventSeatID INT); -- Thay the #AllocatedSeats (I-03)
+
+        -- Mo Cursor de duyet tung WaitlistEntry
+        DECLARE @Sql NVARCHAR(MAX);
+        IF @FairAccessPolicy = 'RANDOM'
         BEGIN
-            -- Bước 1: Lấy N ghế trống
-            -- [§23.6 - Implementation Note] Lý do dùng table hints tại đây:
-            -- Cơ chế conditional UPDATE (WHERE InventoryStatus='Available') không đủ
-            -- trong bước SELECT này vì mục tiêu là xây bảng #AvailableSeats trước khi
-            -- cập nhật. Nếu không có hint, READCOMMITTED có thể đọc được các hàng mà
-            -- sp_CreateBooking đang giữ lock (nhưng chưa commit), dẫn đến race condition:
-            -- cả hai SP cùng 'thấy' 1 ghế là Available rồi tranh nhau cập nhật.
-            -- UPDLOCK: Lấy Update Lock ngay khi đọc, chặn sp_CreateBooking cùng lock.
-            -- READPAST: Bỏ qua (nhảy cóc) các hàng đang bị khóa thay vì chờ đợi,
-            --   đảm bảo SP này không bị block bởi các giao dịch concurrent đang giữ chỗ.
-            -- Application Lock (sp_getapplock) phía trên đã đảm bảo chỉ 1 luồng
-            -- sp_AllocateWaitlist chạy đồng thời cho Concert này; hints chống race với
-            -- sp_CreateBooking (luồng người dùng) - hai loại SP khác nhau về bản chất.
-            SELECT TOP (@BatchSize)
-                   EventSeatID,
-                   ROW_NUMBER() OVER (ORDER BY EventSeatID) AS RowNum
-            INTO   #AvailableSeats
-            FROM   EventSeat WITH (UPDLOCK, READPAST)
-            WHERE  ConcertID       = @ConcertID
-              AND  InventoryStatus = 'Available';
+            DECLARE cWaitlist CURSOR LOCAL FAST_FORWARD FOR
+            SELECT WaitlistEntryID, CustomerUserID, TicketCategoryID, RequestedQuantity
+            FROM WaitlistEntry
+            WHERE WaitlistID = @WaitlistID AND EntryStatus = 'Active'
+            ORDER BY NEWID();
+        END
+        ELSE
+        BEGIN
+            DECLARE cWaitlist CURSOR LOCAL FAST_FORWARD FOR
+            SELECT WaitlistEntryID, CustomerUserID, TicketCategoryID, RequestedQuantity
+            FROM WaitlistEntry
+            WHERE WaitlistID = @WaitlistID AND EntryStatus = 'Active'
+            ORDER BY JoinedTimestamp ASC;
+        END
 
-            SET @MatchedCount = @@ROWCOUNT;
+        OPEN cWaitlist;
+        FETCH NEXT FROM cWaitlist INTO @EntryID, @CustomerID, @CategoryID, @ReqQty;
 
-            IF @MatchedCount = 0
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            -- 1. Kiem tra Category da bi block chua (No skip-ahead CI07)
+            DECLARE @Avail INT = 0, @IsBlocked BIT = 0;
+            SELECT @Avail = AvailableCount, @IsBlocked = IsBlocked
+            FROM #CategoryState WHERE TicketCategoryID = @CategoryID;
+
+            IF @IsBlocked = 1
             BEGIN
-                IF OBJECT_ID('tempdb..#AvailableSeats') IS NOT NULL DROP TABLE #AvailableSeats;
-                BREAK; -- Hết ghế
+                FETCH NEXT FROM cWaitlist INTO @EntryID, @CustomerID, @CategoryID, @ReqQty;
+                CONTINUE;
             END
 
-            -- Bước 2: Lấy N người đầu hàng thỏa mãn Limit (FIFO nghiêm ngặt)
-            -- [§23.6 - Implementation Note] Lý do dùng WITH (UPDLOCK) trên WaitlistEntry:
-            -- Bài toán "Ghost Resurrection": nếu User A cancel WaitlistEntry giữa lúc
-            -- SP này đang đọc và cập nhật (khoảng thời gian giữa SELECT vào #EligibleUsers
-            -- và UPDATE WaitlistEntry bên dưới), conditional UPDATE thuần túy vẫn đủ
-            -- để tránh cập nhật sai. Tuy nhiên, UPDLOCK được giữ lại để phòng thủ theo
-            -- chiều sâu (defense-in-depth): đảm bảo một future stored procedure nào đó
-            -- thực hiện soft-cancel WaitlistEntry sẽ bị serialized thay vì chạy song song,
-            -- tránh mâu thuẫn trạng thái trong suốt vòng lặp batch này.
-            -- Điều kiện đủ để dùng hint (§23.6): application lock phía trên chỉ
-            -- serializes các luồng sp_AllocateWaitlist; cần UPDLOCK để serializes với
-            -- các luồng thao tác WaitlistEntry (user-facing) khác nhau về lock owner.
-            SELECT TOP (@MatchedCount)
-                   we.WaitlistEntryID,
-                   ROW_NUMBER() OVER (ORDER BY we.JoinedTimestamp ASC) AS RowNum
-            INTO   #EligibleUsers
-            FROM   WaitlistEntry we WITH (UPDLOCK)
-            CROSS APPLY dbo.fn_GetCustomerTicketCount(we.CustomerUserID, @ConcertID) tc
-            WHERE  we.WaitlistID  = @WaitlistID
-              AND  we.EntryStatus = 'Active'
-              AND  (tc.TicketCount + 1) <= @PurchaseLimit
-            ORDER BY we.JoinedTimestamp ASC;
-
-            SET @EligibleCount = @@ROWCOUNT;
-
-            IF @EligibleCount = 0
+            -- 2. Kiem tra du so luong RequestedQuantity (All-or-nothing BR42b)
+            IF @ReqQty > @Avail
             BEGIN
-                IF OBJECT_ID('tempdb..#AvailableSeats') IS NOT NULL DROP TABLE #AvailableSeats;
-                IF OBJECT_ID('tempdb..#EligibleUsers') IS NOT NULL DROP TABLE #EligibleUsers;
-                BREAK; -- Hết người hợp lệ
+                UPDATE #CategoryState SET IsBlocked = 1 WHERE TicketCategoryID = @CategoryID;
+                FETCH NEXT FROM cWaitlist INTO @EntryID, @CustomerID, @CategoryID, @ReqQty;
+                CONTINUE;
             END
 
-            -- Bước 3: Ghép cặp và cập nhật trong 1 Transaction nguyên tử
+            -- 3. Kiem tra Purchase Limit
+            DECLARE @ExistingCount INT;
+            SELECT @ExistingCount = TicketCount 
+            FROM dbo.fn_GetCustomerTicketCount(@CustomerID, @ConcertID);
+            
+            IF (@ExistingCount + @ReqQty) > @PurchaseLimit
+            BEGIN
+                FETCH NEXT FROM cWaitlist INTO @EntryID, @CustomerID, @CategoryID, @ReqQty;
+                CONTINUE;
+            END
+
+            -- 4. Tien hanh cap phat
             BEGIN TRANSACTION;
+            
+            DELETE FROM @AllocatedSeats;
+            
+            INSERT INTO @AllocatedSeats (EventSeatID)
+            SELECT TOP (@ReqQty) EventSeatID
+            FROM EventSeat WITH (UPDLOCK, READPAST)
+            WHERE ConcertID = @ConcertID AND TicketCategoryID = @CategoryID AND InventoryStatus = 'Available';
 
-            SET @OpportunityExpiry = DATEADD(SECOND, @OpportunityDuration, @Now);
+            IF (SELECT COUNT(*) FROM @AllocatedSeats) = @ReqQty
+            BEGIN
+                DECLARE @Expiry DATETIME2(7) = DATEADD(SECOND, @OpportunityDuration, @Now);
 
-            UPDATE es
-            SET    InventoryStatus = 'OnHoldForWaitlist'
-            FROM   EventSeat es
-            JOIN   #AvailableSeats a ON es.EventSeatID = a.EventSeatID
-            JOIN   #EligibleUsers  u ON a.RowNum       = u.RowNum;
+                -- Update EventSeat
+                UPDATE EventSeat 
+                SET InventoryStatus = 'OnHoldForWaitlist' 
+                WHERE EventSeatID IN (SELECT EventSeatID FROM @AllocatedSeats);
+                
+                -- Update WaitlistEntry
+                UPDATE WaitlistEntry 
+                SET EntryStatus = 'Granted', 
+                    OpportunityGrantedTimestamp = @Now, 
+                    OpportunityExpiryTimestamp = @Expiry 
+                WHERE WaitlistEntryID = @EntryID;
+                
+                -- Insert WaitlistEntryEventSeatAllocation
+                INSERT INTO WaitlistEntryEventSeatAllocation (WaitlistEntryID, EventSeatID, AllocationTimestamp, AllocationStatus)
+                SELECT @EntryID, EventSeatID, @Now, 'Active' 
+                FROM @AllocatedSeats;
+                
+                -- Cap nhat bien trong memory
+                UPDATE #CategoryState SET AvailableCount = AvailableCount - @ReqQty WHERE TicketCategoryID = @CategoryID;
 
-            UPDATE we
-            SET    EntryStatus                = 'Granted',
-                   OpportunityGrantedTimestamp = @Now,
-                   OpportunityExpiryTimestamp  = @OpportunityExpiry,
-                   OfferedEventSeatID          = a.EventSeatID
-            FROM   WaitlistEntry we
-            JOIN   #EligibleUsers  u ON we.WaitlistEntryID = u.WaitlistEntryID
-            JOIN   #AvailableSeats a ON u.RowNum = a.RowNum;
+                -- Ghi Audit
+                DECLARE @SeatIDsCSV NVARCHAR(MAX);
+                SELECT @SeatIDsCSV = STRING_AGG(CAST(EventSeatID AS VARCHAR), ',') FROM @AllocatedSeats;
 
-            -- @@ROWCOUNT lấy ngay từ UPDATE WaitlistEntry (trước khi có lệnh khác)
-            SET @GrantedThisBatch = @@ROWCOUNT;
+                INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+                VALUES (@SystemUserID, 'SYSTEM_WAITLIST_OPPORTUNITY_GRANTED', 'WaitlistEntry', CAST(@EntryID AS VARCHAR(64)), 'UPDATE', @Now,
+                        '{"EntryStatus":"Granted","EventSeatIDs":"' + @SeatIDsCSV + '"}');
 
-            -- Bulk Audit (tất cả cặp được cấp trong batch này)
-            INSERT INTO AuditRecord
-                (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
-            SELECT @SystemUserID,
-                   'SYSTEM_WAITLIST_OPPORTUNITY_GRANTED',
-                   'WaitlistEntry',
-                   CAST(u.WaitlistEntryID AS VARCHAR(64)),
-                   'UPDATE',
-                   @Now,
-                   '{"EntryStatus":"Granted","OfferedEventSeatID":' + CAST(a.EventSeatID AS VARCHAR) + '}'
-            FROM   #EligibleUsers u
-            JOIN   #AvailableSeats a ON u.RowNum = a.RowNum;
+                COMMIT TRANSACTION;
+            END
+            ELSE
+            BEGIN
+                ROLLBACK TRANSACTION;
+                UPDATE #CategoryState SET IsBlocked = 1 WHERE TicketCategoryID = @CategoryID;
+            END
 
-            COMMIT TRANSACTION; -- COMMIT trước khi DROP
+            FETCH NEXT FROM cWaitlist INTO @EntryID, @CustomerID, @CategoryID, @ReqQty;
+        END
 
-            IF OBJECT_ID('tempdb..#AvailableSeats') IS NOT NULL DROP TABLE #AvailableSeats;
-            IF OBJECT_ID('tempdb..#EligibleUsers') IS NOT NULL DROP TABLE #EligibleUsers;
-        END -- WHILE
+        CLOSE cWaitlist;
+        DEALLOCATE cWaitlist;
+        DROP TABLE #CategoryState;
 
         EXEC sp_releaseapplock @Resource = @LockResource, @LockOwner = 'Session';
 
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-        -- Cleanup temp tables an toàn
-        IF OBJECT_ID('tempdb..#AvailableSeats') IS NOT NULL DROP TABLE #AvailableSeats;
-        IF OBJECT_ID('tempdb..#EligibleUsers')  IS NOT NULL DROP TABLE #EligibleUsers;
-        -- Nhả khóa dù có lỗi
+        IF OBJECT_ID('tempdb..#CategoryState') IS NOT NULL DROP TABLE #CategoryState;
+        
+        IF CURSOR_STATUS('local','cWaitlist') >= -1 
+        BEGIN
+            IF CURSOR_STATUS('local','cWaitlist') > -1 CLOSE cWaitlist;
+            DEALLOCATE cWaitlist;
+        END
+
         EXEC sp_releaseapplock @Resource = @LockResource, @LockOwner = 'Session';
         THROW;
     END CATCH
