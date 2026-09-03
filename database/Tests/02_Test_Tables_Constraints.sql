@@ -138,7 +138,7 @@ EXEC sp_RunTest @Suite,'CHK_Concert_PurchaseLimit_Positive','ERROR',NULL,@SQL;
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag)
-    VALUES (@cid,''PV0'',''FIXED'',0,SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),''Active'',0);';
+    VALUES (@cid,''PV0'',''Fixed Amount'',0,SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),''Active'',0);';
 EXEC sp_RunTest @Suite,'CHK_Promotion_DiscountValue_Positive','ERROR',NULL,@SQL;
 
 -- ===== CHK_Queue_Capacity: AdmissionCapacity <= 0 -> ERROR =====
