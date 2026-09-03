@@ -2,7 +2,7 @@
 -- Chi tiết sửa đổi đã được cập nhật tại plan.txt §23.2.
 
 -- (EventSeatID) có WHERE TicketStatus='Issued' trên Ticket
-CREATE NONCLUSTERED INDEX IX_Ticket_Issued_EventSeat 
+CREATE UNIQUE NONCLUSTERED INDEX UIX_Ticket_Issued_EventSeat 
 ON Ticket (EventSeatID)
 WHERE TicketStatus = 'Issued';
 
