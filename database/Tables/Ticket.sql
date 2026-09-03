@@ -8,6 +8,7 @@ CREATE TABLE Ticket (
     IssuedTimestamp DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
     UsedTimestamp DATETIME2(7),
     CancelledTimestamp DATETIME2(7),
+    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_Ticket PRIMARY KEY CLUSTERED (TicketID),
     CONSTRAINT UQ_Ticket_TicketCode UNIQUE (TicketCode),
     CONSTRAINT FK_Ticket_Booking FOREIGN KEY (BookingID) REFERENCES Booking(BookingID),
