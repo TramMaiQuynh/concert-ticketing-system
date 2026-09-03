@@ -37,8 +37,17 @@ BEGIN
         )
             THROW 58302, 'sp_CreatePromotion: Actor khong co quyen.', 1;
 
-        IF @DiscountType NOT IN ('PERCENTAGE', 'FIXED')
-            THROW 58303, 'sp_CreatePromotion: DiscountType phai la PERCENTAGE hoac FIXED.', 1;
+        -- §12.16.1: Chuan hoa DiscountType ve gia tri chuyen (spec).
+        -- Chap nhan ca dang chu hoa ('Percentage'/'Fixed Amount') va
+        -- legacy ('PERCENTAGE'/'FIXED'/'Fixed'/'fixed amount'...).
+        SET @DiscountType = CASE
+            WHEN UPPER(@DiscountType) IN ('PERCENTAGE', 'PERCENT')       THEN 'Percentage'
+            WHEN UPPER(@DiscountType) IN ('FIXED', 'FIXED AMOUNT')      THEN 'Fixed Amount'
+            ELSE @DiscountType
+        END;
+
+        IF @DiscountType NOT IN ('Percentage', 'Fixed Amount')
+            THROW 58303, 'sp_CreatePromotion: DiscountType phai la Percentage hoac Fixed Amount.', 1;
 
         IF @DiscountValue <= 0
             THROW 58304, 'sp_CreatePromotion: DiscountValue phai lon hon 0.', 1;
