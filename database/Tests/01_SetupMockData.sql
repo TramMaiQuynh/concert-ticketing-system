@@ -109,20 +109,23 @@ INSERT INTO Concert (
 )
 VALUES (
     @OrgID, @ArtistID, @VenueID, 'Test Concert Live 2025',
-    'OnSale',
+    'Draft',
     DATEADD(DAY, 30, SYSDATETIME()), DATEADD(DAY, 30, DATEADD(HOUR, 3, SYSDATETIME())),
     4, 900,   -- PurchaseLimit=4, HoldDuration=15min
     0, 1, 0
 );
 DECLARE @ConcertID INT = SCOPE_IDENTITY();
+UPDATE Concert SET ConcertStatus = 'Published' WHERE ConcertID = @ConcertID;
+UPDATE Concert SET ConcertStatus = 'OnSale' WHERE ConcertID = @ConcertID;
 
 -- Staff assignment
-INSERT INTO CheckinStaffAssignment (ConcertID, UserID)
-VALUES (@ConcertID, @StaffID);
+DECLARE @AdminID INT = (SELECT UserID FROM UserAccount WHERE Username = 'test_admin');
+INSERT INTO CheckinStaffAssignment (ConcertID, UserID, AssignedByUserID)
+VALUES (@ConcertID, @StaffID, @AdminID);
 
 -- TicketCategory
-INSERT INTO TicketCategory (ConcertID, CategoryName, CategoryStatus)
-VALUES (@ConcertID, 'VIP Gold', 'Active');
+INSERT INTO TicketCategory (ConcertID, CategoryName, BasePrice, CategoryStatus)
+VALUES (@ConcertID, 'VIP Gold', 1000000, 'Active');
 DECLARE @CatID INT = SCOPE_IDENTITY();
 
 -- EventSeat (6 ghe, gia 1,000,000 VND)
