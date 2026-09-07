@@ -18,14 +18,21 @@ public class WaitlistController : ControllerBase
         _waitlist = waitlist;
     }
 
-    /// <summary>Đăng ký Waitlist cho Concert (cần Concert bật Waitlist).</summary>
+    /// <summary>
+    /// Đăng ký Waitlist cho một HẠNG VÉ của Concert (cần Concert bật Waitlist).
+    /// Waitlist gắn với một Ticket Category cụ thể (BR40a) và số ghế mong muốn
+    /// (BR40b) — khi có ghế trống, hệ thống chỉ cấp cơ hội nếu đủ toàn bộ số ghế
+    /// đã yêu cầu (all-or-nothing, BR42b).
+    /// </summary>
     [HttpPost("concerts/{concertId:int}/join")]
     [ProducesResponseType(typeof(WaitlistJoinResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Join(int concertId)
+    public async Task<IActionResult> Join(int concertId, [FromBody] JoinWaitlistRequest request)
     {
         var customerId = GetCurrentUserId();
-        var result = await _waitlist.JoinAsync(customerId, concertId);
+        var result = await _waitlist.JoinAsync(
+            customerId, concertId, request.TicketCategoryId, request.RequestedQuantity);
         return Ok(result);
     }
 
