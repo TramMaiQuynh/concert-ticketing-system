@@ -35,20 +35,38 @@ DENY SELECT ON dbo.Booking TO app_organizer;
 DENY SELECT ON dbo.Payment TO app_organizer;
 DENY SELECT ON dbo.Ticket TO app_organizer;
 GRANT SELECT ON dbo.Promotion            TO app_organizer;
-GRANT SELECT ON dbo.DiscountCode         TO app_organizer;
 GRANT SELECT ON dbo.CheckIn              TO app_organizer;
 GRANT SELECT ON dbo.Waitlist             TO app_organizer;
 GRANT SELECT ON dbo.WaitlistEntry        TO app_organizer;
 
--- Quyen xem Views bao cao
+-- KHONG cap SELECT tren DiscountCode cho app_organizer.
+-- Bang nay chua CodeValue cua MOI Promotion cua MOI Organizer, khong co cot nao
+-- gioi han pham vi, nen mot Organizer se doc va su dung duoc ma giam gia chua cong
+-- bo cua doi thu. Day cung la ly do app_customer bi DENY o muc duoi. Organizer thao
+-- tac tren ma cua chinh minh qua sp_CreateDiscountCode / sp_UpdateDiscountCodeStatus
+-- (hai SP nay tu kiem tra quyen so huu Concert).
+DENY SELECT ON dbo.DiscountCode          TO app_organizer;
+
+-- Quyen xem Views bao cao.
+-- Bon view nay deu da duoc gioi han pham vi bang SESSION_CONTEXT(N'UserID')
+-- (Organizer chi thay Concert cua minh, Admin thay toan bo - §23.9), nen quyen
+-- SELECT o day khong con dong nghia voi doc du lieu cua Organizer khac.
+-- Dieu kien tien quyet: tang ung dung PHAI dat session context sau khi mo connection.
 GRANT SELECT ON dbo.VW_ConcertSalesSummary   TO app_organizer;
 GRANT SELECT ON dbo.VW_ActiveInventoryStatus TO app_organizer;
 GRANT SELECT ON dbo.VW_CheckInReport         TO app_organizer;
 GRANT SELECT ON dbo.VW_WaitlistQueue         TO app_organizer;
 
 -- Quyen thuc thi Stored Procedures lien quan
-GRANT EXECUTE ON dbo.sp_ProcessRefund   TO app_organizer;
+GRANT EXECUTE ON dbo.sp_ProcessRefund        TO app_organizer;
+GRANT EXECUTE ON dbo.sp_UpdateRefundStatus   TO app_organizer;  -- Pending->Failed/Cancelled (§10.1/§24.4/BR32)
 GRANT EXECUTE ON dbo.sp_ApplyPromotion  TO app_organizer;
+-- Cau hinh Fair Access / Waitlist va vong doi khuyen mai cho Concert cua chinh minh
+-- (moi SP tu kiem tra Concert.OrganizerUserID = @ActorUserID hoac Admin).
+GRANT EXECUTE ON dbo.sp_ConfigureQueue            TO app_organizer;
+GRANT EXECUTE ON dbo.sp_ConfigureWaitlist         TO app_organizer;
+GRANT EXECUTE ON dbo.sp_UpdatePromotionStatus     TO app_organizer;
+GRANT EXECUTE ON dbo.sp_UpdateDiscountCodeStatus  TO app_organizer;
 
 -- Chặn truy cap AuditRecord truc tiep (chi Admin duoc doc)
 DENY SELECT ON dbo.AuditRecord TO app_organizer;
