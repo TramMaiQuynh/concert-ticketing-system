@@ -1,27 +1,29 @@
 using System.Data;
-using System.Security.Cryptography;
-using System.Text;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Application.Interfaces;
+using ConcertTicketing.Application.Services;
 
 namespace ConcertTicketing.Infrastructure.Repositories;
 
 public class PaymentRepository : IPaymentRepository
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
     private readonly string _signatureSecret;
+    private readonly PaymentGatewaySettings _gateway;
 
-    public PaymentRepository(string connectionString, string signatureSecret)
+    public PaymentRepository(IDbConnectionFactory factory, string signatureSecret,
+                             PaymentGatewaySettings gateway)
     {
-        _connectionString = connectionString;
+        _factory = factory;
         _signatureSecret = signatureSecret;
+        _gateway = gateway;
     }
 
     public async Task<InitiatePaymentResponse> InitiateAsync(int bookingId, int customerUserId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
         p.Add("@BookingID", bookingId, DbType.Int32);
@@ -36,73 +38,170 @@ public class PaymentRepository : IPaymentRepository
         var paymentReference = p.Get<string>("@PaymentReference");
         var amount = p.Get<decimal>("@Amount");
 
-        // Chữ ký: HMAC-SHA256(secret, bookingId:paymentId:amount) — ngăn tự confirm
-        var signature = ComputeSignature(bookingId, paymentId, amount);
-        var paymentUrl = $"https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?paymentId={paymentId}&vnp_TxnRef={paymentReference}";
+        // Chu ky KHONG duoc tra ve cho client - xem PaymentSignatureCalculator.
+        // No la bi mat dung chung backend<->cong thanh toan, chuyen giao server-to-server.
+        //
+        // Dia chi cong thanh toan lay tu cau hinh thay vi viet cung URL sandbox cua VNPay:
+        // moi trien khai (demo dung bo mo phong, that dung PSP that) tro toi mot noi khac
+        // nhau, va viet cung nghia la khong the doi ma khong sua ma nguon.
+        var paymentUrl = _gateway.IsSimulator
+            ? $"{_gateway.PaymentUrlBase}/{bookingId}/{paymentId}"
+            : $"{_gateway.PaymentUrlBase}?paymentId={paymentId}&vnp_TxnRef={paymentReference}";
 
-        return new InitiatePaymentResponse(paymentId, paymentUrl, paymentReference, amount, signature);
+        return new InitiatePaymentResponse(paymentId, paymentUrl, paymentReference, amount);
     }
 
-    public async Task ConfirmAsync(int bookingId, int paymentId, string? signature, string? providerReference)
+    /// <summary>
+    /// Xử lý callback xác nhận thanh toán từ cổng thanh toán.
+    ///
+    /// Trả về KẾT QUẢ NGHIỆP VỤ chứ không chỉ "thành công/thất bại": sp_ConfirmPayment
+    /// commit thành công cả trong những tình huống bất thường (lệch số tiền, Booking hết
+    /// hạn, Booking đã có Payment hiệu lực khác) — khi đó nó ghi nhận tiền đã thu rồi tạo
+    /// yêu cầu hoàn tiền, và Booking KHÔNG được xác nhận. Caller bắt buộc phải phân biệt
+    /// được hai trường hợp này.
+    /// </summary>
+    public async Task<ConfirmPaymentResult> ConfirmAsync(int bookingId, int paymentId, string? signature, string? providerReference)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
-        // 1. Xác thực chữ ký (callback phải trình chữ ký hợp lệ)
+        // Xác thực chữ ký (callback phải trình chữ ký hợp lệ)
         var amount = await GetPaymentAmountAsync(conn, bookingId, paymentId);
         if (amount is null)
             throw new ArgumentException("Payment không tồn tại hoặc không thuộc Booking.");
 
-        if (string.IsNullOrEmpty(signature) ||
-            !CryptographicOperations.FixedTimeEquals(
-                Encoding.UTF8.GetBytes(signature),
-                Encoding.UTF8.GetBytes(ComputeSignature(bookingId, paymentId, amount.Value))))
+        if (!PaymentSignatureCalculator.Verify(_signatureSecret, bookingId, paymentId, amount.Value, signature))
             throw new UnauthorizedAccessException("Chữ ký thanh toán không hợp lệ.");
 
-        // 2. Idempotency: đã Confirmed => trả thành công, không xử lý lại
-        var status = await GetPaymentStatusAsync(conn, bookingId, paymentId);
-        if (status == "Confirmed")
-            return;
-
+        // KHÔNG kiểm tra idempotency ở đây nữa: sp_ConfirmPayment đã có kiểm tra đó
+        // dưới applock theo Booking và phân biệt được "đã xác nhận" với "đã bị hoàn".
+        // Kiểm tra trùng lặp ở tầng này chỉ tạo thêm một nguồn quyết định thứ hai —
+        // không có khóa, đọc trước khi SP chạy — và trước đây nó trả về "thành công"
+        // cho cả Payment đã bị tự động hoàn tiền.
         var p = new DynamicParameters();
         p.Add("@BookingID", bookingId, DbType.Int32);
         p.Add("@PaymentID", paymentId, DbType.Int32);
         p.Add("@ProviderReference", providerReference, DbType.String, size: 64);
+        p.Add("@Outcome", dbType: DbType.String, size: 48, direction: ParameterDirection.Output);
+
         await conn.ExecuteAsync("sp_ConfirmPayment", p, commandType: CommandType.StoredProcedure);
+
+        return MapOutcome(p.Get<string?>("@Outcome"));
     }
 
-    public async Task<int> ProcessRefundAsync(int paymentId, decimal refundAmount, string reason, int actorUserId)
+    private static ConfirmPaymentResult MapOutcome(string? raw) => raw switch
     {
-        using var conn = new SqlConnection(_connectionString);
+        "Confirmed" => new(PaymentConfirmOutcome.Confirmed, true,
+            "Thanh toán đã được xác nhận, vé đã phát hành."),
+        "AlreadyConfirmed" => new(PaymentConfirmOutcome.AlreadyConfirmed, true,
+            "Giao dịch đã được xác nhận trước đó."),
+        "AlreadyRefunded" => new(PaymentConfirmOutcome.AlreadyRefunded, false,
+            "Giao dịch đã được ghi nhận nhưng trước đó đã có yêu cầu hoàn tiền; đơn hàng không được xác nhận."),
+        "AutoRefunded_AmountMismatch" => new(PaymentConfirmOutcome.AutoRefundedAmountMismatch, false,
+            "Số tiền thanh toán không khớp tổng đơn hàng. Tiền đã thu được ghi nhận và một yêu cầu hoàn tiền đã được tạo."),
+        "AutoRefunded_DuplicatePayment" => new(PaymentConfirmOutcome.AutoRefundedDuplicatePayment, false,
+            "Đơn hàng đã có giao dịch thanh toán hiệu lực khác. Một yêu cầu hoàn tiền đã được tạo."),
+        "AutoRefunded_BookingNotPending" => new(PaymentConfirmOutcome.AutoRefundedBookingNotPending, false,
+            "Đơn hàng đã hết hạn giữ chỗ hoặc không còn chờ thanh toán. Một yêu cầu hoàn tiền đã được tạo."),
+        // sp_ConfirmPayment đặt @Outcome trên MỌI nhánh thoát; null nghĩa là SP đã bị
+        // thay đổi mà không cập nhật chỗ này — phải nổ chứ không được đoán là thành công.
+        _ => throw new InvalidOperationException(
+            $"sp_ConfirmPayment trả về @Outcome không nhận diện được: '{raw ?? "(null)"}'.")
+    };
+
+    /// <summary>
+    /// Hủy Booking đã Confirmed và tạo yêu cầu hoàn tiền (BP8 / BR31–BR34a).
+    /// Giá trị hoàn KHÔNG do caller quyết định: sp_ProcessRefund tự tính theo
+    /// Concert.RefundPercentage và kiểm tra hạn hủy theo CancellationDeadlineHours.
+    /// Refund được tạo ở trạng thái Pending, phải gọi ConfirmRefundAsync để hoàn tất.
+    /// </summary>
+    public async Task<int> ProcessRefundAsync(int bookingId, string? reason, int actorUserId,
+                                              bool isConcertCancellation = false)
+    {
+        using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
-        p.Add("@PaymentID", paymentId, DbType.Int32);
-        p.Add("@RefundAmount", refundAmount, DbType.Decimal);
-        p.Add("@RefundReason", reason, DbType.String, size: 255);
+        p.Add("@BookingID", bookingId, DbType.Int32);
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
-        p.Add("@RefundReference", $"REF-{Guid.NewGuid():N}".Substring(0, 16).ToUpperInvariant(), DbType.String, size: 50);
+        p.Add("@RefundReason", reason, DbType.String, size: 500);
+        p.Add("@IsConcertCancellation", isConcertCancellation, DbType.Boolean);
         p.Add("@NewRefundID", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync("sp_ProcessRefund", p, commandType: CommandType.StoredProcedure);
-        return p.Get<int>("@NewRefundID");
+
+        // Lấy thẳng ID do SP trả về. Trước đây chỗ này truy vấn "Refund mới nhất của
+        // Booking" để đoán — sai trong đúng những trường hợp quan trọng: hủy một Booking
+        // đang Pending không tạo Refund nào, và Concert có RefundPercentage = 0 cũng vậy;
+        // khi đó truy vấn kia trả về một Refund CŨ không liên quan (ví dụ khoản tự động
+        // hoàn tiền do lệch số tiền trước đó), khiến caller tưởng vừa tạo được yêu cầu
+        // hoàn tiền và có thể đem chính ID đó đi gọi ConfirmRefundAsync.
+        // 0 = lần gọi này không tạo Refund nào (hủy Booking chưa thanh toán, hoặc tỷ lệ hoàn = 0).
+        return p.Get<int?>("@NewRefundID") ?? 0;
+    }
+
+    /// <summary>Xác nhận một Refund đang Pending (BP8 / BR32b) — chỉ Admin/Organizer.</summary>
+    public async Task ConfirmRefundAsync(int refundId, int actorUserId)
+    {
+        using var conn = await _factory.OpenAsync();
+
+        var p = new DynamicParameters();
+        p.Add("@RefundID", refundId, DbType.Int32);
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+
+        await conn.ExecuteAsync("sp_ConfirmRefund", p, commandType: CommandType.StoredProcedure);
+    }
+
+    /// <summary>
+    /// Kết thúc một yêu cầu hoàn tiền mà không chi trả (Pending → Failed | Cancelled).
+    /// KHÔNG đụng tới Payment.PaymentStatus: không đồng nào rời tài khoản thu, nên
+    /// việc chuyển Payment sang PartiallyRefunded/Refunded vẫn là độc quyền của
+    /// sp_ConfirmRefund (BR32b).
+    /// </summary>
+    public async Task UpdateRefundStatusAsync(int refundId, int actorUserId, string newStatus, string reason)
+    {
+        using var conn = await _factory.OpenAsync();
+
+        var p = new DynamicParameters();
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+        p.Add("@RefundID", refundId, DbType.Int32);
+        // size khớp đúng độ rộng tham số của SP: VARCHAR(32) và NVARCHAR(500).
+        p.Add("@NewStatus", newStatus, DbType.AnsiString, size: 32);
+        p.Add("@Reason", reason, DbType.String, size: 500);
+
+        await conn.ExecuteAsync("sp_UpdateRefundStatus", p, commandType: CommandType.StoredProcedure);
+    }
+
+    /// <summary>
+    /// Ghi nhận thanh toán thất bại từ cổng thanh toán (BP6 / BR24).
+    /// Bắt buộc phải có: nếu thiếu, Payment kẹt ở Pending và
+    /// UIX_Payment_PendingPerBooking sẽ chặn mọi lần thanh toán lại.
+    /// </summary>
+    public async Task FailAsync(int bookingId, int paymentId, string? signature, string? providerReference)
+    {
+        using var conn = await _factory.OpenAsync();
+
+        var amount = await GetPaymentAmountAsync(conn, bookingId, paymentId);
+        if (amount is null)
+            throw new ArgumentException("Payment không tồn tại hoặc không thuộc Booking.");
+
+        if (!PaymentSignatureCalculator.Verify(_signatureSecret, bookingId, paymentId, amount.Value, signature))
+            throw new UnauthorizedAccessException("Chữ ký thanh toán không hợp lệ.");
+
+        var p = new DynamicParameters();
+        p.Add("@PaymentID", paymentId, DbType.Int32);
+        p.Add("@ProviderReference", providerReference, DbType.String, size: 64);
+
+        await conn.ExecuteAsync("sp_FailPayment", p, commandType: CommandType.StoredProcedure);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task<decimal?> GetPaymentAmountAsync(SqlConnection conn, int bookingId, int paymentId)
+    private static async Task<decimal?> GetPaymentAmountAsync(IDbConnection conn, int bookingId, int paymentId)
         => await conn.QuerySingleOrDefaultAsync<decimal?>(
             "SELECT Amount FROM Payment WHERE PaymentID = @PaymentID AND BookingID = @BookingID",
             new { PaymentID = paymentId, BookingID = bookingId });
 
-    private async Task<string?> GetPaymentStatusAsync(SqlConnection conn, int bookingId, int paymentId)
+    private static async Task<string?> GetPaymentStatusAsync(IDbConnection conn, int bookingId, int paymentId)
         => await conn.QuerySingleOrDefaultAsync<string?>(
             "SELECT PaymentStatus FROM Payment WHERE PaymentID = @PaymentID AND BookingID = @BookingID",
             new { PaymentID = paymentId, BookingID = bookingId });
-
-    private string ComputeSignature(int bookingId, int paymentId, decimal amount)
-    {
-        var payload = $"{bookingId}:{paymentId}:{amount.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}";
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_signatureSecret));
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
 }
