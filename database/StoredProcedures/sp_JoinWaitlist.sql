@@ -43,12 +43,24 @@ BEGIN
         SELECT @WaitlistID = WaitlistID FROM Waitlist
         WHERE ConcertID = @ConcertID AND WaitlistStatus = 'Open';
 
-        -- Nếu Waitlist chưa tồn tại thì tạo (mặc định Concert bật Waitlist)
+        -- Neu Waitlist chua ton tai thi tao (mac dinh AllocationPolicy = FIFO theo BR43).
+        -- Muon doi policy cho rieng Concert: dung sp_ConfigureWaitlist.
+        -- UQ_Waitlist_Concert la trong tai cuoi cung: hai nguoi cung dang ky dau tien
+        -- se cung thay chua co Waitlist va cung INSERT; nguoi thua doc lai dong vua tao.
         IF @WaitlistID IS NULL
         BEGIN
-            INSERT INTO Waitlist (ConcertID, WaitlistStatus, OpenTimestamp, AllocationPolicy)
-            VALUES (@ConcertID, 'Open', SYSDATETIME(), 'FIFO');
-            SET @WaitlistID = SCOPE_IDENTITY();
+            BEGIN TRY
+                INSERT INTO Waitlist (ConcertID, WaitlistStatus, OpenTimestamp, AllocationPolicy)
+                VALUES (@ConcertID, 'Open', SYSDATETIME(), 'FIFO');
+                SET @WaitlistID = SCOPE_IDENTITY();
+            END TRY
+            BEGIN CATCH
+                IF ERROR_NUMBER() NOT IN (2601, 2627) THROW;
+                SELECT @WaitlistID = WaitlistID FROM Waitlist
+                WHERE ConcertID = @ConcertID AND WaitlistStatus = 'Open';
+                IF @WaitlistID IS NULL
+                    THROW 58507, 'sp_JoinWaitlist: Waitlist cua Concert nay dang Closed.', 1;
+            END CATCH
         END
 
         -- 2. BR41: 1 Customer chi 1 entry Active cho cung Concert, bat ke TicketCategory
@@ -56,11 +68,23 @@ BEGIN
                    WHERE WaitlistID = @WaitlistID AND CustomerUserID = @CustomerUserID AND EntryStatus IN ('Active', 'Granted'))
             THROW 58503, 'sp_JoinWaitlist: Customer da co co hoi Waitlist dang cho hoac chua su dung cho Concert nay.', 1;
 
-        -- 3. Insert voi QueuePosition = max + 1
-        DECLARE @Pos INT = ISNULL((SELECT MAX(QueuePosition) FROM WaitlistEntry WHERE WaitlistID = @WaitlistID), 0) + 1;
+        -- 3. Insert voi QueuePosition = max + 1.
+        --    UPDLOCK+HOLDLOCK giu range lock den het transaction de hai nguoi dang ky
+        --    cung luc khong nhan trung mot vi tri cho.
+        DECLARE @Pos INT = ISNULL((SELECT MAX(QueuePosition)
+                                   FROM WaitlistEntry WITH (UPDLOCK, HOLDLOCK)
+                                   WHERE WaitlistID = @WaitlistID), 0) + 1;
 
-        INSERT INTO WaitlistEntry (WaitlistID, CustomerUserID, TicketCategoryID, RequestedQuantity, JoinedTimestamp, QueuePosition, EntryStatus)
-        VALUES (@WaitlistID, @CustomerUserID, @TicketCategoryID, @RequestedQuantity, SYSDATETIME(), @Pos, 'Active');
+        BEGIN TRY
+            INSERT INTO WaitlistEntry (WaitlistID, CustomerUserID, TicketCategoryID, RequestedQuantity, JoinedTimestamp, QueuePosition, EntryStatus)
+            VALUES (@WaitlistID, @CustomerUserID, @TicketCategoryID, @RequestedQuantity, SYSDATETIME(), @Pos, 'Active');
+        END TRY
+        BEGIN CATCH
+            -- Thua cuoc voi UIX_WaitlistEntry_ActivePerCustomer (BR41).
+            IF ERROR_NUMBER() IN (2601, 2627)
+                THROW 58503, 'sp_JoinWaitlist: Customer da co co hoi Waitlist dang cho hoac chua su dung cho Concert nay.', 1;
+            THROW;
+        END CATCH
 
         SET @NewWaitlistEntryID = SCOPE_IDENTITY();
 
