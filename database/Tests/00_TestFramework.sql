@@ -12,6 +12,16 @@ SET ANSI_NULLS ON;
 SET NOCOUNT ON;
 GO
 
+-- Khung test nam trong schema rieng [test], KHONG phai dbo.
+-- Ly do: truoc day sp_RunTest duoc tao trong dbo va o lai vinh vien sau khi chay
+-- test, khien database san xuat mang theo mot thu tuc chi phuc vu kiem thu - va
+-- lam chinh cau lenh nghiem thu cua spec (`SELECT COUNT(*) FROM sys.procedures
+-- WHERE is_ms_shipped = 0` phai bang so SP nghiep vu) tra ve sai so.
+-- Tach schema giu ranh gioi ro rang va cho phep thu hoi/xoa nguyen khoi khi can.
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'test')
+    EXEC('CREATE SCHEMA test');
+GO
+
 -- Tao bang luu ket qua (table temp tong session)
 IF OBJECT_ID('tempdb..#TestResults') IS NOT NULL
     DROP TABLE #TestResults;
@@ -33,7 +43,7 @@ GO
 --   @ExpectedErrCode: Error number mong doi khi ERROR (tuy chon)
 --   @TestSQL        : T-SQL can thuc thi (NVARCHAR(MAX))
 -- ============================================================
-CREATE OR ALTER PROCEDURE sp_RunTest
+CREATE OR ALTER PROCEDURE test.sp_RunTest
     @TestSuite       VARCHAR(255),
     @TestName        VARCHAR(255),
     @ExpectedResult  VARCHAR(20),
