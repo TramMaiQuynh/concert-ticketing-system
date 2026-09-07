@@ -12,16 +12,16 @@ namespace ConcertTicketing.Infrastructure.Repositories;
 /// </summary>
 public class QueueRepository : IQueueRepository
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
 
-    public QueueRepository(string connectionString)
+    public QueueRepository(IDbConnectionFactory factory)
     {
-        _connectionString = connectionString;
+        _factory = factory;
     }
 
     public async Task<JoinQueueResponse> JoinAsync(int customerUserId, int concertId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
         var p = new DynamicParameters();
         p.Add("@CustomerUserID", customerUserId, DbType.Int32);
         p.Add("@ConcertID", concertId, DbType.Int32);
@@ -30,16 +30,28 @@ public class QueueRepository : IQueueRepository
         await conn.ExecuteAsync("sp_JoinQueue", p, commandType: CommandType.StoredProcedure);
         var entryId = p.Get<int>("@NewQueueEntryID");
 
-        var dto = await conn.QuerySingleOrDefaultAsync<QueueEntryStatusDto>(
+        // QuerySingle (khong OrDefault): entry vua duoc SP tao nen PHAI ton tai —
+        // neu khong, do la loi that su chu khong phai truong hop hop le tra null.
+        var dto = await conn.QuerySingleAsync<QueueEntryStatusDto>(
             "SELECT QueueEntryID, QueueStatus, JoinedTimestamp, AdmissionPosition, AdmissionExpiryTimestamp FROM QueueEntry WHERE QueueEntryID = @Id",
             new { Id = entryId });
 
         return new JoinQueueResponse(dto.QueueEntryId, dto.QueueStatus, dto.JoinedTimestamp);
     }
 
+    /// <summary>Customer chu dong roi hang doi (BP11 / BR48).</summary>
+    public async Task ExitAsync(int queueEntryId, int actorUserId)
+    {
+        using var conn = await _factory.OpenAsync();
+        var p = new DynamicParameters();
+        p.Add("@QueueEntryID", queueEntryId, DbType.Int32);
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+        await conn.ExecuteAsync("sp_ExitQueue", p, commandType: CommandType.StoredProcedure);
+    }
+
     public async Task<QueueEntryStatusDto?> GetMyEntryAsync(int customerUserId, int concertId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
         var sql = @"
             SELECT
                 qe.QueueEntryID,
