@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ConcertTicketing.Application.Interfaces;
 
 namespace ConcertTicketing.Infrastructure.BackgroundJobs;
 
@@ -19,14 +20,14 @@ namespace ConcertTicketing.Infrastructure.BackgroundJobs;
 /// </summary>
 public class HoldReleaseWorker : BackgroundService
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
     private readonly ILogger<HoldReleaseWorker> _logger;
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
-    public HoldReleaseWorker(string connectionString, ILogger<HoldReleaseWorker> logger)
+    public HoldReleaseWorker(IDbConnectionFactory factory, ILogger<HoldReleaseWorker> logger)
     {
-        _connectionString = connectionString;
-        _logger           = logger;
+        _factory = factory;
+        _logger  = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,8 +59,9 @@ public class HoldReleaseWorker : BackgroundService
 
     private async Task ReleaseAndAllocateAsync(CancellationToken ct)
     {
-        using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
+        // OpenForSystemAsync: SIP1/SIP2 chay duoi danh nghia tai khoan 'system' (D14),
+        // khong co HTTP request nao de lay danh tinh nguoi dung.
+        using var conn = await _factory.OpenForSystemAsync(ct);
 
         // Bước 1: Nhả ghế hết hạn → trả về Available
         var released = await conn.ExecuteAsync(
