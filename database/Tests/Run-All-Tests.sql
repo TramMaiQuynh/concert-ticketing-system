@@ -2,6 +2,14 @@
 -- Run-All-Tests.sql
 -- Master file: chay toan bo test suite va in bao cao.
 -- Chay bang: sqlcmd -S .\SQLEXPRESS -E -d ConcertTicketingDB -i Run-All-Tests.sql
+--
+-- PHAI dat thu muc lam viec o chinh thu muc Tests\ truoc khi chay.
+-- sqlcmd phan giai cac chi thi :r theo THU MUC HIEN HANH, khong theo vi tri cua file
+-- master nay; chay tu thu muc khac se bao "Invalid filename" cho tung file con roi
+-- that bai o buoc doc #TestResults.
+--     cd database\Tests
+--     sqlcmd -S .\SQLEXPRESS -E -d ConcertTicketingDB -i Run-All-Tests.sql -I
+-- Hoac dung Run-All-Tests.ps1 (tu doi thu muc, gop file, va chay them test dong thoi).
 -- ============================================================
 :r 00_TestFramework.sql
 :r 01_SetupMockData.sql
@@ -15,6 +23,8 @@
 :r 09_Test_SP_Others.sql
 :r 10_Test_Security_Permissions.sql
 :r 11_Test_Concurrency.sql
+:r 12_Test_SP_AdminAndCatalog.sql
+:r 13_Test_Regression_Fixes.sql
 
 -- Final Report
 GO
