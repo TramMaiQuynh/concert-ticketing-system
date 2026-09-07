@@ -23,16 +23,17 @@ BEGIN
         WHERE  QueueEntryID = @QueueEntryID;
 
         IF @CurrentStatus IS NULL
-            THROW 58901, 'sp_ExitQueue: QueueEntry khong ton tai.', 1;
+            THROW 59201, 'sp_ExitQueue: QueueEntry khong ton tai.', 1;
 
         -- Quyen: chinh Customer so huu entry, hoac System (het han)
         IF @ActorUserID <> @OwnerID
            AND NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                           WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
-            THROW 58902, 'sp_ExitQueue: Actor khong co quyen.', 1;
+                           JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                           WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
+            THROW 59202, 'sp_ExitQueue: Actor khong co quyen.', 1;
 
         IF @CurrentStatus NOT IN ('Waiting', 'Admitted')
-            THROW 58903, 'sp_ExitQueue: Chi co the exit khi dang Waiting hoac Admitted.', 1;
+            THROW 59203, 'sp_ExitQueue: Chi co the exit khi dang Waiting hoac Admitted.', 1;
 
         UPDATE QueueEntry
         SET    QueueStatus   = 'Exited',
@@ -42,7 +43,7 @@ BEGIN
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@ActorUserID, 'QUEUE_EXITED', 'QueueEntry',
                 CAST(@QueueEntryID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                '{"QueueStatus":"Exited","Reason":"' + ISNULL(@Reason, '') + '"}');
+                '{"QueueStatus":"Exited","Reason":"' + STRING_ESCAPE(ISNULL(@Reason, ''), 'json') + '"}');
 
         COMMIT TRANSACTION;
     END TRY
