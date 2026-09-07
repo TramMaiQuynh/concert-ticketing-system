@@ -10,7 +10,6 @@ CREATE TABLE Payment (
     FailureTimestamp DATETIME2(7),
     ProviderReference VARCHAR(64),
     IsBookingConfirmingPayment BIT NOT NULL DEFAULT 0,
-    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_Payment PRIMARY KEY CLUSTERED (PaymentID),
     CONSTRAINT FK_Payment_Booking FOREIGN KEY (BookingID) REFERENCES Booking(BookingID),
     CONSTRAINT UQ_Payment_Idempotency UNIQUE (BookingID, PaymentReference),
