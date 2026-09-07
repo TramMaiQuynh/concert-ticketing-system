@@ -143,7 +143,7 @@ public class AuthServiceTests
     public async Task Refresh_InvalidToken_ShouldThrowUnauthorized()
     {
         _mockRepo.Setup(r => r.ValidateRefreshTokenAsync("invalid"))
-            .ReturnsAsync((0, false));
+            .ReturnsAsync(new RefreshTokenValidation(0, RefreshTokenState.NotFound));
 
         var act = async () => await _service.RefreshAsync("invalid");
         
@@ -155,7 +155,7 @@ public class AuthServiceTests
     public async Task Refresh_UserInactive_ShouldThrowUnauthorized()
     {
         _mockRepo.Setup(r => r.ValidateRefreshTokenAsync("valid-token"))
-            .ReturnsAsync((1, true));
+            .ReturnsAsync(new RefreshTokenValidation(1, RefreshTokenState.Valid));
         _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync((UserAccount?)null);
 
         var act = async () => await _service.RefreshAsync("valid-token");
@@ -164,12 +164,32 @@ public class AuthServiceTests
             .WithMessage("Tài khoản không còn hoạt động.");
     }
 
+    /// <summary>
+    /// Trình lại một refresh token ĐÃ BỊ THU HỒI nghĩa là có hai bản sao của cùng token
+    /// đang tồn tại — dấu hiệu token bị đánh cắp. Phản ứng đúng theo OWASP: thu hồi TOÀN
+    /// BỘ chuỗi token của user đó, không chỉ từ chối riêng lần này.
+    /// </summary>
+    [Fact]
+    public async Task Refresh_ReusedRevokedToken_RevokesEntireTokenFamily()
+    {
+        _mockRepo.Setup(r => r.ValidateRefreshTokenAsync("stolen-token"))
+            .ReturnsAsync(new RefreshTokenValidation(7, RefreshTokenState.Revoked));
+
+        var act = async () => await _service.RefreshAsync("stolen-token");
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        _mockRepo.Verify(r => r.RevokeAllRefreshTokensForUserAsync(7), Times.Once);
+        // Không được cấp token mới cho kẻ trình token đã thu hồi
+        _mockRepo.Verify(r => r.CreateRefreshTokenAsync(It.IsAny<int>(), It.IsAny<DateTime>()), Times.Never);
+    }
+
     [Fact]
     public async Task Refresh_Success_ShouldRevokeOldAndIssueNew()
     {
         var user = new UserAccount { UserID = 1, Username = "testuser" };
         
-        _mockRepo.Setup(r => r.ValidateRefreshTokenAsync("old-token")).ReturnsAsync((1, true));
+        _mockRepo.Setup(r => r.ValidateRefreshTokenAsync("old-token"))
+            .ReturnsAsync(new RefreshTokenValidation(1, RefreshTokenState.Valid));
         _mockRepo.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(user);
         _mockRepo.Setup(r => r.GetRolesAsync(1)).ReturnsAsync(new[] { "Customer" });
         _mockRepo.Setup(r => r.CreateRefreshTokenAsync(1, It.IsAny<DateTime>())).ReturnsAsync("new-token");
