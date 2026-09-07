@@ -10,6 +10,8 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreateDiscountCode
     @CodeValue   VARCHAR(64),
     @ValidFromDatetime DATETIME2(7),
     @ValidToDatetime   DATETIME2(7),
+    @GlobalUsageLimit  INT = NULL,
+    @PerCustomerUsageLimit INT = NULL,
     @NewDiscountCodeID INT OUTPUT
 )
 AS
@@ -28,7 +30,8 @@ BEGIN
               AND (
                     c.OrganizerUserID = @ActorUserID
                     OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                               WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                               JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                               WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
                   )
         )
             THROW 58601, 'sp_CreateDiscountCode: Actor khong co quyen voi Promotion nay.', 1;
@@ -39,15 +42,15 @@ BEGIN
         IF @ValidToDatetime IS NOT NULL AND @ValidFromDatetime IS NOT NULL AND @ValidToDatetime < @ValidFromDatetime
             THROW 58603, 'sp_CreateDiscountCode: ValidToDatetime phai >= ValidFromDatetime.', 1;
 
-        INSERT INTO DiscountCode (PromotionID, CodeValue, ValidFromDatetime, ValidToDatetime, CodeStatus)
-        VALUES (@PromotionID, @CodeValue, @ValidFromDatetime, @ValidToDatetime, 'Active');
+        INSERT INTO DiscountCode (PromotionID, CodeValue, ValidFromDatetime, ValidToDatetime, CodeStatus, GlobalUsageLimit, PerCustomerUsageLimit)
+        VALUES (@PromotionID, @CodeValue, @ValidFromDatetime, @ValidToDatetime, 'Active', @GlobalUsageLimit, @PerCustomerUsageLimit);
 
         SET @NewDiscountCodeID = SCOPE_IDENTITY();
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@ActorUserID, 'DISCOUNT_CODE_CREATED', 'DiscountCode',
                 CAST(@NewDiscountCodeID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
-                '{"CodeValue":"' + @CodeValue + '"}');
+                '{"CodeValue":"' + STRING_ESCAPE(@CodeValue, 'json') + '"}');
 
         COMMIT TRANSACTION;
     END TRY
