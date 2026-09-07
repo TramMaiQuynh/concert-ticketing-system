@@ -19,11 +19,10 @@ BEGIN
     SELECT @SystemUserID = UserID FROM UserAccount WHERE Username = 'system';
 
     DECLARE @Now DATETIME2(7) = SYSDATETIME();
-    DECLARE @AdmissionValidity INT;
-    SELECT @AdmissionValidity = CAST(ConfigurationValue AS INT)
+    DECLARE @GlobalAdmissionValidity INT;
+    SELECT @GlobalAdmissionValidity = CAST(ConfigurationValue AS INT)
     FROM   SystemConfiguration
     WHERE  ConfigurationKey = 'Queue_Admission_Validity';
-    SET @AdmissionValidity = ISNULL(@AdmissionValidity, 600);
 
     -- Pre-flight: Concert OnSale + Queue Open
     IF NOT EXISTS (
@@ -31,12 +30,20 @@ BEGIN
         WHERE  ConcertID = @ConcertID AND ConcertStatus = 'OnSale' AND SalesPaused = 0
     ) RETURN;
 
-    DECLARE @QueueID INT, @Capacity INT, @Policy VARCHAR(32);
-    SELECT @QueueID = QueueID, @Capacity = AdmissionCapacity, @Policy = ISNULL(FairAccessPolicy, 'FIFO')
+    DECLARE @QueueID INT, @Capacity INT, @Policy VARCHAR(32), @AdmissionValidity INT;
+    SELECT @QueueID   = QueueID,
+           @Capacity  = AdmissionCapacity,
+           @Policy    = ISNULL(FairAccessPolicy, 'FIFO'),
+           -- BR47b/FR64a: booking_ttl uu tien cau hinh cua chinh Concert
+           -- (Queue.AdmissionValiditySeconds), rot xuong mac dinh he thong khi NULL.
+           @AdmissionValidity = ISNULL(AdmissionValiditySeconds, @GlobalAdmissionValidity)
     FROM   Queue
     WHERE  ConcertID = @ConcertID AND QueueStatus = 'Open';
 
     IF @QueueID IS NULL RETURN;
+
+    IF @AdmissionValidity IS NULL
+        THROW 59301, 'sp_ProcessQueueAdmission: Thieu booking_ttl - dat Queue.AdmissionValiditySeconds hoac SystemConfiguration.Queue_Admission_Validity (§23.7).', 1;
 
     BEGIN TRY
         BEGIN TRANSACTION;
