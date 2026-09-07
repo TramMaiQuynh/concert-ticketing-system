@@ -86,14 +86,12 @@ public class ApplyPromotionValidator : AbstractValidator<ApplyPromotionRequest>
 
 public class RefundRequestValidator : AbstractValidator<RefundRequest>
 {
-    public RefundRequestValidator()
-    {
-        RuleFor(x => x.RefundAmount)
-            .GreaterThan(0).WithMessage("Số tiền hoàn phải lớn hơn 0.");
-
+    public RefundRequestValidator() =>
+        // Chỉ ràng buộc độ dài, khớp NVARCHAR(500) của tham số @RefundReason.
+        // KHÔNG kiểm tra số tiền: số tiền hoàn do sp_ProcessRefund tự tính theo
+        // Concert.RefundPercentage, caller không được phép chỉ định (BR32a).
         RuleFor(x => x.Reason)
-            .MaximumLength(500);
-    }
+            .MaximumLength(500).WithMessage("Lý do hủy không được dài quá 500 ký tự.");
 }
 
 public class CreateConcertValidator : AbstractValidator<CreateConcertRequest>
@@ -107,10 +105,14 @@ public class CreateConcertValidator : AbstractValidator<CreateConcertRequest>
         RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
             .WithMessage("EndDatetime phải sau StartDatetime.");
         RuleFor(x => x.PurchaseLimit).GreaterThan(0);
-        RuleFor(x => x.ConcertStatus)
-            .Must(s => s is "Draft" or "Published" or "OnSale" or "SaleClosed" or "Completed" or "Cancelled")
-            .When(x => x.ConcertStatus is not null)
-            .WithMessage("ConcertStatus không hợp lệ.");
+        // Không nhận ConcertStatus: Concert luôn được tạo ở trạng thái Draft,
+        // mọi chuyển trạng thái phải qua sp_UpdateConcertStatus (BR49).
+        RuleFor(x => x.CancellationDeadlineHours).GreaterThan(0)
+            .When(x => x.CancellationDeadlineHours.HasValue)
+            .WithMessage("CancellationDeadlineHours phải lớn hơn 0.");
+        RuleFor(x => x.RefundPercentage).InclusiveBetween(0, 100)
+            .When(x => x.RefundPercentage.HasValue)
+            .WithMessage("RefundPercentage phải nằm trong khoảng 0-100.");
     }
 }
 
@@ -158,8 +160,12 @@ public class CreateSeatValidator : AbstractValidator<CreateSeatRequest>
 
 public class ConfigureTicketCategoryValidator : AbstractValidator<ConfigureTicketCategoryRequest>
 {
-    public ConfigureTicketCategoryValidator() =>
+    public ConfigureTicketCategoryValidator()
+    {
         RuleFor(x => x.CategoryName).NotEmpty().MaximumLength(255);
+        // BasePrice là nguồn sự thật của giá vé (BR10a), cascade xuống EventSeat.SalePrice.
+        RuleFor(x => x.BasePrice).GreaterThanOrEqualTo(0);
+    }
 }
 
 public class AddEventSeatsValidator : AbstractValidator<AddEventSeatsRequest>
@@ -167,7 +173,6 @@ public class AddEventSeatsValidator : AbstractValidator<AddEventSeatsRequest>
     public AddEventSeatsValidator()
     {
         RuleFor(x => x.TicketCategoryId).GreaterThan(0);
-        RuleFor(x => x.SalePrice).GreaterThanOrEqualTo(0);
         RuleFor(x => x.SeatIds).NotEmpty()
             .Must(ids => ids.Distinct().Count() == ids.Count)
             .WithMessage("Danh sách ghế không được trùng.");
@@ -177,16 +182,60 @@ public class AddEventSeatsValidator : AbstractValidator<AddEventSeatsRequest>
 
 public class CreatePromotionValidator : AbstractValidator<CreatePromotionRequest>
 {
+    /// <summary>
+    /// Tập giá trị được chấp nhận, khớp đúng phép chuẩn hoá trong sp_CreatePromotion:
+    /// hai giá trị chính thức, cộng các dạng viết tắt cũ được SP tự quy đổi.
+    /// So sánh không phân biệt hoa thường vì SP cũng dùng UPPER() khi quy đổi.
+    /// </summary>
+    private static readonly HashSet<string> AcceptedDiscountTypes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Percentage", "Fixed Amount",   // chính thức (§12.16.1)
+            "PERCENT", "FIXED",             // dạng cũ, sp_CreatePromotion tự quy đổi
+        };
+
     public CreatePromotionValidator()
     {
         RuleFor(x => x.PromotionName).NotEmpty().MaximumLength(255);
+        // Miền giá trị CHÍNH THỨC là 'Percentage' và 'Fixed Amount' — đúng theo
+        // CHK_Promotion_DiscountType của bảng Promotion và §12.16.1.
+        //
+        // Trước đây validator chỉ chấp nhận 'PERCENTAGE'/'FIXED', tức là nó TỪ CHỐI
+        // đúng hai giá trị mà database cho phép, và chỉ nhận dạng viết tắt cũ mà
+        // sp_CreatePromotion phải tự chuẩn hoá lại. Hậu quả: client gửi giá trị đúng
+        // theo đặc tả thì nhận HTTP 400. Nay validator chấp nhận đúng tập mà
+        // sp_CreatePromotion chấp nhận, để hai tầng nói cùng một ngôn ngữ.
         RuleFor(x => x.DiscountType)
-            .Must(t => t is "PERCENTAGE" or "FIXED")
-            .WithMessage("DiscountType phải là PERCENTAGE hoặc FIXED.");
+            .Must(t => t is not null && AcceptedDiscountTypes.Contains(t))
+            .WithMessage("DiscountType phải là 'Percentage' hoặc 'Fixed Amount'.");
         RuleFor(x => x.DiscountValue).GreaterThan(0);
         RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
             .WithMessage("EndDatetime phải sau StartDatetime.");
         RuleFor(x => x.UsageLimit).GreaterThan(0).When(x => x.UsageLimit is not null);
+    }
+}
+
+public class UpdateRefundStatusValidator : AbstractValidator<UpdateRefundStatusRequest>
+{
+    public UpdateRefundStatusValidator()
+    {
+        RuleFor(x => x.Status)
+            .Must(x => x is "Failed" or "Cancelled")
+            .WithMessage("Status phải là Failed hoặc Cancelled. Muốn xác nhận đã hoàn tiền xong thì dùng refunds/{id}/confirm.");
+        // Bắt buộc có lý do: đây là thao tác đóng một yêu cầu hoàn tiền mà khách
+        // không nhận được tiền, nên phải để lại dấu vết vì sao.
+        RuleFor(x => x.Reason).NotEmpty().MaximumLength(500);
+    }
+}
+
+public class UpdateRoleStatusValidator : AbstractValidator<UpdateRoleStatusRequest>
+{
+    public UpdateRoleStatusValidator()
+    {
+        RuleFor(x => x.RoleName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.Status)
+            .Must(x => x is "Active" or "Inactive")
+            .WithMessage("Status phải là Active hoặc Inactive.");
     }
 }
 
