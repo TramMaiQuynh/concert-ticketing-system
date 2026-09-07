@@ -23,7 +23,9 @@ CREATE OR ALTER PROCEDURE dbo.sp_UpdateConcert
     @WaitlistEnabled   BIT = NULL,
     @SalesPaused       BIT = NULL,
     @CancellationPolicy NVARCHAR(500) = NULL,
-    @RefundPolicy      NVARCHAR(500) = NULL
+    @RefundPolicy      NVARCHAR(500) = NULL,
+    @CancellationDeadlineHours INT = NULL,
+    @RefundPercentage  DECIMAL(5,2) = NULL
 )
 AS
 BEGIN
@@ -48,7 +50,8 @@ BEGIN
         IF NOT (
             @ActorUserID = @OrganizerUserID
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
         )
             THROW 58012, 'sp_UpdateConcert: Actor khong co quyen cap nhat Concert nay.', 1;
 
@@ -72,14 +75,16 @@ BEGIN
             WaitlistEnabled     = COALESCE(@WaitlistEnabled, WaitlistEnabled),
             SalesPaused         = COALESCE(@SalesPaused, SalesPaused),
             CancellationPolicy  = COALESCE(@CancellationPolicy, CancellationPolicy),
-            RefundPolicy        = COALESCE(@RefundPolicy, RefundPolicy)
+            RefundPolicy        = COALESCE(@RefundPolicy, RefundPolicy),
+            CancellationDeadlineHours = COALESCE(@CancellationDeadlineHours, CancellationDeadlineHours),
+            RefundPercentage    = COALESCE(@RefundPercentage, RefundPercentage)
         WHERE ConcertID = @ConcertID;
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
         VALUES (@ActorUserID, 'CONCERT_UPDATED', 'Concert',
                 CAST(@ConcertID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                '{"ConcertName":"' + @OldName + '"}',
-                '{"ConcertName":"' + ISNULL(@ConcertName, @OldName) + '"}');
+                '{"ConcertName":"' + STRING_ESCAPE(@OldName, 'json') + '"}',
+                '{"ConcertName":"' + STRING_ESCAPE(ISNULL(@ConcertName, @OldName), 'json') + '"}');
 
         COMMIT TRANSACTION;
     END TRY
