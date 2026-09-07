@@ -28,7 +28,15 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreateConcert
     @SalesPaused       BIT = 0,
     @CancellationPolicy NVARCHAR(500),
     @RefundPolicy       NVARCHAR(500),
-    @NewConcertID       INT OUTPUT
+    @CancellationDeadlineHours INT = 48,
+    @RefundPercentage   DECIMAL(5,2) = 100.00,
+    @NewConcertID       INT OUTPUT,
+    -- Nguoi THUC HIEN lenh, phan biet voi @OrganizerUserID la nguoi SO HUU Concert.
+    -- Truoc day SP nay la SP nghiep vu duy nhat khong kiem tra actor, nen mot user
+    -- bat ky co the tao Concert va gan quyen so huu cho mot Organizer khac.
+    -- NULL = actor chinh la Organizer (truong hop pho bien nhat).
+    -- Dat o CUOI danh sach de khong lam lech vi tri cua cac caller goi theo thu tu.
+    @ActorUserID        INT = NULL
 )
 AS
 BEGIN
@@ -61,30 +69,53 @@ BEGIN
 
         -- 3b. DR-01 / BR01: Organizer phai la User dang giu Role 'Organizer' Active
         --     (khong chi can tai khoan Active). RBAC §23.7.
+        --
+        -- CO Y khong loc theo Role.RoleStatus o day. §12.3.2 dinh nghia RoleStatus la
+        -- "vai tro co dang duoc phep PHAN CONG hay khong" - tuc no dieu khien DAU VAO,
+        -- khong phai quyen cua nguoi DANG giu vai tro. Loc them RoleStatus tai day se
+        -- bien mot thao tac "tam dung cap Role Organizer cho nguoi moi" thanh "moi
+        -- Organizer hien huu lap tuc het tao duoc Concert" - mot tac dung phu khong ai
+        -- dac ta va rat kho lan ra khi xay ra. Muon go quyen cua mot Organizer cu the
+        -- thi dung sp_AssignRole @GrantOrRevoke = 'Revoke', va dieu kien
+        -- `ura.AssignmentStatus = 'Active'` ngay duoi day se chan.
         IF NOT EXISTS (
             SELECT 1
             FROM   UserAccount ua
             JOIN   UserRoleAssignment ura ON ura.UserID = ua.UserID AND ura.AssignmentStatus = 'Active'
-            JOIN   Role r ON r.RoleID = ura.RoleID AND r.RoleName = 'Organizer' AND r.RoleStatus = 'Active'
+            JOIN   Role r ON r.RoleID = ura.RoleID AND r.RoleName = 'Organizer'
             WHERE  ua.UserID = @OrganizerUserID AND ua.AccountStatus = 'Active'
         )
             THROW 58006, 'sp_CreateConcert: Organizer khong ton tai, khong Active, hoac khong giu Role Organizer.', 1;
+
+        -- 3c. Uy quyen: chi chinh Organizer do, hoac Admin, moi duoc tao Concert
+        --     dung ten Organizer do.
+        SET @ActorUserID = ISNULL(@ActorUserID, @OrganizerUserID);
+
+        IF @ActorUserID <> @OrganizerUserID
+           AND NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura
+                           JOIN   Role r ON r.RoleID = ura.RoleID
+                           JOIN   UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                           WHERE  ura.UserID = @ActorUserID AND r.RoleName = 'Admin'
+                             AND  ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
+            THROW 58008, 'sp_CreateConcert: Actor khong co quyen tao Concert cho Organizer nay.', 1;
 
         -- 4. Insert
         INSERT INTO Concert
             (OrganizerUserID, ArtistID, VenueID, ConcertName, StartDatetime, EndDatetime,
              ConcertStatus, SaleStartDatetime, SaleEndDatetime, PurchaseLimit, TemporaryHoldDuration,
-             FairAccessEnabled, WaitlistEnabled, SalesPaused, CancellationPolicy, RefundPolicy)
+             FairAccessEnabled, WaitlistEnabled, SalesPaused, CancellationPolicy, RefundPolicy,
+             CancellationDeadlineHours, RefundPercentage)
         VALUES
             (@OrganizerUserID, @ArtistID, @VenueID, @ConcertName, @StartDatetime, @EndDatetime,
              @ConcertStatus, @SaleStartDatetime, @SaleEndDatetime, @PurchaseLimit, @TemporaryHoldDuration,
-             @FairAccessEnabled, @WaitlistEnabled, @SalesPaused, @CancellationPolicy, @RefundPolicy);
+             @FairAccessEnabled, @WaitlistEnabled, @SalesPaused, @CancellationPolicy, @RefundPolicy,
+             @CancellationDeadlineHours, @RefundPercentage);
 
         SET @NewConcertID = SCOPE_IDENTITY();
 
         -- 5. Audit
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
-        VALUES (@OrganizerUserID, 'CONCERT_CREATED', 'Concert',
+        VALUES (@ActorUserID, 'CONCERT_CREATED', 'Concert',
                 CAST(@NewConcertID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
                 '{"ConcertStatus":"Draft"}');
 
