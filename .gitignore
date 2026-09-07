@@ -24,3 +24,18 @@ Thumbs.db
 **/obj/
 *.user
 .vs/
+
+# ── Bí mật triển khai — KHÔNG BAO GIỜ commit ────────────────────────────────
+# Sinh ra bởi database/deploy.ps1 và scripts/setup-demo.ps1
+.deploy/
+**/appsettings.Local.json
+frontend/.env
+frontend/.env.local
+
+# ── File tạm / bản sao — không thuộc bài nộp ────────────────────────────────
+# ~$*.docx  : file khóa tạm của Word
+# *_bak.*   : bản sao cũ của đặc tả — rủi ro thật là người chấm mở nhầm bản này
+#             rồi thấy mâu thuẫn với mã nguồn
+~$*
+*_bak.*
+redis_bin/
