@@ -38,7 +38,7 @@ SET @SQL = N'
     DECLARE @bid2 INT = NULL;
     EXEC sp_CreateBooking @CustomerUserID=@uid2, @ConcertID=@cid,
         @SeatList=@seatstr, @NewBookingID=@bid2 OUTPUT;';
-EXEC sp_RunTest @Suite,'OversellGuard_SameSeat_OnlyOneWins','ERROR',51004,@SQL;
+EXEC test.sp_RunTest @Suite,'OversellGuard_SameSeat_OnlyOneWins','ERROR',51004,@SQL;
 
 -- ===== Test: 2 Booking tren ghe KHAC NHAU -> ca 2 phai thanh cong =====
 SET @SQL = N'
@@ -56,7 +56,7 @@ SET @SQL = N'
     
     IF @bid1 IS NULL OR @bid2 IS NULL
         THROW 50000, ''Ca 2 booking phai thanh cong'', 1;';
-EXEC sp_RunTest @Suite,'DifferentSeats_BothSucceed','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'DifferentSeats_BothSucceed','SUCCESS',NULL,@SQL;
 
 PRINT '== Concurrency Tests Done ==';
 GO
