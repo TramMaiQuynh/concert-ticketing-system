@@ -8,7 +8,6 @@ CREATE TABLE Ticket (
     IssuedTimestamp DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
     UsedTimestamp DATETIME2(7),
     CancelledTimestamp DATETIME2(7),
-    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_Ticket PRIMARY KEY CLUSTERED (TicketID),
     CONSTRAINT UQ_Ticket_TicketCode UNIQUE (TicketCode),
     CONSTRAINT FK_Ticket_Booking FOREIGN KEY (BookingID) REFERENCES Booking(BookingID),
@@ -16,8 +15,13 @@ CREATE TABLE Ticket (
     CONSTRAINT FK_Ticket_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
     CONSTRAINT FK_Ticket_Allocation FOREIGN KEY (BookingID, EventSeatID) REFERENCES BookingEventSeatAllocation(BookingID, EventSeatID),
     CONSTRAINT CHK_Ticket_Status CHECK (TicketStatus IN ('Issued', 'Used', 'Cancelled')),
-    CONSTRAINT CHK_Ticket_Timestamps CHECK (
-        (CASE WHEN UsedTimestamp IS NOT NULL THEN 1 ELSE 0 END +
-         CASE WHEN CancelledTimestamp IS NOT NULL THEN 1 ELSE 0 END) <= 1
+    -- Used va Cancelled deu la terminal va loai tru nhau (§10.1), dong thoi
+    -- moi trang thai terminal PHAI co dau thoi gian cua chinh no - neu khong,
+    -- luong huy ve khong the truy nguoc thoi diem huy.
+    CONSTRAINT CHK_Ticket_TimestampCoherence CHECK (
+            (CASE WHEN UsedTimestamp IS NOT NULL THEN 1 ELSE 0 END +
+             CASE WHEN CancelledTimestamp IS NOT NULL THEN 1 ELSE 0 END) <= 1
+        AND (TicketStatus <> 'Used'      OR UsedTimestamp      IS NOT NULL)
+        AND (TicketStatus <> 'Cancelled' OR CancelledTimestamp IS NOT NULL)
     )
 );
