@@ -17,7 +17,8 @@ BEGIN
         BEGIN TRANSACTION;
 
         IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 58101, 'sp_CreateVenue: Chi Admin duoc tao Venue.', 1;
 
         IF ISNULL(@VenueName, '') = ''
@@ -30,7 +31,7 @@ BEGIN
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@ActorUserID, 'VENUE_CREATED', 'Venue', CAST(@NewVenueID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
-                '{"VenueName":"' + @VenueName + '"}');
+                '{"VenueName":"' + STRING_ESCAPE(@VenueName, 'json') + '"}');
 
         COMMIT TRANSACTION;
     END TRY
