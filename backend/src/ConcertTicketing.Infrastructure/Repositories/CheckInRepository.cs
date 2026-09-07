@@ -11,19 +11,24 @@ namespace ConcertTicketing.Infrastructure.Repositories;
 
 public class CheckInRepository : ICheckInRepository
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
 
-    public CheckInRepository(string connectionString)
+    public CheckInRepository(IDbConnectionFactory factory)
     {
-        _connectionString = connectionString;
+        _factory = factory;
     }
 
     public async Task<CheckInResponse> CheckInAsync(int staffUserId, CheckInRequest request)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
-        p.Add("@TicketCode",          request.TicketCode,  DbType.String,  size: 100);
+        // size 64 = đúng độ rộng của @TicketCode VARCHAR(64) trong sp_CheckInTicket và của
+        // cột Ticket.TicketCode. Khai báo rộng hơn (trước đây 100) khiến giá trị dài hơn 64
+        // bị SQL Server cắt cụt lặng lẽ ở biên tham số — một mã vé sai có thể trở thành
+        // tiền tố khớp với mã khác thay vì bị từ chối.
+        // AnsiString khớp kiểu VARCHAR (không phải NVARCHAR) của cột.
+        p.Add("@TicketCode",          request.TicketCode,  DbType.AnsiString, size: 64);
         p.Add("@ConcertID",           request.ConcertId,   DbType.Int32);
         p.Add("@CheckInStaffUserID",  staffUserId,         DbType.Int32);
         p.Add("@ValidationResult",    dbType: DbType.String, size: 32,  direction: ParameterDirection.Output);
