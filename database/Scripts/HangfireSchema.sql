@@ -176,6 +176,22 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire
 CREATE NONCLUSTERED INDEX [IX_HangFire_Job_StateName] ON [HangFire].[Job] ([StateName] ASC) WHERE [StateName] IS NOT NULL
 GO
 
+-- IX_HangFire_Job_ExpireAt — BAT BUOC, khong phai de toi uu.
+--
+-- Tien trinh don dep cua Hangfire (ExpirationManager) xoa cac Job het han bang mot
+-- cau lenh co hint FORCESEEK. Khong co index tren ExpireAt thi trinh toi uu khong
+-- dung noi ke hoach thoa hint do va SQL Server nem loi 8622
+-- ("Query processor could not produce a query plan because of the hints defined in
+-- this query"). Loi nay lap lai theo tung chu ky don dep va lam ban log lien tuc.
+--
+-- Luoc do Hangfire viet tay o day thieu dung index nay, trong khi ban Install.sql
+-- chinh thuc cua Hangfire.SqlServer co tao no. Cac bang Set/Hash/List/AggregatedCounter
+-- deu da co index ExpireAt tuong ung ben duoi — chi rieng Job bi bo sot, dung khop voi
+-- viec thong bao loi chi xuat hien cho bang Job.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[Job]') AND name = N'IX_HangFire_Job_ExpireAt')
+CREATE NONCLUSTERED INDEX [IX_HangFire_Job_ExpireAt] ON [HangFire].[Job] ([ExpireAt] ASC) INCLUDE ([StateName]) WHERE [ExpireAt] IS NOT NULL
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[HangFire].[JobQueue]') AND name = N'IX_HangFire_JobQueue_QueueAndFetchedAt')
 CREATE NONCLUSTERED INDEX [IX_HangFire_JobQueue_QueueAndFetchedAt] ON [HangFire].[JobQueue] ([Queue] ASC, [FetchedAt] ASC)
 GO
