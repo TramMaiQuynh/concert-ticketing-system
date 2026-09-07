@@ -11,19 +11,26 @@ namespace ConcertTicketing.Infrastructure.Repositories;
 /// </summary>
 public class WaitlistRepository : IWaitlistRepository
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
 
-    public WaitlistRepository(string connectionString)
+    public WaitlistRepository(IDbConnectionFactory factory)
     {
-        _connectionString = connectionString;
+        _factory = factory;
     }
 
-    public async Task<WaitlistJoinResponse> JoinAsync(int customerUserId, int concertId)
+    /// <summary>
+    /// Đăng ký Waitlist. Bắt buộc chỉ định Ticket Category (BR40a) và số ghế
+    /// mong muốn (BR40b) — Waitlist gắn với một hạng vé cụ thể, không phải cả Concert.
+    /// </summary>
+    public async Task<WaitlistJoinResponse> JoinAsync(
+        int customerUserId, int concertId, int ticketCategoryId, int requestedQuantity)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
         var p = new DynamicParameters();
         p.Add("@CustomerUserID", customerUserId, DbType.Int32);
         p.Add("@ConcertID", concertId, DbType.Int32);
+        p.Add("@TicketCategoryID", ticketCategoryId, DbType.Int32);
+        p.Add("@RequestedQuantity", requestedQuantity, DbType.Int32);
         p.Add("@NewWaitlistEntryID", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync("sp_JoinWaitlist", p, commandType: CommandType.StoredProcedure);
@@ -38,7 +45,7 @@ public class WaitlistRepository : IWaitlistRepository
 
     public async Task<WaitlistEntryStatusDto?> GetMyEntryAsync(int customerUserId, int concertId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
         var sql = @"
             SELECT
                 we.WaitlistEntryID,
