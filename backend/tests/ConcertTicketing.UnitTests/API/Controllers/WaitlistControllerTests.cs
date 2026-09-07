@@ -37,9 +37,9 @@ public class WaitlistControllerTests
     public async Task Join_Returns200WithEntry()
     {
         var resp = new WaitlistJoinResponse(30, 1);
-        _mockRepo.Setup(r => r.JoinAsync(15, 2)).ReturnsAsync(resp);
+        _mockRepo.Setup(r => r.JoinAsync(15, 2, 7, 1)).ReturnsAsync(resp);
 
-        var result = await _controller.Join(2);
+        var result = await _controller.Join(2, new JoinWaitlistRequest(7, 1));
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().Be(resp);
@@ -72,7 +72,7 @@ public class WaitlistControllerTests
     {
         _controller.ControllerContext.HttpContext.User = new ClaimsPrincipal();
 
-        var act = async () => await _controller.Join(2);
+        var act = async () => await _controller.Join(2, new JoinWaitlistRequest(7, 1));
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
