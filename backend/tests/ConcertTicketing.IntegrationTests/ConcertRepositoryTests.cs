@@ -18,7 +18,7 @@ public sealed class ConcertRepositoryTests : IClassFixture<DbFixture>
     public ConcertRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private ConcertRepository Repo() => new(_fx.ApiConnectionString);
+    private ConcertRepository Repo() => new(_fx.ApiFactory);
 
     [Fact(DisplayName = "GetListAsync: concert OnSale xuất hiện; concert Draft không xuất hiện (public list)")]
     public async Task GetList_ExcludesDraft_IncludesOnSale()
@@ -72,6 +72,57 @@ public sealed class ConcertRepositoryTests : IClassFixture<DbFixture>
         detail.PurchaseLimit.Should().Be(4);
     }
 
+    [Fact(DisplayName = "GetByIdAsync: concert Draft KHÔNG lộ ra endpoint public → null")]
+    public async Task GetById_DraftConcert_ReturnsNull()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+
+        var draftName = $"IT-Concert-{Guid.NewGuid():N}-draft-{_fx.Suffix}";
+        var draftId = await s.CreateConcertDraftAsync(
+            baseline.OrganizerUserId, baseline.ArtistId, baseline.VenueId, concertName: draftName);
+
+        // GET /api/concerts/{id} là [AllowAnonymous]; concert chưa công bố không được lộ
+        // tên, nghệ sĩ, địa điểm, cửa sổ bán hay giới hạn mua cho bất kỳ ai đoán được ID.
+        var detail = await Repo().GetByIdAsync(draftId);
+        detail.Should().BeNull("concert Draft không được hiển thị công khai");
+    }
+
+    [Fact(DisplayName = "GetSeatsAsync: concert Draft và Cancelled không lộ sơ đồ ghế")]
+    public async Task GetSeats_DraftAndCancelled_ReturnsEmpty()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+
+        // Draft: chưa công bố → không lộ sơ đồ ghế lẫn giá
+        var draftName = $"IT-Concert-{Guid.NewGuid():N}-draft2-{_fx.Suffix}";
+        var draftId = await s.CreateConcertDraftAsync(
+            baseline.OrganizerUserId, baseline.ArtistId, baseline.VenueId, concertName: draftName);
+        var draftCat = await s.CreateTicketCategoryAsync(draftId);
+        // Dùng lại một Seat vật lý của baseline (cùng Venue nên thỏa TRG_EventSeatVenue);
+        // một Seat được phép nằm trong kho vé của nhiều Concert — UNIQUE là (ConcertID, SeatID).
+        await _fx.ExecAdminAsync(@"
+            INSERT INTO EventSeat (ConcertID, SeatID, TicketCategoryID, InventoryStatus, SalePrice)
+            SELECT @cid,
+                   (SELECT TOP 1 SeatID FROM EventSeat WHERE ConcertID = @base ORDER BY EventSeatID),
+                   tc.TicketCategoryID, 'Available', tc.BasePrice
+            FROM   TicketCategory tc WHERE tc.TicketCategoryID = @cat;",
+            new { cid = draftId, cat = draftCat, @base = baseline.ConcertId });
+
+        (await Repo().GetSeatsAsync(draftId)).Should().BeEmpty("concert Draft không được lộ sơ đồ ghế");
+
+        // Cancelled: BR50c — không tham gia luồng bán vé mới
+        await _fx.ExecAdminAsync(
+            "EXEC sp_UpdateConcertStatus @ConcertID=@cid, @ActorUserID=@adm, @NewStatus='Cancelled';",
+            new { cid = baseline.ConcertId, adm = baseline.AdminUserId });
+
+        (await Repo().GetSeatsAsync(baseline.ConcertId))
+            .Should().BeEmpty("concert đã hủy không vào luồng bán vé mới (BR50c)");
+
+        // Nhưng chi tiết concert đã hủy VẪN hiển thị — khách cần biết sự kiện bị hủy
+        (await Repo().GetByIdAsync(baseline.ConcertId)).Should().NotBeNull();
+    }
+
     [Fact(DisplayName = "GetByIdAsync: concert không tồn tại → null")]
     public async Task GetById_NotFound_ReturnsNull()
     {
@@ -88,8 +139,10 @@ public sealed class ConcertRepositoryTests : IClassFixture<DbFixture>
         var seats = (await Repo().GetSeatsAsync(baseline.ConcertId)).ToList();
 
         seats.Should().HaveCount(2);
+        // BR10a: mọi ghế cùng hạng vé có giá bằng BasePrice của hạng đó (100000),
+        // không còn đặt giá riêng từng ghế.
         seats.Should().Contain(x => x.SeatID == baseline.EventSeatId1 && x.Price == 100000);
-        seats.Should().Contain(x => x.SeatID == baseline.EventSeatId2 && x.Price == 150000);
+        seats.Should().Contain(x => x.SeatID == baseline.EventSeatId2 && x.Price == 100000);
         seats.Should().OnlyContain(x => x.InventoryStatus == "Available");
         seats.Should().OnlyContain(x => !string.IsNullOrEmpty(x.CategoryName));
     }
