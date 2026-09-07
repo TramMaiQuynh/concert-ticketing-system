@@ -21,6 +21,20 @@ public interface IAuthService
 
 public class AuthService : IAuthService
 {
+    /// <summary>
+    /// Hash BCrypt của một mật khẩu ngẫu nhiên, chỉ dùng để tiêu tốn đúng lượng thời gian
+    /// mà một lần xác thực thật tiêu tốn khi KHÔNG tìm thấy tài khoản.
+    ///
+    /// Không có nó, hai nhánh của LoginAsync chênh nhau khoảng một phần tư giây: tài khoản
+    /// không tồn tại thì trả lời gần như tức thì, còn tài khoản có thật mà sai mật khẩu thì
+    /// phải chờ BCrypt chạy với workFactor = 12 (~250ms). Chênh lệch cỡ đó đo được dễ dàng
+    /// qua mạng, biến trang đăng nhập thành công cụ dò tên tài khoản hợp lệ — kể cả khi
+    /// thông báo lỗi của hai nhánh giống hệt nhau.
+    /// Cùng workFactor với lúc đăng ký để chi phí hai nhánh tương đương.
+    /// </summary>
+    private static readonly string DummyPasswordHash =
+        BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N"), workFactor: 12);
+
     private readonly IUserRepository _userRepository;
     private readonly IConfiguration _config;
 
@@ -34,12 +48,18 @@ public class AuthService : IAuthService
 
     public async Task<(AuthResponse Auth, string RawRefreshToken)> LoginAsync(LoginRequest request)
     {
-        var user = await _userRepository.GetByUsernameAsync(request.Username)
-            ?? throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng.");
+        var user = await _userRepository.GetByUsernameAsync(request.Username);
 
-        // BCrypt.Verify đọc salt nhúng trong chuỗi hash ($2a$12$...)
-        // → Không cần cột PasswordSalt riêng
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        // Luôn chạy một lần xác thực BCrypt, kể cả khi không tìm thấy tài khoản
+        // (xem DummyPasswordHash): giữ cho hai nhánh có chi phí thời gian tương đương.
+        // BCrypt.Verify đọc salt nhúng trong chuỗi hash ($2a$12$...) nên không cần cột
+        // PasswordSalt riêng.
+        var hashToCheck = user?.PasswordHash ?? DummyPasswordHash;
+        var passwordOk = BCrypt.Net.BCrypt.Verify(request.Password, hashToCheck);
+
+        // Thông báo giống hệt nhau cho mọi lý do thất bại: sai tên, sai mật khẩu, tài
+        // khoản bị khóa, hay tài khoản dịch vụ không có mật khẩu.
+        if (user is null || !passwordOk)
             throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng.");
 
         var roles = await _userRepository.GetRolesAsync(user.UserID);
@@ -72,14 +92,31 @@ public class AuthService : IAuthService
 
     public async Task<(AuthResponse Auth, string RawRefreshToken)> RefreshAsync(string rawRefreshToken)
     {
-        var (userId, isValid) = await _userRepository.ValidateRefreshTokenAsync(rawRefreshToken);
+        var validation = await _userRepository.ValidateRefreshTokenAsync(rawRefreshToken);
 
-        if (!isValid || userId == 0)
+        // PHÁT HIỆN TOKEN BỊ DÙNG LẠI (OWASP — refresh token rotation).
+        // Một token ĐÃ BỊ THU HỒI mà vẫn được trình lên nghĩa là có hai bản sao của cùng
+        // một token đang tồn tại: bản hợp lệ đã được xoay vòng, và bản này. Không có cách
+        // nào biết bản nào đang nằm trong tay kẻ tấn công, nên phản ứng đúng là cắt sạch
+        // cả chuỗi token của user đó và buộc đăng nhập lại.
+        //
+        // Trước đây đoạn này chỉ từ chối riêng token bị trình lên. Comment cũ nói rằng hệ
+        // thống "phát hiện" việc dùng lại, nhưng thực tế không hề: kẻ tấn công dùng token
+        // ăn cắp trước sẽ tiếp tục giữ được chuỗi token hợp lệ, còn người dùng thật chỉ bị
+        // đăng xuất — đúng chiều ngược lại với điều mong muốn.
+        if (validation.State == RefreshTokenState.Revoked)
+        {
+            await _userRepository.RevokeAllRefreshTokensForUserAsync(validation.UserId);
+            throw new UnauthorizedAccessException(
+                "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.");
+        }
+
+        if (!validation.IsValid || validation.UserId == 0)
             throw new UnauthorizedAccessException("Refresh token không hợp lệ hoặc đã hết hạn.");
 
+        var userId = validation.UserId;
+
         // Thu hồi token cũ TRƯỚC khi cấp token mới (Refresh Token Rotation).
-        // Mục đích: nếu token cũ bị đánh cắp và được dùng lại → hệ thống phát hiện
-        // (token đã revoked) → buộc đăng nhập lại.
         await _userRepository.RevokeRefreshTokenAsync(rawRefreshToken);
 
         // Lấy lại thông tin user để tạo Access Token đầy đủ claims
