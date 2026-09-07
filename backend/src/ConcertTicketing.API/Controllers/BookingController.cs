@@ -35,6 +35,13 @@ public class BookingController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, result);
     }
 
+    /// <summary>Lịch sử đặt vé của chính người đang đăng nhập (FR50).</summary>
+    [HttpGet]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(IEnumerable<MyBookingListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyBookings()
+        => Ok(await _bookingRepository.GetMyBookingsAsync());
+
     /// <summary>Xem chi tiết booking</summary>
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(BookingDetail), StatusCodes.Status200OK)]
