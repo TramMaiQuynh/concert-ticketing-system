@@ -28,7 +28,7 @@ SET @SQL = N'
         @ConcertID      = @cid_draft,
         @SeatList       = ''1'',
         @NewBookingID   = @bid OUTPUT;';
-EXEC sp_RunTest @Suite,'Concert_NotOnSale_Fail51001','ERROR',51001,@SQL;
+EXEC test.sp_RunTest @Suite,'Concert_NotOnSale_Fail51001','ERROR',51001,@SQL;
 
 -- ===== 51001: Concert SalesPaused =====
 SET @SQL = N'
@@ -41,7 +41,7 @@ SET @SQL = N'
         @ConcertID      = @cid,
         @SeatList       = ''1'',
         @NewBookingID   = @bid OUTPUT;';
-EXEC sp_RunTest @Suite,'Concert_SalesPaused_Fail51001','ERROR',51001,@SQL;
+EXEC test.sp_RunTest @Suite,'Concert_SalesPaused_Fail51001','ERROR',51001,@SQL;
 
 -- ===== 51002: SeatList rong =====
 SET @SQL = N'
@@ -53,7 +53,7 @@ SET @SQL = N'
         @ConcertID      = @cid,
         @SeatList       = '''',
         @NewBookingID   = @bid OUTPUT;';
-EXEC sp_RunTest @Suite,'EmptySeatList_Fail51002','ERROR',51002,@SQL;
+EXEC test.sp_RunTest @Suite,'EmptySeatList_Fail51002','ERROR',51002,@SQL;
 
 -- ===== 51003: Exceed PurchaseLimit =====
 SET @SQL = N'
@@ -70,7 +70,7 @@ SET @SQL = N'
         @ConcertID      = @cid,
         @SeatList       = @seats,
         @NewBookingID   = @bid OUTPUT;';
-EXEC sp_RunTest @Suite,'ExceedPurchaseLimit_Fail51003','ERROR',51003,@SQL;
+EXEC test.sp_RunTest @Suite,'ExceedPurchaseLimit_Fail51003','ERROR',51003,@SQL;
 
 -- ===== 51004: Seat khong Available =====
 SET @SQL = N'
@@ -81,7 +81,7 @@ SET @SQL = N'
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
     DECLARE @bid INT;
     DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR); EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;';
-EXEC sp_RunTest @Suite,'SeatNotAvailable_Fail51004','ERROR',51004,@SQL;
+EXEC test.sp_RunTest @Suite,'SeatNotAvailable_Fail51004','ERROR',51004,@SQL;
 
 -- ===== Happy Path: 1 ghe =====
 SET @SQL = N'
@@ -97,7 +97,7 @@ SET @SQL = N'
         THROW 50000, ''EventSeat phai OnHold'', 1;
     IF NOT EXISTS (SELECT 1 FROM BookingEventSeatAllocation WHERE BookingID=@bid AND EventSeatID=@esid AND AllocationStatus=''Active'')
         THROW 50000, ''Allocation khong ton tai'', 1;';
-EXEC sp_RunTest @Suite,'CreateBooking_1Seat_HappyPath','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CreateBooking_1Seat_HappyPath','SUCCESS',NULL,@SQL;
 
 -- ===== Happy Path: 2 ghe =====
 SET @SQL = N'
@@ -114,7 +114,7 @@ SET @SQL = N'
         @NewBookingID   = @bid OUTPUT;
     DECLARE @cnt INT = (SELECT COUNT(*) FROM BookingEventSeatAllocation WHERE BookingID=@bid AND AllocationStatus=''Active'');
     IF @cnt <> 2 THROW 50000, ''Expected 2 allocations'', 1;';
-EXEC sp_RunTest @Suite,'CreateBooking_2Seats_HappyPath','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CreateBooking_2Seats_HappyPath','SUCCESS',NULL,@SQL;
 
 PRINT '== SP_CreateBooking Tests Done ==';
 GO
