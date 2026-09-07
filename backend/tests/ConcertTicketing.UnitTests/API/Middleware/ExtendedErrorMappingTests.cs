@@ -23,21 +23,37 @@ public class ExtendedErrorMappingTests
     public static TheoryData<int, int> ErrorCodeMappings => new()
     {
         // sp_CreateConcert / sp_UpdateConcert / sp_UpdateConcertStatus
-        { 58001, 400 }, { 58002, 400 }, { 58003, 400 }, { 58004, 400 },
-        { 58005, 400 }, { 58006, 400 }, { 58010, 404 }, { 58011, 409 },
+        // 58001 da bi go: khong SP nao con nem ma nay (giu mapping cho mot ma khong
+        // ton tai chi tao ao giac ve do phu khi doi chieu voi tang DB).
+        { 58002, 400 }, { 58003, 400 }, { 58004, 400 },
+        { 58005, 400 }, { 58006, 400 }, { 58007, 400 }, { 58010, 404 }, { 58011, 409 },
         { 58012, 403 }, { 58013, 400 }, { 58020, 400 }, { 58021, 404 }, { 58022, 403 },
+        { 58023, 422 }, { 58024, 422 },
 
         // sp_CreateVenue / sp_CreateZone / sp_CreateSeat
         { 58101, 403 }, { 58102, 400 }, { 58111, 403 }, { 58112, 400 },
         { 58113, 400 }, { 58121, 403 }, { 58122, 400 }, { 58123, 400 },
 
         // sp_ConfigureTicketCategory / sp_AddEventSeats
-        { 58201, 404 }, { 58202, 403 }, { 58203, 400 }, { 58211, 404 },
-        { 58212, 403 }, { 58213, 400 }, { 58214, 400 }, { 58215, 400 },
+        { 58201, 404 }, { 58202, 403 }, { 58203, 400 }, { 58204, 404 }, { 58211, 404 },
+        { 58212, 403 }, { 58213, 400 }, { 58215, 400 },   // 58214 da bi go (khong con duoc nem)
         { 58216, 400 }, { 58217, 409 },
 
         // sp_CreatePromotion
         { 58301, 404 }, { 58302, 403 }, { 58303, 400 }, { 58304, 400 }, { 58305, 400 },
+        { 58306, 400 },
+
+        // Cac ma truoc day KHONG duoc anh xa -> roi vao nhanh mac dinh va tra HTTP 500
+        // cho mot loi nghiep vu binh thuong. sp_CreateBooking (applock) va sp_ApplyPromotion
+        // la hai cho de gap nhat trong van hanh thuc te.
+        { 51006, 409 },
+        { 54001, 404 }, { 54002, 409 }, { 54003, 404 }, { 54004, 400 },
+        { 54005, 400 }, { 54007, 422 }, { 54008, 400 },
+        { 50000, 409 },
+
+        // Thieu ban ghi SystemConfiguration bat buoc: dung la 500, nhung phai co thong
+        // bao noi ro nguyen nhan thay vi "loi co so du lieu".
+        { 58705, 500 }, { 59301, 500 }, { 59701, 500 },
 
         // sp_AssignRole
         { 58401, 403 }, { 58402, 400 }, { 58403, 400 }, { 58404, 403 },
