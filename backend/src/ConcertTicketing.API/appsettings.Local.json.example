@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Chép file này thành appsettings.Local.json rồi điền giá trị thật.",
+    "appsettings.Local.json nằm trong .gitignore và KHÔNG BAO GIỜ được commit.",
+    "Chuỗi kết nối và mật khẩu SQL do database/deploy.ps1 sinh ra và ghi vào",
+    ".deploy/db-credentials.json — chép apiServiceConnection sang đây.",
+    "Hoặc chạy scripts/setup-demo.ps1 để tự động toàn bộ bước này."
+  ],
+  "ConnectionStrings": {
+    "Default": "<apiServiceConnection tu .deploy/db-credentials.json>"
+  },
+  "Jwt": {
+    "Secret": "<chuoi ngau nhien >= 32 ky tu>"
+  },
+  "PaymentSignature": {
+    "Secret": "<chuoi ngau nhien >= 32 ky tu>"
+  }
+}
