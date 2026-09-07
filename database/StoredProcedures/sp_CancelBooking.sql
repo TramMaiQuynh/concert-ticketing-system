@@ -44,22 +44,26 @@ BEGIN
         UPDATE BookingEventSeatAllocation
         SET    AllocationStatus = 'Released', 
                ReleaseTimestamp = SYSDATETIME()
-        WHERE  BookingID = @BookingID;
+        WHERE  BookingID = @BookingID AND AllocationStatus = 'Active';
 
         -- 4. Cap nhat EventSeat
         -- BR33a: Neu Concert co Waitlist Open -> OnHoldForWaitlist, nguoc lai -> Available
         UPDATE es
-        SET    InventoryStatus = CASE
-                                 WHEN (SELECT WaitlistStatus FROM Waitlist WHERE ConcertID = es.ConcertID) = 'Open'
-                                 THEN 'OnHoldForWaitlist'
-                                 ELSE 'Available'
+        SET    InventoryStatus = CASE 
+                                 WHEN EXISTS (
+                                     SELECT 1 FROM Waitlist w 
+                                     JOIN WaitlistEntry we ON w.WaitlistID = we.WaitlistID 
+                                     WHERE w.ConcertID = es.ConcertID 
+                                       AND w.WaitlistStatus = 'Open' 
+                                       AND we.TicketCategoryID = es.TicketCategoryID 
+                                       AND we.EntryStatus = 'Active'
+                                 )
+                                 THEN 'OnHoldForWaitlist' 
+                                 ELSE 'Available' 
                                  END
         FROM   EventSeat es
-        WHERE  EventSeatID IN (
-            SELECT EventSeatID 
-            FROM   BookingEventSeatAllocation 
-            WHERE  BookingID = @BookingID
-        );
+        WHERE  EventSeatID IN (SELECT EventSeatID FROM BookingEventSeatAllocation WHERE BookingID = @BookingID)
+          AND  InventoryStatus IN ('OnHold', 'Booked');
 
         -- 5. Ghi AuditRecord
         INSERT INTO AuditRecord
