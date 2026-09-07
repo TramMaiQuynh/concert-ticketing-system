@@ -25,7 +25,7 @@ SET @SQL = N'
         IF ERROR_NUMBER() = 50000 THROW;  -- re-throw test fail
         -- loi 229 = SELECT denied -> dat yeu cau
     END CATCH;';
-EXEC sp_RunTest @Suite,'Customer_DENY_SELECT_Booking','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Customer_DENY_SELECT_Booking','SUCCESS',NULL,@SQL;
 
 -- ===== app_customer: DENY SELECT on Payment =====
 SET @SQL = N'
@@ -39,7 +39,7 @@ SET @SQL = N'
         REVERT;
         IF ERROR_NUMBER() = 50000 THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Customer_DENY_SELECT_Payment','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Customer_DENY_SELECT_Payment','SUCCESS',NULL,@SQL;
 
 -- ===== app_customer: GRANT SELECT on VW_CustomerBookingHistory =====
 SET @SQL = N'
@@ -52,7 +52,7 @@ SET @SQL = N'
         REVERT;
         THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Customer_GRANT_SELECT_View','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Customer_GRANT_SELECT_View','SUCCESS',NULL,@SQL;
 
 -- ===== app_organizer: DENY SELECT on AuditRecord =====
 SET @SQL = N'
@@ -66,7 +66,7 @@ SET @SQL = N'
         REVERT;
         IF ERROR_NUMBER() = 50000 THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Organizer_DENY_SELECT_AuditRecord','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Organizer_DENY_SELECT_AuditRecord','SUCCESS',NULL,@SQL;
 
 -- ===== app_organizer: GRANT SELECT on Booking (xem don hang) =====
 SET @SQL = N'
@@ -79,13 +79,13 @@ SET @SQL = N'
         REVERT;
         THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Organizer_GRANT_SELECT_Booking','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Organizer_GRANT_SELECT_Booking','ERROR',229,@SQL;
 
 -- ===== app_checkinstaff: DENY UPDATE on Ticket truc tiep =====
 SET @SQL = N'
     EXECUTE AS USER = ''app_checkinstaff'';
     BEGIN TRY
-        UPDATE Ticket SET TicketStatus=''Used'' WHERE 1=0;
+        UPDATE Ticket SET TicketStatus=''Used'', UsedTimestamp=SYSDATETIME() WHERE 1=0;
         REVERT;
         THROW 50000, ''Expected DENY UPDATE on Ticket'', 1;
     END TRY
@@ -93,7 +93,7 @@ SET @SQL = N'
         REVERT;
         IF ERROR_NUMBER() = 50000 THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Staff_DENY_UPDATE_Ticket','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Staff_DENY_UPDATE_Ticket','SUCCESS',NULL,@SQL;
 
 -- ===== app_checkinstaff: DENY SELECT on Payment =====
 SET @SQL = N'
@@ -107,7 +107,7 @@ SET @SQL = N'
         REVERT;
         IF ERROR_NUMBER() = 50000 THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Staff_DENY_SELECT_Payment','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Staff_DENY_SELECT_Payment','SUCCESS',NULL,@SQL;
 
 -- ===== app_checkinstaff: GRANT SELECT on Ticket =====
 SET @SQL = N'
@@ -120,7 +120,7 @@ SET @SQL = N'
         REVERT;
         THROW;
     END CATCH;';
-EXEC sp_RunTest @Suite,'Staff_GRANT_SELECT_Ticket','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'Staff_GRANT_SELECT_Ticket','SUCCESS',NULL,@SQL;
 
 PRINT '== Security_RBAC Tests Done ==';
 GO
