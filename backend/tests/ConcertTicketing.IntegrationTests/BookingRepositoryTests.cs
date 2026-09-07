@@ -21,8 +21,8 @@ public sealed class BookingRepositoryTests : IClassFixture<DbFixture>
     public BookingRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private BookingRepository Repo() => new(_fx.ApiConnectionString);
-    private PaymentRepository PaymentRepo() => new(_fx.ApiConnectionString, _fx.PaymentSignatureSecret);
+    private BookingRepository Repo() => new(_fx.ApiFactory);
+    private PaymentRepository PaymentRepo() => new(_fx.ApiFactory, _fx.PaymentSignatureSecret, DbFixture.TestGateway);
 
     // ── CreateBooking ──────────────────────────────────────────────────────────
 
@@ -104,7 +104,7 @@ public sealed class BookingRepositoryTests : IClassFixture<DbFixture>
     {
         var s = NewSeeder();
         var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
-        var adminRepo = new AdminRepository(_fx.ApiConnectionString);
+        var adminRepo = new AdminRepository(_fx.ApiFactory);
 
         var promoId = await adminRepo.CreatePromotionAsync(baseline.AdminUserId, baseline.ConcertId,
             new CreatePromotionRequest(
@@ -147,7 +147,7 @@ public sealed class BookingRepositoryTests : IClassFixture<DbFixture>
     {
         var s = NewSeeder();
         var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
-        var adminRepo = new AdminRepository(_fx.ApiConnectionString);
+        var adminRepo = new AdminRepository(_fx.ApiFactory);
 
         var promoId = await adminRepo.CreatePromotionAsync(baseline.AdminUserId, baseline.ConcertId,
             new CreatePromotionRequest(
@@ -218,7 +218,7 @@ public sealed class BookingRepositoryTests : IClassFixture<DbFixture>
         init.PaymentId.Should().BeGreaterThan(0);
         init.PaymentReference.Should().NotBeNullOrEmpty();
         init.Amount.Should().Be(100000);
-        init.PaymentSignature.Should().NotBeNullOrEmpty();
+        _fx.ComputePaymentSignature(booking.BookingId, init.PaymentId, init.Amount).Should().NotBeNullOrEmpty();
 
         var status = await _fx.QueryAdminAsync<string>(
             "SELECT PaymentStatus FROM Payment WHERE PaymentID = @id", new { id = init.PaymentId });
@@ -226,5 +226,44 @@ public sealed class BookingRepositoryTests : IClassFixture<DbFixture>
 
         var act = () => payment.InitiateAsync(booking.BookingId, baseline.CustomerUserId);
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 56003);
+    }
+
+    [Fact(DisplayName = "GetMyBookings: RLS của VW_CustomerBookingHistory chỉ trả đơn của chính khách")]
+    public async Task GetMyBookings_OnlyReturnsOwnBookings()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+        var other = await s.CreateUserAsync("Customer", instance: 8);
+
+        var repo = Repo();
+        var mine = await repo.CreateAsync(baseline.CustomerUserId,
+            new CreateBookingRequest(baseline.ConcertId, new List<int> { baseline.EventSeatId1 }));
+        var theirs = await repo.CreateAsync(other,
+            new CreateBookingRequest(baseline.ConcertId, new List<int> { baseline.EventSeatId2 }));
+
+        // Đọc dưới danh tính của baseline.CustomerUserId: view lọc bằng
+        // SESSION_CONTEXT(N'UserID') nên phạm vi do database quyết định, không phải
+        // do tham số truyền lên.
+        var asOwner = new BookingRepository(_fx.ApiFactory.AsUser(baseline.CustomerUserId));
+        var rows = (await asOwner.GetMyBookingsAsync()).ToList();
+
+        rows.Should().Contain(x => x.BookingID == mine.BookingId);
+        rows.Should().NotContain(x => x.BookingID == theirs.BookingId,
+            "RLS phải chặn đơn của khách hàng khác");
+        rows.Should().OnlyContain(x => x.SeatCount >= 1);
+    }
+
+    [Fact(DisplayName = "GetMyBookings: không có session context → 0 dòng (fail-closed)")]
+    public async Task GetMyBookings_WithoutSessionContext_ReturnsNothing()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+        await Repo().CreateAsync(baseline.CustomerUserId,
+            new CreateBookingRequest(baseline.ConcertId, new List<int> { baseline.EventSeatId1 }));
+
+        // _fx.ApiFactory không đặt SESSION_CONTEXT (không có danh tính HTTP trong test).
+        // View phải trả rỗng chứ không được lộ dữ liệu của người khác.
+        var rows = (await Repo().GetMyBookingsAsync()).ToList();
+        rows.Should().BeEmpty("thiếu session context thì view phải fail-closed");
     }
 }
