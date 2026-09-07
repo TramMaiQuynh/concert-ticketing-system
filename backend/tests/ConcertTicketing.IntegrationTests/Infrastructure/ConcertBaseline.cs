@@ -44,9 +44,11 @@ public static class ConcertBaselineFactory
 
         var concertId = await seeder.CreateConcertDraftAsync(
             organizer, artist, venue, waitlistEnabled, fairAccess, purchaseLimit);
-        var category = await seeder.CreateTicketCategoryAsync(concertId);
-        var es1 = await seeder.CreateEventSeatAsync(concertId, seat1, category, price: 100000);
-        var es2 = await seeder.CreateEventSeatAsync(concertId, seat2, category, price: 150000);
+        // BR10a: mọi EventSeat của cùng một hạng vé có giá bằng BasePrice của hạng đó —
+        // không còn đặt giá riêng cho từng ghế (TRG_EventSeat_PriceInsert canh giữ).
+        var category = await seeder.CreateTicketCategoryAsync(concertId, basePrice: 100000);
+        var es1 = await seeder.CreateEventSeatAsync(concertId, seat1, category);
+        var es2 = await seeder.CreateEventSeatAsync(concertId, seat2, category);
 
         await seeder.SetConcertOnSaleAsync(concertId);
 
