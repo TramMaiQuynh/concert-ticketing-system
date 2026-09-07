@@ -19,10 +19,14 @@ public sealed class WaitlistQueueRepositoryTests : IClassFixture<DbFixture>
     public WaitlistQueueRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private WaitlistRepository WaitlistRepo() => new(_fx.ApiConnectionString);
-    private QueueRepository QueueRepo() => new(_fx.ApiConnectionString);
+    private WaitlistRepository WaitlistRepo() => new(_fx.ApiFactory);
+    private QueueRepository QueueRepo() => new(_fx.ApiFactory);
 
-    private async Task<(int concertId, int customerId)> CreateConcertAsync(bool waitlist, bool fairAccess)
+    /// <summary>
+    /// Tra ve Concert dang OnSale: sp_JoinQueue yeu cau Concert o giai doan mo ban
+    /// (BP11), nen Concert Draft se bi tu choi bang 58704.
+    /// </summary>
+    private async Task<(int concertId, int customerId, int categoryId)> CreateConcertAsync(bool waitlist, bool fairAccess)
     {
         var s = NewSeeder();
         var organizer = await s.CreateUserAsync("Organizer");
@@ -31,16 +35,18 @@ public sealed class WaitlistQueueRepositoryTests : IClassFixture<DbFixture>
         var venue = await s.CreateVenueAsync();
         var concertId = await s.CreateConcertDraftAsync(organizer, artist, venue,
             waitlistEnabled: waitlist, fairAccess: fairAccess);
-        return (concertId, customer);
+        var categoryId = await s.CreateTicketCategoryAsync(concertId);
+        await s.SetConcertOnSaleAsync(concertId);
+        return (concertId, customer, categoryId);
     }
 
     [Fact(DisplayName = "Waitlist: join → position ≥1; join lặp → 58503; getMyEntry trả đúng")]
     public async Task Waitlist_Join_ThenDuplicateRejected()
     {
-        var (concertId, customer) = await CreateConcertAsync(waitlist: true, fairAccess: false);
+        var (concertId, customer, categoryId) = await CreateConcertAsync(waitlist: true, fairAccess: false);
         var repo = WaitlistRepo();
 
-        var join = await repo.JoinAsync(customer, concertId);
+        var join = await repo.JoinAsync(customer, concertId, categoryId, 1);
         join.WaitlistEntryId.Should().BeGreaterThan(0);
         join.QueuePosition.Should().BeGreaterThan(0);
 
@@ -49,23 +55,23 @@ public sealed class WaitlistQueueRepositoryTests : IClassFixture<DbFixture>
         entry!.WaitlistEntryId.Should().Be(join.WaitlistEntryId);
         entry.EntryStatus.Should().Be("Active");
 
-        var act = () => repo.JoinAsync(customer, concertId);
+        var act = () => repo.JoinAsync(customer, concertId, categoryId, 1);
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 58503);
     }
 
     [Fact(DisplayName = "Waitlist: concert không bật Waitlist → SqlException 58502")]
     public async Task Waitlist_ConcertDisabled_Throws58502()
     {
-        var (concertId, customer) = await CreateConcertAsync(waitlist: false, fairAccess: false);
+        var (concertId, customer, categoryId) = await CreateConcertAsync(waitlist: false, fairAccess: false);
 
-        var act = () => WaitlistRepo().JoinAsync(customer, concertId);
+        var act = () => WaitlistRepo().JoinAsync(customer, concertId, categoryId, 1);
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 58502);
     }
 
     [Fact(DisplayName = "Queue: join → QueueEntryId + Waiting; join lặp → 58703; getMyEntry")]
     public async Task Queue_Join_ThenDuplicateRejected()
     {
-        var (concertId, customer) = await CreateConcertAsync(waitlist: false, fairAccess: true);
+        var (concertId, customer, categoryId) = await CreateConcertAsync(waitlist: false, fairAccess: true);
         var repo = QueueRepo();
 
         var join = await repo.JoinAsync(customer, concertId);
@@ -83,7 +89,7 @@ public sealed class WaitlistQueueRepositoryTests : IClassFixture<DbFixture>
     [Fact(DisplayName = "Queue: concert không bật Fair Access → SqlException 58702")]
     public async Task Queue_ConcertDisabled_Throws58702()
     {
-        var (concertId, customer) = await CreateConcertAsync(waitlist: false, fairAccess: false);
+        var (concertId, customer, categoryId) = await CreateConcertAsync(waitlist: false, fairAccess: false);
 
         var act = () => QueueRepo().JoinAsync(customer, concertId);
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 58702);
