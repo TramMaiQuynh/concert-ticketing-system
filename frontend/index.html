@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Màu thanh trạng thái trình duyệt mobile, khớp từng theme. -->
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101013" media="(prefers-color-scheme: dark)" />
+
+    <meta name="description" content="Hệ thống đặt vé sự kiện âm nhạc — chọn ghế theo thời gian thực, thanh toán an toàn, soát vé tại cổng." />
+
+    <!--
+      Tải phông sớm. preconnect mở sẵn kết nối tới hai máy chủ của Google Fonts
+      trước khi CSS được phân tích, cắt được một vòng bắt tay TLS. Thiếu
+      crossorigin ở dòng gstatic thì preconnect vô tác dụng với file phông.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+
+    <title>TicketPro — Đặt vé sự kiện</title>
+
+    <!--
+      CHỐNG CHỚP TRẮNG.
+
+      Phải chạy ĐỒNG BỘ, ngay trong <head>, TRƯỚC khi trang vẽ khung hình đầu.
+      Nếu để React đặt data-theme sau khi khởi động, người dùng chọn giao diện
+      tối sẽ thấy một nhịp nền trắng loé lên rồi mới tối lại — lỗi mà gần như
+      mọi bản dark mode tự làm đều mắc.
+
+      Chỉ đọc localStorage; không có giá trị thì không đặt gì và CSS tự rơi về
+      prefers-color-scheme của hệ điều hành.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('ct.theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) {
+          /* chế độ riêng tư chặn localStorage — rơi về cài đặt hệ thống */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
