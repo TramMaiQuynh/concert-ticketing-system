@@ -19,16 +19,22 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        DECLARE @OrganizerUserID INT;
-        SELECT @OrganizerUserID = OrganizerUserID FROM Concert WHERE ConcertID = @ConcertID;
+        DECLARE @OrganizerUserID INT, @ConcertStatus VARCHAR(32);
+        SELECT @OrganizerUserID = OrganizerUserID, @ConcertStatus = ConcertStatus
+        FROM   Concert WHERE ConcertID = @ConcertID;
 
-        IF @OrganizerUserID IS NULL
+        IF @ConcertStatus IS NULL
             THROW 58211, 'sp_AddEventSeats: Concert khong ton tai.', 1;
+
+        -- Precondition BP3: chi cau hinh kho ve khi Concert o trang thai Draft hoac Published.
+        IF @ConcertStatus NOT IN ('Draft', 'Published')
+            THROW 58218, 'sp_AddEventSeats (BP3): Chi them EventSeat khi Concert o trang thai Draft hoac Published.', 1;
 
         IF NOT (
             @ActorUserID = @OrganizerUserID
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
         )
             THROW 58212, 'sp_AddEventSeats: Actor khong co quyen.', 1;
 
@@ -58,6 +64,15 @@ BEGIN
             WHERE s.SeatID IS NULL
         )
             THROW 58216, 'sp_AddEventSeats: Co Seat khong ton tai.', 1;
+
+        -- BR50e/HAI02: Seat hoac Zone da Retired khong duoc dua vao kho ve moi.
+        IF EXISTS (
+            SELECT 1 FROM @SeatRequests sr
+            JOIN   Seat s ON s.SeatID = sr.SeatID
+            JOIN   Zone z ON z.ZoneID = s.ZoneID
+            WHERE  s.SeatStatus = 'Retired' OR z.ZoneStatus = 'Retired'
+        )
+            THROW 58219, 'sp_AddEventSeats (BR50e): Co Seat hoac Zone da Retired, khong the dua vao kho ve.', 1;
 
         IF EXISTS (
             SELECT 1 FROM EventSeat es
