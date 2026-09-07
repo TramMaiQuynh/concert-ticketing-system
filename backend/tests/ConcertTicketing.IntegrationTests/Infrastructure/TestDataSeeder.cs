@@ -108,8 +108,10 @@ public sealed class TestDataSeeder
                 StartDatetime, EndDatetime, ConcertStatus,
                 SaleStartDatetime, SaleEndDatetime, PurchaseLimit,
                 FairAccessEnabled, WaitlistEnabled, SalesPaused)
+            -- Start cach hien tai 30 ngay: Concert.CancellationDeadlineHours mac dinh 48h
+            -- (BR31a), nen neu Start chi cach 1 ngay thi moi test huy ve se bi chan boi 53013.
             VALUES (@org, @art, @vid, @name,
-                DATEADD(day,1,SYSUTCDATETIME()), DATEADD(day,2,SYSUTCDATETIME()), 'Draft',
+                DATEADD(day,30,SYSUTCDATETIME()), DATEADD(day,30,DATEADD(hour,3,SYSUTCDATETIME())), 'Draft',
                 DATEADD(day,-1,SYSUTCDATETIME()), DATEADD(day,30,SYSUTCDATETIME()), @pl,
                 @fair, @wl, 0);",
             new { org = organizerId, art = artistId, vid = venueId, name = name,
@@ -118,24 +120,31 @@ public sealed class TestDataSeeder
             "SELECT ConcertID FROM Concert WHERE ConcertName = @n", new { n = name }))!.Value;
     }
 
-    public async Task<int> CreateTicketCategoryAsync(int concertId)
+    /// <summary>BasePrice la nguon su that cua gia ve (BR10a) - bat buoc, NOT NULL.</summary>
+    public async Task<int> CreateTicketCategoryAsync(int concertId, decimal basePrice = 100000)
     {
         var name = $"IT-Cat-{_testId}-{_suffix}";
         await _fixture.ExecAdminAsync(@"
-            INSERT INTO TicketCategory (ConcertID, CategoryName, CategoryDescription, CategoryStatus)
-            VALUES (@cid, @name, 'IT', 'Active');",
-            new { cid = concertId, name = name });
+            INSERT INTO TicketCategory (ConcertID, CategoryName, CategoryDescription, CategoryStatus, BasePrice)
+            VALUES (@cid, @name, 'IT', 'Active', @price);",
+            new { cid = concertId, name = name, price = basePrice });
         return (await _fixture.QueryAdminAsync<int?>(
             "SELECT TicketCategoryID FROM TicketCategory WHERE ConcertID = @cid AND CategoryName = @name",
             new { cid = concertId, name = name }))!.Value;
     }
 
-    public async Task<int> CreateEventSeatAsync(int concertId, int seatId, int categoryId, decimal price = 100000)
+    /// <summary>
+    /// SalePrice của EventSeat PHẢI bằng BasePrice của TicketCategory (BR10a) —
+    /// TRG_EventSeat_PriceInsert chặn nếu lệch, nên lấy thẳng từ TicketCategory
+    /// thay vì truyền giá tự do.
+    /// </summary>
+    public async Task<int> CreateEventSeatAsync(int concertId, int seatId, int categoryId)
     {
         await _fixture.ExecAdminAsync(@"
             INSERT INTO EventSeat (ConcertID, SeatID, TicketCategoryID, SalePrice, InventoryStatus, AddedTimestamp)
-            VALUES (@cid, @sid, @cat, @price, 'Available', SYSUTCDATETIME());",
-            new { cid = concertId, sid = seatId, cat = categoryId, price = price });
+            SELECT @cid, @sid, @cat, tc.BasePrice, 'Available', SYSUTCDATETIME()
+            FROM   TicketCategory tc WHERE tc.TicketCategoryID = @cat;",
+            new { cid = concertId, sid = seatId, cat = categoryId });
         return (await _fixture.QueryAdminAsync<int?>(
             "SELECT EventSeatID FROM EventSeat WHERE ConcertID = @cid AND SeatID = @sid",
             new { cid = concertId, sid = seatId }))!.Value;
