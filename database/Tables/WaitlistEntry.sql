@@ -10,7 +10,6 @@ CREATE TABLE WaitlistEntry (
     OpportunityGrantedTimestamp DATETIME2(7),
     OpportunityExpiryTimestamp DATETIME2(7),
     ResultingBookingID INT,
-    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_WaitlistEntry PRIMARY KEY CLUSTERED (WaitlistEntryID),
     CONSTRAINT FK_WaitlistEntry_Waitlist FOREIGN KEY (WaitlistID) REFERENCES Waitlist(WaitlistID),
     CONSTRAINT FK_WaitlistEntry_TicketCategory FOREIGN KEY (TicketCategoryID) REFERENCES TicketCategory(TicketCategoryID),
