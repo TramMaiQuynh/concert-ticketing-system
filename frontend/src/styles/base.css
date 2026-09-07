@@ -1,0 +1,162 @@
+/* ============================================================================
+   BASE — reset, chữ, và hành vi mặc định của trình duyệt
+   ============================================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;   /* iOS không tự phóng chữ khi xoay ngang */
+  scroll-behavior: smooth;
+  tab-size: 4;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  letter-spacing: var(--tracking-normal);
+  color: var(--text);
+  background: var(--surface);
+  min-height: 100dvh;              /* dvh: đúng cả khi thanh địa chỉ mobile thu vào */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums lining-nums;  /* số thẳng cột trong bảng giá */
+  transition: background-color var(--duration-base) var(--ease),
+              color var(--duration-base) var(--ease);
+}
+
+/* ── Chữ tiêu đề ────────────────────────────────────────────────────────────
+   Tiêu đề càng lớn thì tracking càng âm. Đây là quy tắc typography cơ bản mà
+   hầu hết giao diện tự làm bỏ qua: cỡ chữ lớn dùng tracking mặc định sẽ trông
+   rời rạc và nghiệp dư.                                                       */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;              /* tiêu đề không còn rớt lại một chữ ở dòng cuối */
+}
+
+h1 { font-size: var(--text-3xl); line-height: var(--leading-3xl); letter-spacing: -0.03em; }
+h2 { font-size: var(--text-2xl); line-height: var(--leading-2xl); }
+h3 { font-size: var(--text-lg);  line-height: var(--leading-lg);  }
+h4 { font-size: var(--text-base); line-height: var(--leading-base); font-weight: var(--weight-semibold); }
+
+p { text-wrap: pretty; }           /* đoạn văn không còn dòng cuối trơ trọi một từ */
+
+a { color: inherit; text-decoration: none; }
+
+ul, ol { list-style-position: outside; }
+
+img, svg, video { display: block; max-width: 100%; height: auto; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-6) 0;
+}
+
+code, kbd, pre, samp {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* ── Vòng focus ─────────────────────────────────────────────────────────────
+   Bản trước đặt `outline: none` trên mọi button mà KHÔNG thay thế gì. Hệ quả:
+   người dùng bàn phím hoàn toàn không thấy mình đang ở đâu — đây là lỗi tiếp
+   cận nghiêm trọng, không phải chuyện thẩm mỹ.
+
+   `:focus-visible` cho đúng thứ cần: chuột bấm thì không hiện vòng, bàn phím
+   Tab tới thì hiện rõ.                                                        */
+:focus { outline: none; }
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Vùng bôi đen ───────────────────────────────────────────────────────── */
+::selection {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+/* ── Thanh cuộn ─────────────────────────────────────────────────────────────
+   Mảnh và hoà vào nền. Chỉ áp cho trình duyệt nhân WebKit/Blink; Firefox dùng
+   thuộc tính chuẩn bên dưới.                                                  */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  border: 3px solid var(--surface);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Tôn trọng lựa chọn giảm chuyển động ────────────────────────────────────
+   Không phải tuỳ chọn thẩm mỹ: với người bị rối loạn tiền đình, hiệu ứng động
+   có thể gây chóng mặt và buồn nôn thật sự. Hệ điều hành đã có công tắc này —
+   việc của ứng dụng là nghe theo.                                             */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Tiện ích tối thiểu ───────────────────────────────────────────────────── */
+
+/* Ẩn khỏi mắt nhưng vẫn đọc được bằng trình đọc màn hình. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Nội dung rộng (bảng, sơ đồ) cuộn TRONG khung của nó, không đẩy cả trang
+   trượt ngang — lỗi bố cục hay gặp nhất trên mobile. */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.stack       { display: flex; flex-direction: column; }
+.row         { display: flex; align-items: center; }
+.wrap        { flex-wrap: wrap; }
+.grow        { flex: 1; min-width: 0; }   /* min-width:0 để flex item co được */
+.gap-1 { gap: var(--space-1); } .gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); } .gap-4 { gap: var(--space-4); }
+.gap-6 { gap: var(--space-6); } .gap-8 { gap: var(--space-8); }
+
+.text-secondary { color: var(--text-secondary); }
+.text-muted     { color: var(--text-muted); }
+.text-xs   { font-size: var(--text-xs);  line-height: var(--leading-xs); }
+.text-sm   { font-size: var(--text-sm);  line-height: var(--leading-sm); }
+.tabular   { font-variant-numeric: tabular-nums; }
+
+/* Nhãn chữ hoa nhỏ — dùng cho tiêu đề cột và nhãn nhóm. */
+.overline {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
