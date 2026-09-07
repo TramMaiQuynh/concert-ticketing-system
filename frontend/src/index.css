@@ -1,0 +1,18 @@
+/* ============================================================================
+   Điểm gom style của ứng dụng.
+
+   Thứ tự nạp có ý nghĩa và không được đổi:
+     tokens     — biến, phải có trước mọi thứ dùng chúng
+     base       — reset và mặc định phần tử
+     components — lớp giao diện dùng chung
+     layout     — khung trang, điều hướng, sơ đồ ghế
+
+   Phông Inter được nạp bằng <link> trong index.html kèm preconnect, KHÔNG dùng
+   @import ở đây: @import trong CSS chặn việc dựng trang cho tới khi tải xong,
+   và nó nằm sau cả chuỗi CSS nên không tận dụng được preconnect.
+   ============================================================================ */
+
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
+@import './styles/layout.css';
