@@ -10,16 +10,16 @@ namespace ConcertTicketing.Infrastructure.Repositories;
 
 public class BookingRepository : IBookingRepository
 {
-    private readonly string _connectionString;
+    private readonly IDbConnectionFactory _factory;
 
-    public BookingRepository(string connectionString)
+    public BookingRepository(IDbConnectionFactory factory)
     {
-        _connectionString = connectionString;
+        _factory = factory;
     }
 
     public async Task<CreateBookingResponse> CreateAsync(int customerUserId, CreateBookingRequest request)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
         p.Add("@CustomerUserID", customerUserId, DbType.Int32);
@@ -48,7 +48,7 @@ public class BookingRepository : IBookingRepository
 
     public async Task<BookingDetail?> GetByIdAsync(int bookingId, int customerUserId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         var sql = @"
             SELECT 
@@ -100,9 +100,35 @@ public class BookingRepository : IBookingRepository
             allocations);
     }
 
+    /// <summary>
+    /// Lịch sử đặt vé của chính Customer (FR50).
+    ///
+    /// Đọc qua VW_CustomerBookingHistory chứ không truy vấn thẳng bảng Booking: view này
+    /// được tạo ra đúng cho mục đích đó và tự lọc bằng
+    /// `CustomerUserID = SESSION_CONTEXT(N'UserID')` (§23.7). SqlConnectionFactory đặt
+    /// session context ngay sau khi mở connection, nên phạm vi dữ liệu được thi hành ở
+    /// tầng database — không phụ thuộc vào việc tầng ứng dụng có nhớ truyền đúng UserID
+    /// vào mệnh đề WHERE hay không. Nếu context chưa được đặt, view trả 0 dòng
+    /// (fail-closed), không bao giờ rò rỉ dữ liệu của người khác.
+    ///
+    /// Trước đây view này KHÔNG có bên đọc nào — cơ chế RLS tồn tại nhưng không phục vụ
+    /// chức năng nào (§24.4: mọi đường dữ liệu phải có cả bên ghi lẫn bên gọi).
+    /// </summary>
+    public async Task<IEnumerable<MyBookingListItem>> GetMyBookingsAsync()
+    {
+        using var conn = await _factory.OpenAsync();
+
+        return await conn.QueryAsync<MyBookingListItem>(@"
+            SELECT BookingID, ConcertID, ConcertName, BookingStatus,
+                   CreatedTimestamp, HoldExpiryDatetime, ConfirmedTimestamp, CancelledTimestamp,
+                   SubtotalAmount, FinalAmount, SeatCount, PaymentStatus
+            FROM   VW_CustomerBookingHistory
+            ORDER  BY CreatedTimestamp DESC;");
+    }
+
     public async Task CancelAsync(int bookingId, int customerUserId)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
         p.Add("@BookingID", bookingId, DbType.Int32);
@@ -113,7 +139,7 @@ public class BookingRepository : IBookingRepository
 
     public async Task ApplyPromotionAsync(int bookingId, int customerUserId, string discountCode)
     {
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = await _factory.OpenAsync();
 
         // Lookup promotion ID and discount code ID
         var sqlLookup = @"
