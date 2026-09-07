@@ -36,7 +36,16 @@ param(
     [string]$DatabaseName   = "ConcertTicketingDB",
     [string]$Username       = "",
     [string]$Password       = "",
-    [bool]$DropExisting     = $false
+    [bool]$DropExisting     = $false,
+
+    # Mat khau cho 5 SQL login do he thong tao (api_service, app_admin, ...).
+    # De trong -> script TU SINH mat khau ngau nhien manh va in ra chuoi ket noi
+    # de dua vao cau hinh backend. Mat khau KHONG BAO GIO duoc luu trong repository.
+    [string]$ApiServicePassword   = "",
+    [string]$AppAdminPassword     = "",
+    [string]$AppOrganizerPassword = "",
+    [string]$AppCustomerPassword  = "",
+    [string]$AppCheckinPassword   = ""
 )
 
 Set-StrictMode -Version Latest
@@ -59,7 +68,10 @@ function Write-Phase {
 function Invoke-SqlFile {
     param(
         [string]$FilePath,
-        [string]$Database = $DatabaseName
+        [string]$Database = $DatabaseName,
+        # Bien sqlcmd (-v). Dung de truyen mat khau vao CreateDBUsers.sql ma khong
+        # phai viet chung vao file SQL.
+        [hashtable]$Variables = $null
     )
 
     $fileName = Split-Path $FilePath -Leaf
@@ -80,6 +92,12 @@ function Invoke-SqlFile {
         "-b",         # Exit on error
         "-I"          # SET QUOTED_IDENTIFIER ON (bat buoc cho Filtered Indexes)
     )
+
+    if ($Variables) {
+        foreach ($key in $Variables.Keys) {
+            $args += @("-v", ("{0}={1}" -f $key, $Variables[$key]))
+        }
+    }
 
     if ($Username -ne "") {
         $args += @("-U", $Username, "-P", $Password)
@@ -191,7 +209,7 @@ Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Datab
 #   Layer 5 (phu thuoc Layer 4): Ticket, BookingPromotionApplication
 #   Layer 6 (phu thuoc Layer 5): CheckIn, AuditRecord
 # ============================================================
-Write-Phase "PHASE 1: TABLES (27 bang)"
+Write-Phase "PHASE 1: TABLES (28 bang)"
 
 $tablesDir = Join-Path $DbRoot "Tables"
 
@@ -226,6 +244,7 @@ Invoke-SqlFile "$tablesDir\CheckinStaffAssignment.sql" # -> UserAccount, Concert
 
 # Layer 4 -- Phu thuoc Layer 3
 Invoke-SqlFile "$tablesDir\BookingEventSeatAllocation.sql"  # -> Booking, EventSeat
+Invoke-SqlFile "$tablesDir\WaitlistEntryEventSeatAllocation.sql"
 Invoke-SqlFile "$tablesDir\Refund.sql"                      # -> Payment
 
 # Layer 5 -- Phu thuoc Layer 4
@@ -237,23 +256,25 @@ Invoke-SqlFile "$tablesDir\CheckIn.sql"                     # -> Ticket, Concert
 Invoke-SqlFile "$tablesDir\AuditRecord.sql"                 # -> UserAccount
 
 Write-Host ""
-Write-Host "  Tong cong: 27 bang da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: 28 bang da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 2: INDEXES
 # Indexes duoc tao sau Tables de tranh loi "table not found".
 # Filtered Unique Index can table co data type dung.
 # ============================================================
-Write-Phase "PHASE 2: INDEXES (13 index)"
+Write-Phase "PHASE 2: INDEXES (operational + reporting + audit)"
 
 $indexDir = Join-Path $DbRoot "Indexes"
 Invoke-SqlFile "$indexDir\OperationalIndexes.sql"
 
 Write-Host ""
-Write-Host "  Luu y: 3 Filtered Unique Index da duoc tao inline trong Tables:" -ForegroundColor DarkGray
-Write-Host "    UIX_Allocation_ActiveEventSeat   (BookingEventSeatAllocation)" -ForegroundColor DarkGray
-Write-Host "    UIX_Payment_ConfirmedPerBooking   (Payment)" -ForegroundColor DarkGray
+Write-Host "  Luu y: 5 Filtered Unique Index da duoc tao inline trong Tables:" -ForegroundColor DarkGray
+Write-Host "    UIX_Allocation_ActiveEventSeat      (BookingEventSeatAllocation)" -ForegroundColor DarkGray
+Write-Host "    UIX_Payment_EffectivePerBooking     (Payment)" -ForegroundColor DarkGray
+Write-Host "    UIX_Payment_PendingPerBooking       (Payment)" -ForegroundColor DarkGray
 Write-Host "    UIX_WaitlistEntry_ActivePerCustomer (WaitlistEntry)" -ForegroundColor DarkGray
+Write-Host "    UIX_QueueEntry_ActivePerCustomer    (QueueEntry)" -ForegroundColor DarkGray
 
 # ============================================================
 # PHASE 3: FUNCTIONS
@@ -276,7 +297,7 @@ Invoke-SqlFile "$fnDir\fn_GetCustomerTicketCount.sql"
 # ngoai tru TRG_StateTransition chua nhieu trigger tren
 # nhieu bang -> chay truoc.
 # ============================================================
-Write-Phase "PHASE 4: TRIGGERS (26 trigger)"
+Write-Phase "PHASE 4: TRIGGERS (22 file, 33 trigger object) + ghim thu tu khai hoa"
 
 $trgDir = Join-Path $DbRoot "Triggers"
 
@@ -295,17 +316,27 @@ Invoke-SqlFile "$trgDir\TRG_TicketConcertConsistency.sql"
 # Business rule triggers
 Invoke-SqlFile "$trgDir\TRG_InventoryAllocationConsistency.sql"
 Invoke-SqlFile "$trgDir\TRG_OneActiveTicketPerEventSeat.sql"
-Invoke-SqlFile "$trgDir\TRG_PaymentConfirmedSingle.sql"
+Invoke-SqlFile "$trgDir\TRG_PaymentEffectiveSingle.sql"
 Invoke-SqlFile "$trgDir\TRG_RefundLimits.sql"
 Invoke-SqlFile "$trgDir\TRG_TicketCountOnConfirm.sql"
 Invoke-SqlFile "$trgDir\TRG_DiscountCodeConditional.sql"
 Invoke-SqlFile "$trgDir\TRG_PromotionValidity.sql"
+Invoke-SqlFile "$trgDir\TRG_Booking_DiscountUsageGuard.sql"
+Invoke-SqlFile "$trgDir\TRG_EventSeatPriceConsistency.sql"
+Invoke-SqlFile "$trgDir\TRG_EventSeat_PriceInsert.sql"
+Invoke-SqlFile "$trgDir\TRG_WaitlistEntryAllocationConcert.sql"
+Invoke-SqlFile "$trgDir\TRG_WaitlistEntryCategoryConcert.sql"
 
 # Audit trigger (chay sau cac trigger khac de khong tu ghi audit vao chinh no)
 Invoke-SqlFile "$trgDir\TRG_AuditLog.sql"
+Invoke-SqlFile "$trgDir\TRG_AuditRecord_SecurityGuard.sql"
 
 # Security trigger
 Invoke-SqlFile "$trgDir\TRG_SystemActorGuard.sql"
+
+# Ghim thu tu khai hoa -- PHAI la buoc CUOI CUNG cua Phase 4.
+# CREATE OR ALTER TRIGGER reset thu tu da ghim, nen moi trigger phai ton tai truoc.
+Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 
 # ============================================================
 # PHASE 5: STORED PROCEDURES
@@ -313,7 +344,7 @@ Invoke-SqlFile "$trgDir\TRG_SystemActorGuard.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (26 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (43 SP)"
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
 # --- Core transaction SPs ---
@@ -327,6 +358,9 @@ Invoke-SqlFile "$spDir\sp_ApplyPromotion.sql"
 Invoke-SqlFile "$spDir\sp_RegisterUser.sql"
 Invoke-SqlFile "$spDir\sp_CancelBooking.sql"
 Invoke-SqlFile "$spDir\sp_InitiatePayment.sql"
+Invoke-SqlFile "$spDir\sp_FailPayment.sql"
+Invoke-SqlFile "$spDir\sp_ConfirmRefund.sql"
+Invoke-SqlFile "$spDir\sp_UpdateRefundStatus.sql"
 
 # --- Admin/Organizer management SPs (feature completion) ---
 Invoke-SqlFile "$spDir\sp_CreateConcert.sql"
@@ -335,29 +369,45 @@ Invoke-SqlFile "$spDir\sp_UpdateConcertStatus.sql"
 Invoke-SqlFile "$spDir\sp_CreateVenue.sql"
 Invoke-SqlFile "$spDir\sp_CreateZone.sql"
 Invoke-SqlFile "$spDir\sp_CreateSeat.sql"
+Invoke-SqlFile "$spDir\sp_UpdateVenue.sql"          # FR59b/BR50e: Venue -> Inactive
+Invoke-SqlFile "$spDir\sp_UpdateZone.sql"           # FR59b/BR50e: Zone  -> Retired
+Invoke-SqlFile "$spDir\sp_UpdateSeat.sql"           # FR59b/BR50e: Seat  -> Retired
+Invoke-SqlFile "$spDir\sp_ConfigureVenueMap.sql"    # FR11a: mat phang toa do + san khau
+Invoke-SqlFile "$spDir\sp_CreateArtist.sql"
+Invoke-SqlFile "$spDir\sp_UpdateArtist.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTicketCategory.sql"
 Invoke-SqlFile "$spDir\sp_AddEventSeats.sql"
 Invoke-SqlFile "$spDir\sp_CreatePromotion.sql"
 Invoke-SqlFile "$spDir\sp_AssignRole.sql"
+Invoke-SqlFile "$spDir\sp_UpdateRoleStatus.sql"
 
 # --- Customer self-service SPs ---
 Invoke-SqlFile "$spDir\sp_JoinWaitlist.sql"
+Invoke-SqlFile "$spDir\sp_ConfigureWaitlist.sql"    # BR43 : AllocationPolicy FIFO/RANDOM
+Invoke-SqlFile "$spDir\sp_ConfigureQueue.sql"       # FR64a: capacity/policy/booking_ttl
 Invoke-SqlFile "$spDir\sp_JoinQueue.sql"
+Invoke-SqlFile "$spDir\sp_ExitQueue.sql"
+
+# --- Scheduled job SPs (goi boi SQL Agent) ---
+Invoke-SqlFile "$spDir\sp_ProcessQueueAdmission.sql"
+Invoke-SqlFile "$spDir\sp_ProcessSaleWindowTransitions.sql"
 
 # --- Admin extended management SPs ---
 Invoke-SqlFile "$spDir\sp_CreateDiscountCode.sql"
+Invoke-SqlFile "$spDir\sp_UpdatePromotionStatus.sql"    # FR52: Draft/Active/Disabled
+Invoke-SqlFile "$spDir\sp_UpdateDiscountCodeStatus.sql" # FR53b: thu hoi ma giam gia
 Invoke-SqlFile "$spDir\sp_SetEventSeatUnavailable.sql"
 Invoke-SqlFile "$spDir\sp_AdminUpdateUserStatus.sql"
 Invoke-SqlFile "$spDir\sp_AddCheckinStaffAssignment.sql"
 
 Write-Host ""
-Write-Host "  Tong cong: 26 Stored Procedures da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: 43 Stored Procedures da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 6: VIEWS
 # Views phu thuoc Tables, khong phu thuoc SP/Trigger/Function.
 # ============================================================
-Write-Phase "PHASE 6: VIEWS (6 view)"
+Write-Phase "PHASE 6: VIEWS (2 file, 11 view)"
 
 $viewDir = Join-Path $DbRoot "Views"
 Invoke-SqlFile "$viewDir\VW_ConcertSalesSummary.sql"
@@ -380,7 +430,31 @@ Invoke-SqlFile "$scriptsDir\HangfireSchema.sql"
 Write-Phase "PHASE 7.5: SECURITY (RBAC)"
 
 $secDir = Join-Path $DbRoot "Security"
-Invoke-SqlFile "$secDir\CreateDBUsers.sql"
+
+# Sinh mat khau manh cho nhung login khong duoc chi dinh tu ngoai.
+# 24 byte ngau nhien tu RNGCryptoServiceProvider -> Base64 (32 ky tu), loc bo cac
+# ky tu gay roi cho chuoi ket noi ADO.NET (dau ; va ') va cho sqlcmd.
+function New-StrongPassword {
+    $bytes = New-Object byte[] 24
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $raw = [Convert]::ToBase64String($bytes) -replace '[^A-Za-z0-9]', ''
+    # Bao dam thoa chinh sach do phuc tap cua SQL Server (chu hoa/thuong/so/ky tu dac biet)
+    return ($raw + 'Aa1#')
+}
+
+if ($ApiServicePassword   -eq "") { $ApiServicePassword   = New-StrongPassword }
+if ($AppAdminPassword     -eq "") { $AppAdminPassword     = New-StrongPassword }
+if ($AppOrganizerPassword -eq "") { $AppOrganizerPassword = New-StrongPassword }
+if ($AppCustomerPassword  -eq "") { $AppCustomerPassword  = New-StrongPassword }
+if ($AppCheckinPassword   -eq "") { $AppCheckinPassword   = New-StrongPassword }
+
+Invoke-SqlFile "$secDir\CreateDBUsers.sql" -Variables @{
+    ApiServicePwd   = $ApiServicePassword
+    AdminPwd        = $AppAdminPassword
+    OrganizerPwd    = $AppOrganizerPassword
+    CustomerPwd     = $AppCustomerPassword
+    CheckinStaffPwd = $AppCheckinPassword
+}
 Invoke-SqlFile "$secDir\GrantPermissions.sql"
 
 # ============================================================
@@ -400,6 +474,32 @@ Write-Phase "DEPLOY HOAN TAT"
 
 Write-Host ""
 Write-Host "  He thong Concert Ticketing da duoc deploy thanh cong!" -ForegroundColor Green
+
+# Ghi chuoi ket noi ra file de buoc cau hinh backend khong phai chep tay.
+# File nay nam trong .gitignore - mat khau khong bao gio vao repository.
+$connString = "Server=$ServerInstance;Database=$DatabaseName;User Id=api_service;Password=$ApiServicePassword;Max Pool Size=300;Min Pool Size=10;Connect Timeout=30;TrustServerCertificate=True;"
+$outFile = Join-Path $DbRoot "..\.deploy\db-credentials.json"
+$outDir = Split-Path $outFile -Parent
+if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+
+@{
+    generatedAt          = (Get-Date).ToString("s")
+    serverInstance       = $ServerInstance
+    database             = $DatabaseName
+    apiServiceConnection = $connString
+    logins = @{
+        api_service      = $ApiServicePassword
+        app_admin        = $AppAdminPassword
+        app_organizer    = $AppOrganizerPassword
+        app_customer     = $AppCustomerPassword
+        app_checkinstaff = $AppCheckinPassword
+    }
+} | ConvertTo-Json -Depth 4 | Out-File -FilePath $outFile -Encoding utf8
+
+Write-Host ""
+Write-Host "  Mat khau cac SQL login da duoc SINH NGAU NHIEN va ghi vao:" -ForegroundColor Yellow
+Write-Host "    $((Resolve-Path $outFile).Path)" -ForegroundColor Yellow
+Write-Host "  (thu muc .deploy nam trong .gitignore - khong bao gio vao repository)" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Database  : $DatabaseName" -ForegroundColor White
 Write-Host "  Server    : $ServerInstance" -ForegroundColor White
