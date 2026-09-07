@@ -1,4 +1,4 @@
-# ====================================================================
+﻿# ====================================================================
 # Run-All-Tests.ps1
 # Chay toan bo Test Suite va in ra bao cao.
 # ====================================================================
@@ -21,19 +21,19 @@ Write-Host "==========================================================" -Foregro
 $masterFile = "MasterTestRun.sql"
 if (Test-Path $masterFile) { Remove-Item $masterFile }
 
-$sqlFiles = @(
-    "00_TestFramework.sql",
-    "01_SetupMockData.sql",
-    "02_Test_Tables_Constraints.sql",
-    "03_Test_Triggers_StateMachine.sql",
-    "04_Test_Triggers_Integrity.sql",
-    "05_Test_Functions.sql",
-    "06_Test_Views.sql",
-    "07_Test_SP_CreateBooking.sql",
-    "08_Test_SP_ConfirmPayment.sql",
-    "09_Test_SP_Others.sql",
-    "10_Test_Security_Permissions.sql"
-)
+# Danh sach file test duoc SUY RA tu thu muc, KHONG liet ke cung.
+# Truoc day danh sach nay duoc go tay va dung lai o 10_Test_Security_Permissions.sql,
+# nen moi file test them vao sau do (12_, 13_) im lang khong duoc chay: nguoi chay
+# script van thay "All SQL Tests completed successfully" nhung thuc te thieu hang chuc
+# test. Quy uoc: moi file khop NN_*.sql (NN la hai chu so) deu duoc nap theo thu tu ten.
+# Rieng 11_Test_Concurrency.sql duoc nap trong danh sach nay; ban .ps1 cung ten chay
+# rieng o cuoi vi no can nhieu ket noi song song.
+$sqlFiles = Get-ChildItem -Path $scriptDir -Filter "*.sql" |
+            Where-Object { $_.Name -match '^\d{2}_' } |
+            Sort-Object Name |
+            Select-Object -ExpandProperty Name
+
+Write-Host ("Phat hien {0} file test: {1}" -f $sqlFiles.Count, ($sqlFiles -join ', ')) -ForegroundColor DarkGray
 
 Write-Host "Compiling test scripts..." -ForegroundColor Yellow
 foreach ($file in $sqlFiles) {
@@ -66,7 +66,15 @@ IF @FailCount > 0
 "@ | Out-File -Append -Encoding UTF8 $masterFile
 
 Write-Host "Executing SQL test suite..." -ForegroundColor Yellow
-$sqlCmdArgs = "-S", $ServerInstance, "-E", "-d", $Database, "-i", $masterFile, "-b"
+# -I (SET QUOTED_IDENTIFIER ON) la BAT BUOC, khong phai tuy chon:
+# 8 bang nghiep vu co filtered index (AuditRecord, Payment, Ticket, QueueEntry,
+# WaitlistEntry, BookingEventSeatAllocation, RefreshToken...) va SQL Server tu choi
+# moi lenh INSERT/UPDATE ad-hoc len chung khi QUOTED_IDENTIFIER = OFF (loi 1934).
+# Hien tai cac file test tu dat SET QUOTED_IDENTIFIER ON nen van chay duoc, nhung
+# phu thuoc vao dieu do la mong manh: chi can them mot file test thieu dong SET la
+# hong voi mot thong bao rat kho hieu. (Stored procedure khong bi anh huong — chung
+# gan cung thiet lap nay tai thoi diem duoc tao.)
+$sqlCmdArgs = "-S", $ServerInstance, "-E", "-d", $Database, "-i", $masterFile, "-b", "-I"
 $process = Start-Process -FilePath "sqlcmd" -ArgumentList $sqlCmdArgs -NoNewWindow -Wait -PassThru
 
 if ($process.ExitCode -eq 0) {
@@ -78,7 +86,13 @@ if ($process.ExitCode -eq 0) {
 Write-Host "`nRunning Concurrency Test..." -ForegroundColor Yellow
 .\11_Test_Concurrency.ps1 -ServerInstance $ServerInstance -Database $Database
 
-Write-Host "`nCleaning up..." -ForegroundColor Yellow
+# Chi xoa FILE SQL tam da ghep, KHONG dong vao database.
+# Du lieu mock (concert/tai khoan test) CO Y o lai sau khi chay: de con soi khi co test
+# do, va vi 01_SetupMockData.sql da xoa sach o dau moi lan chay nen no tu lam sach.
+# Hau qua can biet: "Test Concert Live 2025" van hien CONG KHAI o trang chu voi trang
+# thai OnSale cho toi lan deploy sach ke tiep. Truoc khi demo, chay lai:
+#     .\scripts\setup-demo.ps1   (deploy sach)  hoac  .\scripts\seed-demo.ps1
+Write-Host "`nXoa file SQL tam (du lieu mock trong database duoc giu lai)..." -ForegroundColor Yellow
 Remove-Item $masterFile
 
 Write-Host "==========================================================" -ForegroundColor Cyan
