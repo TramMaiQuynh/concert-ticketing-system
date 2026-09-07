@@ -304,3 +304,47 @@ public class ApplyPromotionValidatorTests
         result.IsValid.Should().BeTrue();
     }
 }
+
+/// <summary>
+/// Hồi quy cho một lỗi CHẶN HẲN quy trình hoàn tiền.
+///
+/// RefundRequest từng có trường `decimal RefundAmount` và validator bắt buộc nó > 0,
+/// trong khi cả hai endpoint (`POST /bookings/{id}/refund` và `POST /bookings/{id}/cancel`)
+/// chỉ đọc `Reason`, còn `sp_ProcessRefund` KHÔNG hề có tham số số tiền — nó tự tính
+/// `@PaymentAmount * Concert.RefundPercentage / 100` (BR32a).
+///
+/// Hậu quả: mọi request đúng theo tài liệu đều nhận HTTP 400
+/// `{"errors":{"RefundAmount":["Số tiền hoàn phải lớn hơn 0."]}}`, tức là không ai
+/// hủy vé và hoàn tiền được — cả một quy trình nghiệp vụ không gọi được.
+///
+/// Các test dưới đây khóa hợp đồng lại: thân yêu cầu chỉ gồm lý do, và lý do là tùy chọn.
+/// </summary>
+public class RefundRequestValidatorTests
+{
+    private readonly RefundRequestValidator _validator = new();
+
+    [Fact]
+    public void ReasonOnly_ShouldPass()
+    {
+        var result = _validator.Validate(new RefundRequest("Khách đổi lịch"));
+        result.IsValid.Should().BeTrue(
+            "số tiền hoàn do sp_ProcessRefund tự tính, caller không được chỉ định");
+    }
+
+    [Fact]
+    public void NullReason_ShouldPass()
+    {
+        // Hủy vé không bắt buộc nêu lý do; @RefundReason của SP nhận NULL.
+        var result = _validator.Validate(new RefundRequest(null));
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Reason_TooLong_ShouldFail()
+    {
+        // Khớp NVARCHAR(500) của tham số @RefundReason.
+        var result = _validator.Validate(new RefundRequest(new string('x', 501)));
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "Reason");
+    }
+}
