@@ -31,6 +31,17 @@ BEGIN
         IF @PaymentID IS NULL
             THROW 53101, 'sp_ConfirmRefund: Refund khong ton tai.', 1;
 
+        -- Idempotent voi webhook settlement gui lap (BR49a) - dong bo voi
+        -- sp_ConfirmPayment va sp_FailPayment. Mot lan goi lai cho khoan hoan DA
+        -- settle khong phai la loi: cong thanh toan gui lai callback la chuyen
+        -- binh thuong, va tra ve loi o day chi lam cong gui lai nhieu hon nua.
+        IF @RefundStatus = 'Confirmed'
+        BEGIN
+            COMMIT TRANSACTION;
+            RETURN;
+        END
+
+        -- Failed/Cancelled thi khac han: khoan hoan da bi bo, khong duoc settle nua.
         IF @RefundStatus <> 'Pending'
             THROW 53102, 'sp_ConfirmRefund: Chi confirm Refund dang Pending.', 1;
 
@@ -45,15 +56,28 @@ BEGIN
         IF NOT (
             @ActorUserID = @ConcertOrg
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
         )
             THROW 53103, 'sp_ConfirmRefund: Actor khong co quyen.', 1;
 
-        -- 3. Chuyen Refund -> Confirmed
+        -- 3. Chuyen Refund -> Confirmed bang atomic conditional update (BR49a).
+        --    Dieu kien `AND RefundStatus = 'Pending'` la lop chan that su chong
+        --    webhook/thao tac lap: kiem tra o buoc 1 va lenh UPDATE la hai thoi diem
+        --    khac nhau, khong co dieu kien nay thi hai luong dong thoi deu di qua
+        --    va deu cong don vao @TotalConfirmed o buoc 4.
         UPDATE Refund
         SET    RefundStatus = 'Confirmed',
                RefundConfirmationTimestamp = SYSDATETIME()
-        WHERE  RefundID = @RefundID;
+        WHERE  RefundID = @RefundID
+          AND  RefundStatus = 'Pending';
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            -- Luong khac vua confirm truoc: coi nhu da hoan tat (idempotent).
+            COMMIT TRANSACTION;
+            RETURN;
+        END
 
         -- 4. Neu tong Refund Confirmed dat 100% Payment.Amount -> Payment -> Refunded
         DECLARE @PaymentAmount DECIMAL(18,0);
@@ -64,11 +88,13 @@ BEGIN
         FROM   Refund
         WHERE  PaymentID = @PaymentID AND RefundStatus = 'Confirmed';
 
-        IF @TotalConfirmed >= @PaymentAmount
+        IF @TotalConfirmed > 0
         BEGIN
+            DECLARE @NewStatus VARCHAR(32) = CASE WHEN @TotalConfirmed >= @PaymentAmount THEN 'Refunded' ELSE 'PartiallyRefunded' END;
+            
             UPDATE Payment
-            SET    PaymentStatus = 'Refunded'
-            WHERE  PaymentID = @PaymentID AND PaymentStatus = 'Confirmed';
+            SET    PaymentStatus = @NewStatus
+            WHERE  PaymentID = @PaymentID AND PaymentStatus IN ('Confirmed', 'PartiallyRefunded');
         END
 
         -- 5. Audit
@@ -76,7 +102,7 @@ BEGIN
         VALUES (@ActorUserID, 'REFUND_CONFIRMED', 'Refund',
                 CAST(@RefundID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
                 '{"RefundStatus":"Confirmed","PaymentID":' + CAST(@PaymentID AS VARCHAR) +
-                CASE WHEN @TotalConfirmed >= @PaymentAmount THEN ',"PaymentStatus":"Refunded"' ELSE '' END + '}');
+                CASE WHEN @TotalConfirmed > 0 THEN ',"PaymentStatus":"' + (CASE WHEN @TotalConfirmed >= @PaymentAmount THEN 'Refunded' ELSE 'PartiallyRefunded' END) + '"' ELSE '' END + '}');
 
         COMMIT TRANSACTION;
     END TRY
