@@ -25,20 +25,27 @@ BEGIN
         FROM Concert
         WHERE ConcertStatus = 'Published'
           AND SaleStartDatetime <= @Now
+          AND SaleEndDatetime IS NOT NULL
           -- Dam bao thoa man BR10: da co EventSeat
           AND EXISTS (SELECT 1 FROM EventSeat WHERE ConcertID = Concert.ConcertID);
 
         IF EXISTS (SELECT 1 FROM #ToOnSale)
         BEGIN
+            -- OUTPUT chi tra ve cac dong THUC SU duoc cap nhat, nen AuditRecord khong
+            -- ghi nham cho Concert bi guard loai bo (trang thai doi dong thoi boi Actor khac).
+            DECLARE @ChangedToOnSale TABLE (ConcertID INT NOT NULL);
+
             UPDATE Concert
             SET ConcertStatus = 'OnSale'
-            WHERE ConcertID IN (SELECT ConcertID FROM #ToOnSale);
+            OUTPUT inserted.ConcertID INTO @ChangedToOnSale(ConcertID)
+            WHERE ConcertID IN (SELECT ConcertID FROM #ToOnSale)
+              AND ConcertStatus = 'Published';
 
             INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
             SELECT @SystemUserID, 'CONCERT_STATUS_CHANGED', 'Concert', CAST(ConcertID AS VARCHAR(64)), 'UPDATE', @Now,
                    '{"ConcertStatus":"Published"}',
                    '{"ConcertStatus":"OnSale", "Reason":"SaleStartDatetime reached"}'
-            FROM #ToOnSale;
+            FROM @ChangedToOnSale;
         END
 
         -- 2. OnSale -> SaleClosed
@@ -52,15 +59,19 @@ BEGIN
 
         IF EXISTS (SELECT 1 FROM #ToSaleClosed)
         BEGIN
+            DECLARE @ChangedToSaleClosed TABLE (ConcertID INT NOT NULL);
+
             UPDATE Concert
             SET ConcertStatus = 'SaleClosed'
-            WHERE ConcertID IN (SELECT ConcertID FROM #ToSaleClosed);
+            OUTPUT inserted.ConcertID INTO @ChangedToSaleClosed(ConcertID)
+            WHERE ConcertID IN (SELECT ConcertID FROM #ToSaleClosed)
+              AND ConcertStatus = 'OnSale';
 
             INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
             SELECT @SystemUserID, 'CONCERT_STATUS_CHANGED', 'Concert', CAST(ConcertID AS VARCHAR(64)), 'UPDATE', @Now,
                    '{"ConcertStatus":"OnSale"}',
                    '{"ConcertStatus":"SaleClosed", "Reason":"SaleEndDatetime reached"}'
-            FROM #ToSaleClosed;
+            FROM @ChangedToSaleClosed;
         END
 
         DROP TABLE #ToOnSale;
