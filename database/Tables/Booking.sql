@@ -11,7 +11,6 @@ CREATE TABLE Booking (
     ConfirmedTimestamp DATETIME2(7),
     CancelledTimestamp DATETIME2(7),
     ExpiredTimestamp DATETIME2(7),
-    IsDeleted BIT NOT NULL DEFAULT 0,
     CONSTRAINT PK_Booking PRIMARY KEY CLUSTERED (BookingID),
     CONSTRAINT FK_Booking_Customer FOREIGN KEY (CustomerUserID) REFERENCES UserAccount(UserID),
     CONSTRAINT FK_Booking_Concert FOREIGN KEY (ConcertID) REFERENCES Concert(ConcertID),
@@ -26,9 +25,21 @@ CREATE TABLE Booking (
     ),
     CONSTRAINT CHK_Booking_Subtotal CHECK (SubtotalAmount >= 0),
     CONSTRAINT CHK_Booking_FinalAmount CHECK (FinalAmount >= 0),
-    CONSTRAINT CHK_Booking_Timestamps CHECK (
-        (CASE WHEN ConfirmedTimestamp IS NOT NULL THEN 1 ELSE 0 END +
-         CASE WHEN CancelledTimestamp IS NOT NULL THEN 1 ELSE 0 END +
-         CASE WHEN ExpiredTimestamp IS NOT NULL THEN 1 ELSE 0 END) <= 1
+    -- Bat bien thoi diem <-> trang thai (thay cho rang buoc loai tru cu).
+    -- Rang buoc cu "toi da 1 trong 3 timestamp" la SAI voi state machine §10.1:
+    -- Confirmed -> Cancelled la chuyen doi hop le, nen mot Booking da xac nhan roi
+    -- bi huy PHAI giu ca ConfirmedTimestamp lan CancelledTimestamp - hai su kien
+    -- deu that su xay ra. Rang buoc cu ep phai danh mat lich su, va do chinh la
+    -- ly do cac SP huy khong dam ghi CancelledTimestamp.
+    -- Bat bien dung: moi trang thai ket thuc PHAI co dau thoi gian cua chinh no;
+    -- Expired va Cancelled loai tru nhau (hai nhanh terminal khac nhau);
+    -- Pending thi chua co bat ky dau thoi gian ket thuc nao.
+    CONSTRAINT CHK_Booking_TimestampCoherence CHECK (
+            (BookingStatus <> 'Confirmed' OR ConfirmedTimestamp IS NOT NULL)
+        AND (BookingStatus <> 'Expired'   OR ExpiredTimestamp   IS NOT NULL)
+        AND (BookingStatus <> 'Cancelled' OR CancelledTimestamp IS NOT NULL)
+        AND (ExpiredTimestamp IS NULL OR CancelledTimestamp IS NULL)
+        AND (BookingStatus <> 'Pending'
+             OR (ConfirmedTimestamp IS NULL AND CancelledTimestamp IS NULL AND ExpiredTimestamp IS NULL))
     )
 );
