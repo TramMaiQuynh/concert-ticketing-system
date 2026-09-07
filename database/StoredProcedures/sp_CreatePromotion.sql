@@ -14,6 +14,8 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreatePromotion
     @StartDatetime  DATETIME2(7),
     @EndDatetime    DATETIME2(7),
     @UsageLimit     INT,
+    @MaxApplicableQuantity INT = NULL,
+    @MaxDiscountAmount     DECIMAL(18,0) = NULL,
     @CodeRequiredFlag BIT,
     @NewPromotionID INT OUTPUT
 )
@@ -33,7 +35,8 @@ BEGIN
         IF NOT (
             @ActorUserID = @OrganizerUserID
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
         )
             THROW 58302, 'sp_CreatePromotion: Actor khong co quyen.', 1;
 
@@ -60,17 +63,17 @@ BEGIN
 
         INSERT INTO Promotion
             (ConcertID, PromotionName, PromotionDescription, DiscountType, DiscountValue,
-             StartDatetime, EndDatetime, PromotionStatus, UsageLimit, CodeRequiredFlag)
+             StartDatetime, EndDatetime, PromotionStatus, UsageLimit, CodeRequiredFlag, MaxApplicableQuantity, MaxDiscountAmount)
         VALUES
             (@ConcertID, @PromotionName, @PromotionDescription, @DiscountType, @DiscountValue,
-             @StartDatetime, @EndDatetime, 'Active', @UsageLimit, @CodeRequiredFlag);
+             @StartDatetime, @EndDatetime, 'Active', @UsageLimit, @CodeRequiredFlag, @MaxApplicableQuantity, @MaxDiscountAmount);
 
         SET @NewPromotionID = SCOPE_IDENTITY();
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@ActorUserID, 'PROMOTION_CREATED', 'Promotion',
                 CAST(@NewPromotionID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
-                '{"PromotionName":"' + ISNULL(@PromotionName,'') + '"}');
+                '{"PromotionName":"' + STRING_ESCAPE(ISNULL(@PromotionName,''), 'json') + '"}');
 
         COMMIT TRANSACTION;
     END TRY
