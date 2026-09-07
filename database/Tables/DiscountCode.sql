@@ -16,7 +16,9 @@ CREATE TABLE DiscountCode (
     -- tu BookingPromotionApplication: ep DiscountCodeID khi duoc apply vao Booking
     -- PHAI thuoc dung PromotionID cua hang (chong dung code cua promotion khac).
     CONSTRAINT UQ_DiscountCode_PromotionCodeID UNIQUE (PromotionID, DiscountCodeID),
-    CONSTRAINT CHK_DiscountCode_Status CHECK (CodeStatus IN ('Active', 'Expired', 'Disabled')),
+    -- Nhu Promotion: 'Expired' bi loai bo vi trung lap voi ValidToDatetime
+    -- (BR50d - hai nguon su that). Chi giu trang thai do nguoi van hanh dat.
+    CONSTRAINT CHK_DiscountCode_Status CHECK (CodeStatus IN ('Active', 'Disabled')),
     CONSTRAINT CHK_DiscountCode_ValidDates CHECK (
         ValidFromDatetime IS NULL OR ValidToDatetime IS NULL OR ValidToDatetime >= ValidFromDatetime
     ),
