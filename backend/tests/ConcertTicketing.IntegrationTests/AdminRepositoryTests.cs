@@ -23,18 +23,22 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
     public AdminRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private AdminRepository Repo() => new(_fx.ApiConnectionString);
+    private AdminRepository Repo() => new(_fx.ApiFactory);
 
     private async Task<(TestDataSeeder s, int admin, int artist, int venue, int concertId)>
         CreateDraftConcertAsync()
     {
         var s = NewSeeder();
         var admin = await s.CreateUserAsync("Admin");
+        // sp_CreateConcert đặt @OrganizerUserID = actor và bắt buộc user đó giữ Role
+        // Organizer (58006) — nên người TẠO concert phải là Organizer, không phải Admin.
+        // Các thao tác quản trị sau đó vẫn dùng `admin` (Admin được phép trên mọi Concert).
+        var organizer = await s.CreateUserAsync("Organizer");
         var artist = await s.CreateArtistAsync();
         var venue = await s.CreateVenueAsync();
-        var start = DateTime.UtcNow.AddDays(1);
-        var concertId = await Repo().CreateConcertAsync(admin, new CreateConcertRequest(
-            artist, venue, s.ConcertName, start, start.AddHours(3), ConcertStatus: "Draft"));
+        var start = DateTime.UtcNow.AddDays(30);
+        var concertId = await Repo().CreateConcertAsync(organizer, new CreateConcertRequest(
+            artist, venue, s.ConcertName, start, start.AddHours(3)));
         return (s, admin, artist, venue, concertId);
     }
 
@@ -43,7 +47,7 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
     [Fact(DisplayName = "CreateConcert: tạo ở Draft; UpdateConcert: đổi tên; UpdateStatus: Draft→Published→OnSale")]
     public async Task CreateConcert_Update_StatusFlow_Succeeds()
     {
-        var (s, admin, _, _, concertId) = await CreateDraftConcertAsync();
+        var (s, admin, _, venue, concertId) = await CreateDraftConcertAsync();
         var repo = Repo();
 
         await repo.UpdateConcertAsync(concertId, admin, new UpdateConcertRequest(
@@ -52,6 +56,9 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         var name = await _fx.QueryAdminAsync<string>(
             "SELECT ConcertName FROM Concert WHERE ConcertID = @id", new { id = concertId });
         name.Should().Be(s.ConcertName + "-updated");
+
+        // BR10: Concert chỉ được mở bán khi đã có kho vé và cấu hình thời gian bán.
+        await SeedInventoryAndSaleWindowAsync(s, repo, admin, concertId, venue);
 
         await repo.UpdateConcertStatusAsync(concertId, admin, "Published");
         await repo.UpdateConcertStatusAsync(concertId, admin, "OnSale");
@@ -64,12 +71,37 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
     [Fact(DisplayName = "UpdateConcertStatus: chuyển không hợp lệ (Draft→OnSale) → SqlException 50001 (HTTP 409)")]
     public async Task UpdateConcertStatus_InvalidTransition_Throws50001()
     {
-        var (_, admin, _, _, concertId) = await CreateDraftConcertAsync();
+        var (s, admin, _, venue, concertId) = await CreateDraftConcertAsync();
         var repo = Repo();
+
+        // Phải có kho vé + cửa sổ bán trước, nếu không sẽ dừng ở BR10 (58023)
+        // và không chạm tới được state machine cần kiểm.
+        await SeedInventoryAndSaleWindowAsync(s, repo, admin, concertId, venue);
 
         // Draft → OnSale (bỏ qua Published) là transition không hợp lệ theo state machine
         var act = () => repo.UpdateConcertStatusAsync(concertId, admin, "OnSale");
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 50001);
+    }
+
+    /// <summary>
+    /// Tạo TicketCategory + Seat + EventSeat và đặt SaleStart/SaleEnd cho Concert —
+    /// điều kiện tiên quyết của BR10 để Concert được phép chuyển sang OnSale.
+    /// </summary>
+    private async Task SeedInventoryAndSaleWindowAsync(
+        TestDataSeeder s, AdminRepository repo, int admin, int concertId, int venue)
+    {
+        var catId = await repo.ConfigureTicketCategoryAsync(admin, concertId,
+            new ConfigureTicketCategoryRequest(s.CategoryName, "desc", 250000));
+        var zone = await s.CreateZoneAsync(venue);
+        var seat = await s.CreateSeatAsync(venue, zone);
+        await repo.AddEventSeatsAsync(admin, concertId,
+            new AddEventSeatsRequest(catId, new List<int> { seat }));
+
+        await _fx.ExecAdminAsync(@"
+            UPDATE Concert
+            SET    SaleStartDatetime = DATEADD(day,-1,SYSUTCDATETIME()),
+                   SaleEndDatetime   = DATEADD(day,29,SYSUTCDATETIME())
+            WHERE  ConcertID = @id;", new { id = concertId });
     }
 
     // ── Venue / Zone / Seat: chỉ Admin ─────────────────────────────────────────
@@ -113,11 +145,11 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         var repo = Repo();
 
         var catId = await repo.ConfigureTicketCategoryAsync(admin, concertId,
-            new ConfigureTicketCategoryRequest(s.CategoryName, "desc"));
+            new ConfigureTicketCategoryRequest(s.CategoryName, "desc", 250000));
         catId.Should().BeGreaterThan(0);
 
         await repo.AddEventSeatsAsync(admin, concertId,
-            new AddEventSeatsRequest(catId, 250000, new List<int> { seat }));
+            new AddEventSeatsRequest(catId, new List<int> { seat }));
 
         var count = await _fx.QueryAdminAsync<int>(
             "SELECT COUNT(*) FROM EventSeat WHERE ConcertID = @cid", new { cid = concertId });
