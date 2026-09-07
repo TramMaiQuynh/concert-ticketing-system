@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Application.Interfaces;
@@ -55,5 +55,41 @@ public class ConcertController : ControllerBase
     {
         var seats = await _seatMapCache.GetSeatsAsync(id, ct);
         return Ok(seats);
+    }
+
+    /// <summary>
+    /// Sơ đồ chỗ ngồi của concert (FR11a).
+    ///
+    /// Khác <c>/seats</c> ở chỗ đây là một TÀI LIỆU HÌNH HỌC lồng nhau — địa điểm,
+    /// khu, ghế — chứ không phải danh sách phẳng. Nó cho phép giao diện vẽ được vị
+    /// trí thật của chỗ ngồi so với sân khấu, thay vì chỉ liệt kê mã ghế.
+    ///
+    /// Ẩn danh gọi được: khách phải xem được chỗ ngồi trước khi quyết định đăng nhập.
+    /// </summary>
+    [HttpGet("{id:int}/seatmap")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSeatMap(int id)
+    {
+        var map = await _concertRepository.GetSeatMapAsync(id);
+        return map is null ? NotFound() : Ok(map);
+    }
+
+    /// <summary>
+    /// Muc hai cua so do: ghe ben trong MOT khu (FR11a).
+    ///
+    /// Chi tai khi nguoi dung bam vao khu do. Do la ly do endpoint tong quan
+    /// khong mang ghe: 234 byte moi ghe nghia la mot arena 20.000 cho se tra ve
+    /// 4,5 MB neu gop lam mot.
+    /// </summary>
+    [HttpGet("{id:int}/seatmap/zones/{zoneId:int}")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSeatMapZone(int id, int zoneId)
+    {
+        var zone = await _concertRepository.GetSeatMapZoneAsync(id, zoneId);
+        return zone is null ? NotFound() : Ok(zone);
     }
 }
