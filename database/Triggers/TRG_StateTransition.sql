@@ -204,9 +204,24 @@ BEGIN
         FROM   inserted i
         JOIN   deleted  d ON d.EventSeatID = i.EventSeatID
         WHERE  NOT (
-                   (d.InventoryStatus = 'Available'         AND i.InventoryStatus IN ('OnHold', 'OnHoldForWaitlist', 'Unavailable', 'Booked'))
+                -- Danh sach nay phai TRUNG KHIT bang §10.1, khong duoc rong hon.
+                -- BR49: "cac trang thai ... CHI duoc chuyen doi theo cac state
+                -- transition duoc phep cua vong doi tuong ung (Muc 10.1)" - tuc §10.1
+                -- la danh sach DONG, khong phai vi du.
+                --
+                -- Vi sao KHONG co 'Booked' o hai dong Available va OnHoldForWaitlist
+                -- (day tung la lo hong that, da bi go bo):
+                -- Con duong duy nhat de mot ghe tro thanh da ban la di qua OnHold -
+                -- sp_CreateBooking giu cho bang conditional update tu Available (hoac
+                -- tu OnHoldForWaitlist neu la luong waitlist) sang OnHold, roi
+                -- sp_ConfirmPayment moi dat Booked cho nhung ghe co Allocation Active
+                -- (ma theo TRG_InventoryAllocationConsistency thi chung luon dang
+                -- OnHold). Cho phep Available -> Booked nghia la mot ghe co the bi
+                -- danh dau da ban MA KHONG HE di qua giu cho - tuc vo hieu hoa dung
+                -- cai co che chong ban trung cua BR15a ma tang trigger sinh ra de bao ve.
+                   (d.InventoryStatus = 'Available'         AND i.InventoryStatus IN ('OnHold', 'OnHoldForWaitlist', 'Unavailable'))
                 OR (d.InventoryStatus = 'OnHold'            AND i.InventoryStatus IN ('Available', 'Booked', 'OnHoldForWaitlist'))
-                OR (d.InventoryStatus = 'OnHoldForWaitlist' AND i.InventoryStatus IN ('Available', 'OnHold', 'OnHoldForWaitlist', 'Booked'))
+                OR (d.InventoryStatus = 'OnHoldForWaitlist' AND i.InventoryStatus IN ('Available', 'OnHold', 'OnHoldForWaitlist'))
                 OR (d.InventoryStatus = 'Booked'            AND i.InventoryStatus IN ('Available', 'OnHoldForWaitlist'))
                 OR (d.InventoryStatus = 'Unavailable'       AND i.InventoryStatus IN ('Available'))
                 OR (d.InventoryStatus = i.InventoryStatus)
@@ -295,7 +310,16 @@ BEGIN
         FROM   inserted i
         JOIN   deleted  d ON d.WaitlistEntryID = i.WaitlistEntryID
         WHERE  NOT (
-                   (d.EntryStatus = 'Active'  AND i.EntryStatus IN ('Granted', 'Expired', 'Cancelled'))
+                -- §10.1 (Trang thai Waitlist Entry): Active -> Granted, Cancelled.
+                -- KHONG co Active -> Expired, va do la dung ve nghia: 'Expired' nghia la
+                -- "co hoi da het han theo BR44", ma mot Entry con Active thi chua he
+                -- duoc cap co hoi nao de het han. Duong ghi that cung xac nhan dieu do:
+                -- sp_ReleaseExpiredHolds - noi DUY NHAT dat 'Expired' - co dieu kien
+                -- tuong minh `AND EntryStatus = 'Granted'`. Khi Concert bi huy thi
+                -- sp_UpdateConcertStatus dat 'Cancelled' (BR44a), khong phai 'Expired'.
+                -- De lot Active -> Expired se lam moi thong ke "co hoi bi bo lo" lan ca
+                -- nhung nguoi chua bao gio toi luot.
+                   (d.EntryStatus = 'Active'  AND i.EntryStatus IN ('Granted', 'Cancelled'))
                 OR (d.EntryStatus = 'Granted' AND i.EntryStatus IN ('Fulfilled', 'Expired', 'Cancelled'))
                 OR (d.EntryStatus = i.EntryStatus)
                )
