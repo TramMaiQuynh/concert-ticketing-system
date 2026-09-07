@@ -1,4 +1,5 @@
 using ConcertTicketing.Domain.Models;
+using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Infrastructure.Repositories;
 using ConcertTicketing.IntegrationTests.Infrastructure;
 using FluentAssertions;
@@ -20,7 +21,7 @@ public sealed class AuthRepositoryTests : IClassFixture<DbFixture>
     public AuthRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private UserRepository Repo() => new(_fx.ApiConnectionString);
+    private UserRepository Repo() => new(_fx.ApiFactory);
 
     [Fact(DisplayName = "RegisterUser: tạo thành công, trả NewUserID, gán role Customer")]
     public async Task RegisterUser_CreatesUser_WithCustomerRole()
@@ -103,19 +104,39 @@ public sealed class AuthRepositoryTests : IClassFixture<DbFixture>
         var rawToken = await repo.CreateRefreshTokenAsync(userId, DateTime.UtcNow.AddDays(7));
         rawToken.Should().NotBeNullOrEmpty();
 
-        var (uid, valid) = await repo.ValidateRefreshTokenAsync(rawToken);
-        uid.Should().Be(userId);
-        valid.Should().BeTrue();
+        var ok = await repo.ValidateRefreshTokenAsync(rawToken);
+        ok.UserId.Should().Be(userId);
+        ok.State.Should().Be(RefreshTokenState.Valid);
 
         await repo.RevokeRefreshTokenAsync(rawToken);
 
-        var (uid2, valid2) = await repo.ValidateRefreshTokenAsync(rawToken);
-        uid2.Should().Be(userId);
-        valid2.Should().BeFalse();
+        // Phải phân biệt được "đã thu hồi" với "không tồn tại": đó là điều kiện để
+        // AuthService phát hiện refresh token bị dùng lại.
+        var revoked = await repo.ValidateRefreshTokenAsync(rawToken);
+        revoked.UserId.Should().Be(userId);
+        revoked.State.Should().Be(RefreshTokenState.Revoked);
+        revoked.IsValid.Should().BeFalse();
 
         // Token không tồn tại
-        var (uid3, valid3) = await repo.ValidateRefreshTokenAsync("nonexistent-token");
-        uid3.Should().Be(0);
-        valid3.Should().BeFalse();
+        var unknown = await repo.ValidateRefreshTokenAsync("nonexistent-token");
+        unknown.UserId.Should().Be(0);
+        unknown.State.Should().Be(RefreshTokenState.NotFound);
+    }
+
+    [Fact(DisplayName = "RevokeAll: thu hồi toàn bộ token còn hiệu lực của user")]
+    public async Task RevokeAllRefreshTokens_RevokesEveryLiveToken()
+    {
+        var s = NewSeeder();
+        var userId = await s.CreateUserAsync("Customer");
+        var repo = Repo();
+
+        var t1 = await repo.CreateRefreshTokenAsync(userId, DateTime.UtcNow.AddDays(7));
+        var t2 = await repo.CreateRefreshTokenAsync(userId, DateTime.UtcNow.AddDays(7));
+
+        var affected = await repo.RevokeAllRefreshTokensForUserAsync(userId);
+        affected.Should().BeGreaterThanOrEqualTo(2);
+
+        (await repo.ValidateRefreshTokenAsync(t1)).State.Should().Be(RefreshTokenState.Revoked);
+        (await repo.ValidateRefreshTokenAsync(t2)).State.Should().Be(RefreshTokenState.Revoked);
     }
 }
