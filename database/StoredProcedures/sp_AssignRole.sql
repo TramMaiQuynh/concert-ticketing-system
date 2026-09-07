@@ -20,7 +20,8 @@ BEGIN
 
         -- Chi Admin duoc assign/revoke role
         IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 58401, 'sp_AssignRole: Chi Admin duoc gan/thu hoi Role.', 1;
 
         IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE UserID = @TargetUserID)
@@ -51,10 +52,29 @@ BEGIN
             INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
             VALUES (@ActorUserID, 'ROLE_GRANTED', 'UserRoleAssignment',
                     CAST(@TargetUserID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                    '{"Role":"' + @RoleName + '","Status":"Granted"}');
+                    '{"Role":"' + STRING_ESCAPE(@RoleName, 'json') + '","Status":"Granted"}');
         END
         ELSE IF UPPER(@GrantOrRevoke) = 'REVOKE'
         BEGIN
+            -- UAI01 (BR52): thu hoi Role Admin khong duoc lam so Admin dang Active giam ve 0.
+            -- HOLDLOCK giu range lock den het transaction, chan hai lenh thu hoi dong thoi
+            -- cung thay "van con Admin khac" (aggregate constraint, khong bieu dien duoc bang CHECK).
+            IF @RoleName = 'Admin'
+               AND EXISTS (SELECT 1 FROM UserRoleAssignment
+                           WHERE UserID = @TargetUserID AND RoleID = @RoleID AND AssignmentStatus = 'Active')
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM   UserAccount ua WITH (UPDLOCK, HOLDLOCK)
+                    JOIN   UserRoleAssignment ura ON ura.UserID = ua.UserID
+                    JOIN   Role r ON r.RoleID = ura.RoleID
+                    WHERE  r.RoleName            = 'Admin'
+                      AND  ura.AssignmentStatus  = 'Active'
+                      AND  ua.AccountStatus      = 'Active'
+                      AND  ua.UserID            <> @TargetUserID)
+                    THROW 58406, 'sp_AssignRole (UAI01): Khong the thu hoi Role Admin cua Admin Active cuoi cung.', 1;
+            END
+
             UPDATE UserRoleAssignment
             SET AssignmentStatus = 'Revoked'
             WHERE UserID = @TargetUserID AND RoleID = @RoleID AND AssignmentStatus = 'Active';
@@ -62,7 +82,7 @@ BEGIN
             INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
             VALUES (@ActorUserID, 'ROLE_REVOKED', 'UserRoleAssignment',
                     CAST(@TargetUserID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                    '{"Role":"' + @RoleName + '","Status":"Revoked"}');
+                    '{"Role":"' + STRING_ESCAPE(@RoleName, 'json') + '","Status":"Revoked"}');
         END
         ELSE
             THROW 58405, 'sp_AssignRole: GrantOrRevoke phai la Grant hoac Revoke.', 1;
