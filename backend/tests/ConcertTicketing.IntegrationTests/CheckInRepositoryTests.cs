@@ -19,9 +19,9 @@ public sealed class CheckInRepositoryTests : IClassFixture<DbFixture>
     public CheckInRepositoryTests(DbFixture fx) => _fx = fx;
 
     private TestDataSeeder NewSeeder() => new(_fx);
-    private CheckInRepository CheckInRepo() => new(_fx.ApiConnectionString);
-    private BookingRepository BookingRepo() => new(_fx.ApiConnectionString);
-    private PaymentRepository PaymentRepo() => new(_fx.ApiConnectionString, _fx.PaymentSignatureSecret);
+    private CheckInRepository CheckInRepo() => new(_fx.ApiFactory);
+    private BookingRepository BookingRepo() => new(_fx.ApiFactory);
+    private PaymentRepository PaymentRepo() => new(_fx.ApiFactory, _fx.PaymentSignatureSecret, DbFixture.TestGateway);
 
     /// <summary>Dựng concert + booking + payment confirmed + staff được assign concert.</summary>
     private async Task<(ConcertBaseline baseline, string ticketCode, int staffUserId)>
@@ -34,7 +34,7 @@ public sealed class CheckInRepositoryTests : IClassFixture<DbFixture>
 
         var payment = PaymentRepo();
         var init = await payment.InitiateAsync(booking.BookingId, baseline.CustomerUserId);
-        await payment.ConfirmAsync(booking.BookingId, init.PaymentId, init.PaymentSignature, "PROVIDER");
+        await payment.ConfirmAsync(booking.BookingId, init.PaymentId, _fx.ComputePaymentSignature(booking.BookingId, init.PaymentId, init.Amount), "PROVIDER");
 
         var ticketCode = await s.GetTicketCodeAsync(booking.BookingId);
         ticketCode.Should().NotBeNullOrEmpty();
@@ -42,7 +42,7 @@ public sealed class CheckInRepositoryTests : IClassFixture<DbFixture>
         var staff = await s.CreateUserAsync("Check-in Staff");
         if (assignStaff)
         {
-            var adminRepo = new AdminRepository(_fx.ApiConnectionString);
+            var adminRepo = new AdminRepository(_fx.ApiFactory);
             await adminRepo.AddCheckinStaffAssignmentAsync(baseline.AdminUserId,
                 new AddCheckinStaffAssignmentRequest(staff, new List<int> { baseline.ConcertId }));
         }
