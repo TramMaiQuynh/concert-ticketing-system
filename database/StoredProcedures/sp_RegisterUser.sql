@@ -51,7 +51,7 @@ BEGIN
             (@NewUserID, 'ACCOUNT_REGISTERED', 'UserAccount',
              CAST(@NewUserID AS VARCHAR(64)), 'INSERT',
              SYSDATETIME(),
-             '{"Username":"' + @Username + '","Role":"Customer"}');
+             '{"Username":"' + STRING_ESCAPE(@Username, 'json') + '","Role":"Customer"}');
 
         COMMIT TRANSACTION;
 
