@@ -18,7 +18,7 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50060, 'CRIT-17 Violation: SalePrice cua EventSeat phai bang BasePrice cua TicketCategory khi insert.', 1;
+        THROW 50061, 'CRIT-17 Violation: SalePrice cua EventSeat phai bang BasePrice cua TicketCategory khi insert.', 1;
     END
 END;
 GO
