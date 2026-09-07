@@ -3,10 +3,11 @@
 -- Tao Booking va giu cac EventSeat theo co che Temporary Hold.
 -- Toan bo xu ly duoc thuc hien trong mot Transaction:
 --   1. Kiem tra Concert OnSale va khong bi SalesPaused.
---   2. Kiem tra Purchase Limit.
---   3. Giu tung EventSeat bang conditional UPDATE (chong oversell).
---   4. Tao Booking va cac Allocation.
---   5. Ghi AuditRecord.
+--   2. Kiem tra quyen vao Booking Flow theo Fair Access (BR45-BR48).
+--   3. Kiem tra Purchase Limit.
+--   4. Giu tung EventSeat bang conditional UPDATE (chong oversell).
+--   5. Tao Booking va cac Allocation.
+--   6. Dong QueueEntry Admitted -> Exited (BR47b) va ghi AuditRecord.
 -- @SeatList: chuoi EventSeatID phan cach bang dau phay.
 -- ============================================================
 CREATE PROCEDURE dbo.sp_CreateBooking
@@ -37,6 +38,52 @@ BEGIN
         BEGIN
             ROLLBACK TRANSACTION;
             THROW 51001, 'sp_CreateBooking: Concert khong o trang thai OnSale hoac dang tam dung ban ve.', 1;
+        END
+
+        -- --------------------------------------------------------
+        -- 1b. Fair Access gate (BR45-BR48, BR47b)
+        --
+        --     Khi Concert bat Fair Access va Queue dang Open, quyen BAT DAU
+        --     Booking Flow (BP5) chi thuoc ve QueueEntry dang Admitted va con
+        --     han booking_ttl - dung dinh nghia cua BR47 ("Admitted = dang co
+        --     quyen truy cap Booking Flow"). Neu khong chan tai day thi toan bo
+        --     Virtual Queue chi con la trang trai: bat ky ai cung dat duoc ve
+        --     ma khong can xep hang, tuc la vi pham BR46 ("khong duoc cho phep
+        --     Customer bo qua co che admission").
+        --
+        --     Luong Waitlist (@WaitlistEntryID) duoc mien: co hoi Waitlist la
+        --     mot duong quyen loi doc lap da duoc SIP2 cap phat kem ghe cu the,
+        --     khong di qua Queue.
+        -- --------------------------------------------------------
+        DECLARE @AdmittedQueueEntryID INT = NULL;
+
+        IF @WaitlistEntryID IS NULL
+        BEGIN
+            DECLARE @OpenQueueID INT;
+            SELECT @OpenQueueID = q.QueueID
+            FROM   Queue q
+            JOIN   Concert c ON c.ConcertID = q.ConcertID
+            WHERE  q.ConcertID = @ConcertID
+              AND  q.QueueStatus = 'Open'
+              AND  c.FairAccessEnabled = 1;
+
+            IF @OpenQueueID IS NOT NULL
+            BEGIN
+                -- UPDLOCK: giu dong entry den het transaction de SIP3 khong the
+                -- danh Expired ngay giua luc dang tao Booking.
+                SELECT @AdmittedQueueEntryID = QueueEntryID
+                FROM   QueueEntry WITH (UPDLOCK)
+                WHERE  QueueID        = @OpenQueueID
+                  AND  CustomerUserID = @CustomerUserID
+                  AND  QueueStatus    = 'Admitted'
+                  AND  (AdmissionExpiryTimestamp IS NULL OR AdmissionExpiryTimestamp > SYSDATETIME());
+
+                IF @AdmittedQueueEntryID IS NULL
+                BEGIN
+                    ROLLBACK TRANSACTION;
+                    THROW 51007, 'sp_CreateBooking (BR46/BR47): Concert dang ap dung Fair Access. Ban phai duoc admission tu Virtual Queue va con han booking_ttl truoc khi dat ve.', 1;
+                END
+            END
         END
 
         -- --------------------------------------------------------
@@ -202,6 +249,31 @@ BEGIN
              CAST(@NewBookingID AS VARCHAR(64)), 'INSERT',
              SYSDATETIME(),
              '{"Status":"Pending","SeatCount":' + CAST(@RequestedCount AS VARCHAR) + '}');
+
+        -- --------------------------------------------------------
+        -- 9b. BR47b/QI06: hoan tat Booking trong han -> QueueEntry chuyen Exited
+        --     (thanh cong), KHONG phai Expired. Dong thoi giai phong ngay mot
+        --     slot AdmissionCapacity cho nguoi ke tiep - neu bo qua buoc nay,
+        --     slot bi giu vo ich cho den het booking_ttl va thong luong admission
+        --     giam dung bang khoang thoi gian do.
+        --     Conditional update (BR49a) de an toan voi race cung SIP3.
+        -- --------------------------------------------------------
+        IF @AdmittedQueueEntryID IS NOT NULL
+        BEGIN
+            UPDATE QueueEntry
+            SET    QueueStatus   = 'Exited',
+                   ExitTimestamp = SYSDATETIME()
+            WHERE  QueueEntryID = @AdmittedQueueEntryID
+              AND  QueueStatus  = 'Admitted';
+
+            IF @@ROWCOUNT = 1
+                INSERT INTO AuditRecord
+                    (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+                VALUES
+                    (@CustomerUserID, 'QUEUE_EXITED', 'QueueEntry',
+                     CAST(@AdmittedQueueEntryID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
+                     '{"QueueStatus":"Exited","Reason":"Booking completed within booking_ttl"}');
+        END
 
         -- --------------------------------------------------------
         -- 10. Cap nhat WaitlistEntry neu co
