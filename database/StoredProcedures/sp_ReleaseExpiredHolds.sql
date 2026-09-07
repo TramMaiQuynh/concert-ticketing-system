@@ -21,7 +21,12 @@ BEGIN
     CREATE TABLE #ExpiredBookings (BookingID INT NOT NULL, ConcertID INT NOT NULL);
     INSERT INTO #ExpiredBookings (BookingID, ConcertID)
     SELECT BookingID, ConcertID
-    FROM   Booking WITH (UPDLOCK) -- khoa truoc de ngan chan race condition thay doi trang thai
+    -- Luu y: hai lenh SELECT gom viec nay chay NGOAI transaction (BEGIN TRANSACTION
+    -- o duoi), nen hint UPDLOCK chi ton tai trong pham vi cau lenh va KHONG bao ve
+    -- duoc gi. Co che chong race that su nam o duoi: UPDATE co dieu kien
+    -- (`AND BookingStatus = 'Pending'`) theo BR49a, cong voi buoc DELETE loc lai bang
+    -- tam de chi giai phong dung nhung dong ma chinh lan chay nay da doi trang thai.
+    FROM   Booking WITH (UPDLOCK)
     WHERE  BookingStatus      = 'Pending'
       AND  HoldExpiryDatetime < @Now
       AND  (@ConcertID IS NULL OR ConcertID = @ConcertID);
