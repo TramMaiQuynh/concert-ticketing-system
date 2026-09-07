@@ -21,6 +21,7 @@ using ConcertTicketing.Application.Services;
 using ConcertTicketing.Application.Validators;
 using ConcertTicketing.Infrastructure.BackgroundJobs;
 using ConcertTicketing.Infrastructure.Cache;
+using ConcertTicketing.Infrastructure.Data;
 using ConcertTicketing.Infrastructure.Repositories;
 
 // ── Bootstrap Serilog sớm để bắt lỗi khởi động ────────────────────────────
@@ -32,22 +33,74 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // ── Cấu hình cục bộ chứa bí mật ──────────────────────────────────────────
+    // appsettings.json trong repository KHÔNG chứa bí mật nào. Giá trị thật đến từ
+    // appsettings.Local.json (dev/demo, nằm trong .gitignore) hoặc biến môi trường
+    // (môi trường thật).
+    //
+    // THỨ TỰ ƯU TIÊN: biến môi trường LUÔN thắng file.
+    // WebApplication.CreateBuilder đã nạp biến môi trường TRƯỚC dòng này, nên nếu chỉ
+    // thêm file JSON thì file sẽ ghi đè biến môi trường — ngược hoàn toàn với quy ước.
+    // Hậu quả thực tế: triển khai bằng biến môi trường nhưng máy còn sót một
+    // appsettings.Local.json cũ thì hệ thống lặng lẽ dùng chuỗi kết nối và bí mật cũ.
+    // Vì vậy nạp lại biến môi trường SAU file để khôi phục đúng thứ tự.
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+    builder.Configuration.AddEnvironmentVariables();
+    builder.Configuration.AddEnvironmentVariables(prefix: "CONCERT_");
+
     // ── Serilog ───────────────────────────────────────────────────────────────
     builder.Host.UseSerilog((ctx, services, config) =>
         config.ReadFrom.Configuration(ctx.Configuration)
               .ReadFrom.Services(services));
 
-    var connectionString = builder.Configuration.GetConnectionString("Default")!;
+    // ── Kiểm tra cấu hình bắt buộc — DỪNG NGAY LÚC KHỞI ĐỘNG ────────────────
+    // Trước đây chỉ Jwt:Secret và PaymentSignature:Secret được kiểm; những khóa còn lại
+    // dùng toán tử `!` nên nếu thiếu thì lỗi chỉ nổ ra lúc có request thật: thiếu
+    // Jwt:AccessTokenExpiryMinutes làm MỌI lần đăng nhập trả HTTP 500 mà không nói được
+    // nguyên nhân. Sai cấu hình phải làm tiến trình không khởi động được, không phải làm
+    // hệ thống chạy rồi hỏng lẻ tẻ.
+    static string RequireConfig(WebApplicationBuilder b, string key, int minLength = 1)
+    {
+        var value = b.Configuration[key];
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Thiếu cấu hình bắt buộc: '{key}'.");
+        if (value.Length < minLength)
+            throw new InvalidOperationException(
+                $"Cấu hình '{key}' phải có độ dài tối thiểu {minLength} ký tự.");
+        return value;
+    }
+
+    static int RequireIntConfig(WebApplicationBuilder b, string key, int min)
+    {
+        var raw = RequireConfig(b, key);
+        if (!int.TryParse(raw, out var value) || value < min)
+            throw new InvalidOperationException(
+                $"Cấu hình '{key}' phải là số nguyên >= {min} (hiện tại: '{raw}').");
+        return value;
+    }
+
+    var connectionString = builder.Configuration.GetConnectionString("Default");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Thiếu cấu hình bắt buộc: 'ConnectionStrings:Default'.");
 
     // ── CORS ─────────────────────────────────────────────────────────────────
+    // Origin lấy từ cấu hình thay vì viết cứng localhost:5173 — nếu không, frontend
+    // triển khai ở bất kỳ địa chỉ nào khác đều bị trình duyệt chặn hoàn toàn.
+    var allowedOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+
+    if (allowedOrigins.Length == 0)
+        throw new InvalidOperationException(
+            "Thiếu cấu hình bắt buộc: 'Cors:AllowedOrigins' (danh sách origin của frontend).");
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowFrontend", policy =>
         {
-            policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+            policy.WithOrigins(allowedOrigins)
                   .AllowAnyHeader()
                   .AllowAnyMethod()
-                  .AllowCredentials(); // Required for HttpOnly Cookies (Refresh Token)
+                  .AllowCredentials(); // Bắt buộc để gửi/nhận HttpOnly Cookie (Refresh Token)
         });
     });
 
@@ -79,13 +132,15 @@ try
     });
 
     // ── JWT Authentication ────────────────────────────────────────────────────
-    var jwtSecret   = builder.Configuration["Jwt:Secret"]!;
-    var jwtIssuer   = builder.Configuration["Jwt:Issuer"]!;
-    var jwtAudience = builder.Configuration["Jwt:Audience"]!;
+    // Secret >= 32 ký tự = 256-bit, tương xứng với HMAC-SHA256.
+    var jwtSecret   = RequireConfig(builder, "Jwt:Secret", minLength: 32);
+    var jwtIssuer   = RequireConfig(builder, "Jwt:Issuer");
+    var jwtAudience = RequireConfig(builder, "Jwt:Audience");
 
-    // C3 fix: Từ chối khởi động nếu JWT Secret không đủ mạnh/bị bỏ trống.
-    if (string.IsNullOrEmpty(jwtSecret) || jwtSecret.Length < 32)
-        throw new InvalidOperationException("Jwt:Secret phải được cấu hình hợp lệ với độ dài >= 32 ký tự (256-bit).");
+    // AuthService đọc lại hai khóa này bằng int.Parse ở mỗi lần cấp token; kiểm tại đây
+    // để lỗi cấu hình lộ ra lúc khởi động thay vì lúc người dùng đăng nhập.
+    _ = RequireIntConfig(builder, "Jwt:AccessTokenExpiryMinutes", min: 1);
+    _ = RequireIntConfig(builder, "Jwt:RefreshTokenExpiryDays",  min: 1);
 
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
@@ -164,7 +219,7 @@ try
     });
 
     // ── Redis ─────────────────────────────────────────────────────────────────
-    var redisConnection = builder.Configuration["Redis:ConnectionString"]!;
+    var redisConnection = RequireConfig(builder, "Redis:ConnectionString");
     if (!redisConnection.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
     {
         redisConnection += ",abortConnect=false";
@@ -188,26 +243,56 @@ try
         }));
     builder.Services.AddHangfireServer();
 
-    // ── Repositories (Dapper-based) ───────────────────────────────────────────
-    var paymentSignatureSecret = builder.Configuration["PaymentSignature:Secret"]
-        ?? throw new InvalidOperationException("PaymentSignature:Secret phải được cấu hình.");
+    // ── Data access ───────────────────────────────────────────────────────────
+    // Mọi connection đi qua factory để SESSION_CONTEXT(N'UserID') được set trước
+    // câu lệnh đầu tiên — điều kiện bắt buộc để 4 view RLS và
+    // TRG_AuditRecord_SecurityGuard hoạt động (§23.7).
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddScoped<IDbConnectionFactory>(sp =>
+        new SqlConnectionFactory(connectionString, sp.GetRequiredService<IHttpContextAccessor>()));
 
-    builder.Services.AddScoped<IBookingRepository>(_ =>
-        new BookingRepository(connectionString));
-    builder.Services.AddScoped<IConcertRepository>(_ =>
-        new ConcertRepository(connectionString));
-    builder.Services.AddScoped<ICheckInRepository>(_ =>
-        new CheckInRepository(connectionString));
-    builder.Services.AddScoped<IUserRepository>(_ =>
-        new UserRepository(connectionString));
-    builder.Services.AddScoped<IPaymentRepository>(_ =>
-        new PaymentRepository(connectionString, paymentSignatureSecret));
-    builder.Services.AddScoped<IAdminRepository>(_ =>
-        new AdminRepository(connectionString));
-    builder.Services.AddScoped<IWaitlistRepository>(_ =>
-        new WaitlistRepository(connectionString));
-    builder.Services.AddScoped<IQueueRepository>(_ =>
-        new QueueRepository(connectionString));
+    // ── Repositories (Dapper-based) ───────────────────────────────────────────
+    // Cùng yêu cầu độ dài với Jwt:Secret: đây cũng là khóa HMAC-SHA256, và nó là thứ
+    // duy nhất ngăn người ngoài tự gọi webhook xác nhận thanh toán.
+    var paymentSignatureSecret = RequireConfig(builder, "PaymentSignature:Secret", minLength: 32);
+
+    // ── Cổng thanh toán ──────────────────────────────────────────────────────
+    // Simulator = bộ mô phỏng chạy trong chính backend, phục vụ demo khi chưa tích hợp
+    // PSP thật. Nó KHÔNG bỏ qua bước xác minh: nó đóng đúng vai của cổng thanh toán —
+    // tính chữ ký ở phía máy chủ rồi gọi vào cùng luồng xác nhận, nên demo vẫn chạy qua
+    // toàn bộ mã kiểm tra chữ ký thật.
+    //
+    // Chặn cứng ở Production: cho phép "thanh toán" mà không có tiền thật đi kèm là
+    // điều không bao giờ được xuất hiện ngoài môi trường demo/thử nghiệm.
+    var paymentMode = builder.Configuration["PaymentGateway:Mode"] ?? "External";
+    if (!string.Equals(paymentMode, "Simulator", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(paymentMode, "External", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("'PaymentGateway:Mode' phải là 'Simulator' hoặc 'External'.");
+
+    var simulatorMode = string.Equals(paymentMode, "Simulator", StringComparison.OrdinalIgnoreCase);
+    if (simulatorMode && builder.Environment.IsProduction())
+        throw new InvalidOperationException(
+            "PaymentGateway:Mode = 'Simulator' KHÔNG được phép ở môi trường Production. " +
+            "Đặt 'External' và cấu hình cổng thanh toán thật.");
+
+    var paymentUrlTemplate = simulatorMode
+        ? RequireConfig(builder, "PaymentGateway:SimulatorReturnUrl")
+        : RequireConfig(builder, "PaymentGateway:ExternalPaymentUrl");
+
+    builder.Services.AddSingleton(new PaymentGatewaySettings(simulatorMode, paymentUrlTemplate));
+
+    builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+    builder.Services.AddScoped<IConcertRepository, ConcertRepository>();
+    builder.Services.AddScoped<ICheckInRepository, CheckInRepository>();
+    builder.Services.AddScoped<IUserRepository, UserRepository>();
+    builder.Services.AddScoped<IPaymentRepository>(sp =>
+        new PaymentRepository(
+            sp.GetRequiredService<IDbConnectionFactory>(),
+            paymentSignatureSecret,
+            sp.GetRequiredService<PaymentGatewaySettings>()));
+    builder.Services.AddScoped<IAdminRepository, AdminRepository>();
+    builder.Services.AddScoped<IWaitlistRepository, WaitlistRepository>();
+    builder.Services.AddScoped<IQueueRepository, QueueRepository>();
 
     // ── Application Services ──────────────────────────────────────────────────
     builder.Services.AddScoped<IAuthService, AuthService>();
@@ -217,17 +302,33 @@ try
     builder.Services.AddSingleton<ISeatMapCache>(sp =>
         new SeatMapCache(
             sp.GetRequiredService<IConnectionMultiplexer>(),
-
             sp.GetRequiredService<IServiceScopeFactory>(),
-            seatMapTtl));
+            seatMapTtl,
+            sp.GetRequiredService<ILogger<SeatMapCache>>()));
 
-    // ── Background Worker: HoldRelease + Waitlist Allocation (IHostedService) ─
+    // ── Background Workers: một tiến trình định kỳ cho mỗi SIP (§24.3) ────────
     // Dùng IHostedService (không phải Hangfire) vì đây là job định kỳ đơn giản,
-    // không cần retry hay persistence.
+    // không cần retry hay persistence — mọi SP đều idempotent theo BR49a.
+    // Các worker chạy ngoài HTTP request nên dùng OpenForSystemAsync (ActorUserID = 'system', D14).
+    // SIP4 KHÔNG có worker: chạy đồng bộ ngay trong sp_UpdateConcertStatus.
+    var workerFactory = (IServiceProvider sp) =>
+        (IDbConnectionFactory)new SqlConnectionFactory(
+            connectionString, sp.GetRequiredService<IHttpContextAccessor>());
+
+    // SIP1 + SIP2 — nhả hold hết hạn rồi cấp ngay cho Waitlist
     builder.Services.AddHostedService(sp =>
-        new HoldReleaseWorker(
-            connectionString,
+        new HoldReleaseWorker(workerFactory(sp),
             sp.GetRequiredService<ILogger<HoldReleaseWorker>>()));
+
+    // SIP3 — admission hàng đợi Fair Access
+    builder.Services.AddHostedService(sp =>
+        new QueueAdmissionWorker(workerFactory(sp),
+            sp.GetRequiredService<ILogger<QueueAdmissionWorker>>()));
+
+    // SIP5 — tự động mở/đóng bán vé theo lịch
+    builder.Services.AddHostedService(sp =>
+        new SaleWindowWorker(workerFactory(sp),
+            sp.GetRequiredService<ILogger<SaleWindowWorker>>()));
 
     // ── Health Checks ─────────────────────────────────────────────────────────
     builder.Services.AddHealthChecks()
