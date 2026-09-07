@@ -20,6 +20,8 @@ BEGIN
         IF @NewStatus NOT IN ('Draft','Published','OnSale','SaleClosed','Completed','Cancelled')
             THROW 58020, 'sp_UpdateConcertStatus: ConcertStatus khong hop le.', 1;
 
+        DECLARE @TxnRef VARCHAR(64) = LOWER(CAST(NEWID() AS VARCHAR(36)));
+
         DECLARE @OrganizerUserID INT, @CurrentStatus VARCHAR(32);
         SELECT @OrganizerUserID = OrganizerUserID, @CurrentStatus = ConcertStatus
         FROM Concert WHERE ConcertID = @ConcertID;
@@ -31,7 +33,8 @@ BEGIN
         IF NOT (
             @ActorUserID = @OrganizerUserID
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active')
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
         )
             THROW 58022, 'sp_UpdateConcertStatus: Actor khong co quyen.', 1;
 
@@ -57,45 +60,56 @@ BEGIN
         IF @NewStatus = 'Cancelled'
         BEGIN
             -- 1. Tao Refund cho phan chua hoan cua cac Payment dang Confirmed/PartiallyRefunded (CRIT-07, I-12)
-            INSERT INTO Refund (PaymentID, RefundAmount, RefundStatus, RefundRequestTimestamp, RefundReason)
+            INSERT INTO Refund (PaymentID, RefundAmount, RefundStatus, RefundRequestTimestamp, RefundReason, RefundReference)
             SELECT p.PaymentID, 
                    p.Amount - ISNULL((SELECT SUM(RefundAmount) FROM Refund r WHERE r.PaymentID = p.PaymentID AND r.RefundStatus = 'Confirmed'), 0),
-                   'Pending', SYSDATETIME(), 'Concert Cancelled'
+                   'Pending', SYSDATETIME(), 'Concert Cancelled', LOWER(CAST(NEWID() AS VARCHAR(36)))
             FROM Payment p
             JOIN Booking b ON b.BookingID = p.BookingID
             WHERE b.ConcertID = @ConcertID AND b.BookingStatus = 'Confirmed' 
               AND p.IsBookingConfirmingPayment = 1 AND p.PaymentStatus IN ('Confirmed', 'PartiallyRefunded')
               AND p.Amount > ISNULL((SELECT SUM(RefundAmount) FROM Refund r2 WHERE r2.PaymentID = p.PaymentID AND r2.RefundStatus = 'Confirmed'), 0);
 
-            -- 2. Cap nhat Payment -> Refunded
-            UPDATE p
-            SET PaymentStatus = 'Refunded'
-            FROM Payment p
-            JOIN Booking b ON b.BookingID = p.BookingID
-            WHERE b.ConcertID = @ConcertID AND b.BookingStatus = 'Confirmed' 
-              AND p.IsBookingConfirmingPayment = 1 AND p.PaymentStatus IN ('Confirmed', 'PartiallyRefunded');
+            -- 2. KHONG dat PaymentStatus tai day.
+            --    Truoc day buoc nay set thang PaymentStatus = 'Refunded' trong khi
+            --    Refund vua tao o buoc 1 moi chi la 'Pending'. Hau qua that:
+            --      (a) Payment noi doi - bao da hoan tien trong khi tien chua roi
+            --          khoi tai khoan thu; vi pham BR32b.
+            --      (b) sp_ConfirmRefund - duong DUY NHAT hop le - vinh vien khong
+            --          sua duoc nua, vi no chi UPDATE khi PaymentStatus IN
+            --          ('Confirmed','PartiallyRefunded').
+            --      (c) VW_ConcertSalesSummary tru refund theo RefundStatus='Confirmed',
+            --          nen bao cao doanh thu day du cho mot Concert da huy sach.
+            --    Dung theo thuc te thanh toan: Payment giu nguyen 'Confirmed' cho toi
+            --    khi khoan hoan duoc settle that su qua sp_ConfirmRefund; cac Refund
+            --    'Pending' o buoc 1 chinh la hang doi cong viec cua bo phan thanh toan.
 
             -- 3. Chuyen tat ca Booking Pending/Confirmed -> Cancelled
+            --    CancelledTimestamp phai duoc ghi trong CUNG lenh UPDATE:
+            --    CHK_Booking_TimestampCoherence bat buoc trang thai terminal co dau
+            --    thoi gian tuong ung, va bao cao/doi soat can biet chinh xac thoi diem huy.
             UPDATE Booking 
-            SET BookingStatus = 'Cancelled' 
+            SET BookingStatus = 'Cancelled',
+                CancelledTimestamp = SYSDATETIME()
             WHERE ConcertID = @ConcertID AND BookingStatus IN ('Pending', 'Confirmed');
 
             -- 4. Chuyen tat ca Ticket Issued -> Cancelled
             UPDATE Ticket 
-            SET TicketStatus = 'Cancelled' 
+            SET TicketStatus = 'Cancelled',
+                CancelledTimestamp = SYSDATETIME()
             WHERE ConcertID = @ConcertID AND TicketStatus = 'Issued';
 
-            -- 5. Giai phong EventSeat
-            UPDATE EventSeat 
-            SET InventoryStatus = 'Available' 
-            WHERE ConcertID = @ConcertID AND InventoryStatus IN ('OnHold', 'OnHoldForWaitlist', 'Booked');
-
-            -- 6. Giai phong Booking Allocation
+            -- 5. Giai phong Booking Allocation
             UPDATE a
             SET AllocationStatus = 'Released', ReleaseTimestamp = SYSDATETIME()
             FROM BookingEventSeatAllocation a
             JOIN Booking b ON b.BookingID = a.BookingID
             WHERE b.ConcertID = @ConcertID AND a.AllocationStatus = 'Active';
+
+            -- 6. Giai phong EventSeat
+            UPDATE EventSeat 
+            SET InventoryStatus = 'Available' 
+            WHERE ConcertID = @ConcertID AND InventoryStatus IN ('OnHold', 'OnHoldForWaitlist', 'Booked');
 
             -- 7. WaitlistEntry Active/Granted -> Cancelled
             UPDATE e
@@ -114,10 +128,17 @@ BEGIN
 
             -- 9. Dong Waitlist
             UPDATE Waitlist 
-            SET WaitlistStatus = 'Closed' 
+            SET WaitlistStatus = 'Closed', CloseTimestamp = SYSDATETIME()
             WHERE ConcertID = @ConcertID AND WaitlistStatus = 'Open';
 
-            -- 10. QueueEntry Waiting/Admitted -> Cancelled (CRIT-03)
+            -- 10. QueueEntry Waiting/Admitted -> Cancelled
+            --     Ngu nghia da chot (spec §12.15.1 da duoc cap nhat theo huong nay):
+            --       Exited    = khach TU minh ket thuc (hoan tat Booking, hoac chu dong roi hang)
+            --       Expired   = het booking_ttl ma chua dat ve
+            --       Cancelled = HE THONG cham dut entry ngoai y muon khach (Concert bi huy)
+            --     Dung 'Exited' cho ca truong hop Concert bi huy se lam mat kha nang
+            --     phan biet "khach mua duoc ve" voi "khach bi xoa so vi su kien huy" -
+            --     dung loai nhap nhang ma BR47b da chu dong tach ra giua Exited/Expired.
             UPDATE e
             SET QueueStatus = 'Cancelled', ExitTimestamp = SYSDATETIME()
             FROM QueueEntry e
@@ -130,19 +151,20 @@ BEGIN
             WHERE ConcertID = @ConcertID AND QueueStatus = 'Open';
 
             -- Audit Tong hop
-            INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
+            INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue, TransactionReference)
             VALUES (@ActorUserID, 'CONCERT_CASCADE_CANCELLED', 'Concert', CAST(@ConcertID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                    '{"Reason":"Concert Cancelled SIP4"}');
+                    '{"Reason":"Concert Cancelled SIP4"}', @TxnRef);
         END
 
         -- UPDATE -> TRG_Concert_StateTransition tu chan chuyen doi khong hop le
         UPDATE Concert SET ConcertStatus = @NewStatus WHERE ConcertID = @ConcertID;
 
-        INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
+        INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue, TransactionReference)
         VALUES (@ActorUserID, 'CONCERT_STATUS_CHANGED', 'Concert',
                 CAST(@ConcertID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
                 '{"ConcertStatus":"' + @CurrentStatus + '"}',
-                '{"ConcertStatus":"' + @NewStatus + '"}');
+                '{"ConcertStatus":"' + @NewStatus + '"}',
+                @TxnRef);
 
         COMMIT TRANSACTION;
     END TRY
