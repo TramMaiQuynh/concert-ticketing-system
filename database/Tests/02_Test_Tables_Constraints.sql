@@ -22,7 +22,7 @@ SET @SQL = N'
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
     VALUES (@uid,@aid,@vid,''Bad'',''INVALID_STATUS'',
         DATEADD(d,1,SYSDATETIME()),DATEADD(d,2,SYSDATETIME()),4,0,0,0);';
-EXEC sp_RunTest @Suite,'CHK_Concert_Status_Invalid','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Concert_Status_Invalid','ERROR',NULL,@SQL;
 
 -- CHK_Concert_Dates: EndDatetime <= StartDatetime
 SET @SQL = N'
@@ -33,7 +33,7 @@ SET @SQL = N'
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
     VALUES (@uid,@aid,@vid,''Bad Dates'',''Draft'',
         DATEADD(d,2,SYSDATETIME()),DATEADD(d,1,SYSDATETIME()),4,0,0,0);';
-EXEC sp_RunTest @Suite,'CHK_Concert_Dates_Invalid','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Concert_Dates_Invalid','ERROR',NULL,@SQL;
 
 -- ===== EventSeat =====
 -- CHK_EventSeat_Status: trang thai sai
@@ -43,7 +43,7 @@ SET @SQL = N'
     DECLARE @tid INT = (SELECT TOP 1 TicketCategoryID FROM TicketCategory);
     INSERT INTO EventSeat (ConcertID,SeatID,TicketCategoryID,InventoryStatus,SalePrice)
     VALUES (@cid,@sid,@tid,''WRONG_STATUS'',100000);';
-EXEC sp_RunTest @Suite,'CHK_EventSeat_Status_Invalid','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_EventSeat_Status_Invalid','ERROR',NULL,@SQL;
 
 -- ===== DiscountCode =====
 -- CHK_DiscountCode_Status: trang thai sai
@@ -51,7 +51,7 @@ SET @SQL = N'
     DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion);
     INSERT INTO DiscountCode (PromotionID,CodeValue,CodeStatus)
     VALUES (@pid,''BADCODE'',''InvalidStatus'');';
-EXEC sp_RunTest @Suite,'CHK_DiscountCode_Status_Invalid','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_DiscountCode_Status_Invalid','ERROR',NULL,@SQL;
 
 -- ===== Payment =====
 -- CHK_Payment_Amount: Amount <= 0
@@ -59,20 +59,20 @@ SET @SQL = N'
     DECLARE @bid INT;
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
-    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',-100,''REF-TEST'');';
-EXEC sp_RunTest @Suite,'CHK_Payment_Amount_Negative','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Payment_Amount_Negative','ERROR',NULL,@SQL;
 
 -- CHK_Payment_Status: trang thai sai
 SET @SQL = N'
     DECLARE @bid INT;
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
-    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''BadStatus'',100000,''REF-TEST'');';
-EXEC sp_RunTest @Suite,'CHK_Payment_Status_Invalid','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Payment_Status_Invalid','ERROR',NULL,@SQL;
 
 -- ===== Ticket =====
 -- CHK_Ticket_Timestamps: khong duoc co ca 2 UsedTimestamp va CancelledTimestamp
@@ -81,11 +81,12 @@ SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Confirmed'',1000000,1000000);
-    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid = SCOPE_IDENTITY();
+UPDATE Booking SET BookingStatus=''Confirmed'', ConfirmedTimestamp=SYSDATETIME(), HoldStartDatetime=NULL, HoldExpiryDatetime=NULL WHERE BookingID = SCOPE_IDENTITY();
     INSERT INTO Ticket (BookingID,EventSeatID,ConcertID,TicketCode,TicketStatus,UsedTimestamp,CancelledTimestamp)
     VALUES (@bid,@esid,@cid,''TCK_BOTH'',''Issued'',SYSDATETIME(),SYSDATETIME());';
-EXEC sp_RunTest @Suite,'CHK_Ticket_Timestamps_BothSet','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Ticket_Timestamps_BothSet','ERROR',NULL,@SQL;
 
 -- ===== UIX_Allocation_ActiveEventSeat =====
 -- 2 Active allocation tren cung 1 EventSeat -> phai loi
@@ -95,15 +96,15 @@ SET @SQL = N'
     DECLARE @uid2 INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust2'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
     DECLARE @bid1 INT, @bid2 INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,''Pending'',1000000,1000000);
-    SET @bid1=SCOPE_IDENTITY();
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
-    SET @bid2=SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid1,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid1=SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid2,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid2=SCOPE_IDENTITY();
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
     VALUES (@bid1, @esid, ''Active'', 1000000);
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
     VALUES (@bid2, @esid, ''Active'', 1000000);';
-EXEC sp_RunTest @Suite,'UIX_Allocation_2Active_SameSeat','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'UIX_Allocation_2Active_SameSeat','ERROR',NULL,@SQL;
 
 -- 1 Active + 1 Released tren cung ghe -> OK
 SET @SQL = N'
@@ -112,16 +113,16 @@ SET @SQL = N'
     DECLARE @uid2 INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust2'');
     DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'');
     DECLARE @bid1 INT, @bid2 INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid1,@cid,''Pending'',1000000,1000000);
-    SET @bid1=SCOPE_IDENTITY();
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid2,@cid,''Pending'',1000000,1000000);
-    SET @bid2=SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid1,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid1=SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid2,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid2=SCOPE_IDENTITY();
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
     VALUES (@bid1,@esid,''Released'',1000000);
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot)
     VALUES (@bid2,@esid,''Active'',1000000);';
-EXEC sp_RunTest @Suite,'UIX_Allocation_1Active_1Released_OK','SUCCESS',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'UIX_Allocation_1Active_1Released_OK','SUCCESS',NULL,@SQL;
 
 -- ===== CHK_Concert_PurchaseLimit: PurchaseLimit <= 0 -> ERROR =====
 SET @SQL = N'
@@ -132,39 +133,39 @@ SET @SQL = N'
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
     VALUES (@uid,@aid,@vid,''PL0'',''Draft'',
         DATEADD(d,1,SYSDATETIME()),DATEADD(d,2,SYSDATETIME()),0,0,0,0);';
-EXEC sp_RunTest @Suite,'CHK_Concert_PurchaseLimit_Positive','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Concert_PurchaseLimit_Positive','ERROR',NULL,@SQL;
 
 -- ===== CHK_Promotion_DiscountValue: DiscountValue <= 0 -> ERROR =====
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,StartDatetime,EndDatetime,PromotionStatus,CodeRequiredFlag)
     VALUES (@cid,''PV0'',''Fixed Amount'',0,SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),''Active'',0);';
-EXEC sp_RunTest @Suite,'CHK_Promotion_DiscountValue_Positive','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Promotion_DiscountValue_Positive','ERROR',NULL,@SQL;
 
 -- ===== CHK_Queue_Capacity: AdmissionCapacity <= 0 -> ERROR =====
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert);
     INSERT INTO Queue (ConcertID,QueueStatus,AdmissionCapacity,FairAccessPolicy)
     VALUES (@cid,''Open'',0,''FIFO'');';
-EXEC sp_RunTest @Suite,'CHK_Queue_Capacity_Positive','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_Queue_Capacity_Positive','ERROR',NULL,@SQL;
 
 -- ===== CHK_DiscountCode_ValidDates: ValidTo < ValidFrom -> ERROR =====
 SET @SQL = N'
     DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion);
     INSERT INTO DiscountCode (PromotionID,CodeValue,ValidFromDatetime,ValidToDatetime,CodeStatus)
     VALUES (@pid,''BAD_DATE'',DATEADD(d,10,SYSDATETIME()),SYSDATETIME(),''Active'');';
-EXEC sp_RunTest @Suite,'CHK_DiscountCode_ValidDates','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'CHK_DiscountCode_ValidDates','ERROR',NULL,@SQL;
 
 -- ===== UIX_Payment_PendingPerBooking: 2 Payment Pending/booking -> ERROR =====
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @bid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount) VALUES (@uid,@cid,''Pending'',1000000,1000000);
-    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+SET @bid = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-PEND-1'');
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-PEND-2'');';
-EXEC sp_RunTest @Suite,'UIX_Payment_PendingPerBooking','ERROR',NULL,@SQL;
+EXEC test.sp_RunTest @Suite,'UIX_Payment_PendingPerBooking','ERROR',NULL,@SQL;
 
 PRINT '== Constraints Tests Done ==';
 GO
