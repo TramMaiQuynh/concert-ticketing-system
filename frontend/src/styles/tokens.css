@@ -1,0 +1,272 @@
+/* ============================================================================
+   TOKEN — tầng nền của toàn bộ giao diện
+   ============================================================================
+
+   Nguyên tắc: KHÔNG có giá trị màu, khoảng cách, cỡ chữ hay bo góc nào được viết
+   thẳng trong component. Mọi thứ đi qua đây.
+
+   Lý do không phải thẩm mỹ mà là vận hành: bản trước có khoảng 1500 dòng
+   `style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#B45309' }}`
+   nằm rải trong các trang. Hệ quả cụ thể: không thể làm dark mode (màu bị đóng
+   cứng), không thể chỉnh nhịp khoảng cách toàn hệ thống, và hai trang cùng loại
+   nội dung lại lệch nhau vài pixel vì mỗi chỗ gõ một con số.
+
+   Cấu trúc: thang NGUYÊN THỦY (neutral-50…950, space-1…) là bảng màu vật lý,
+   không mang ý nghĩa. Token NGỮ NGHĨA (--surface, --text, --border) trỏ vào thang
+   đó và là thứ component được phép dùng. Đổi theme = đổi ánh xạ ngữ nghĩa, thang
+   nguyên thủy giữ nguyên.
+   ============================================================================ */
+
+:root {
+  /* ── Thang màu trung tính ───────────────────────────────────────────────
+     Zinc: hơi ngả lạnh, sạch, hợp với nội dung dày chữ số và bảng biểu.      */
+  --zinc-0:   #FFFFFF;
+  --zinc-25:  #FCFCFD;
+  --zinc-50:  #FAFAFA;
+  --zinc-100: #F4F4F5;
+  --zinc-150: #ECECEE;
+  --zinc-200: #E4E4E7;
+  --zinc-300: #D4D4D8;
+  --zinc-400: #A1A1AA;
+  --zinc-500: #71717A;
+  --zinc-600: #52525B;
+  --zinc-700: #3F3F46;
+  --zinc-800: #27272A;
+  --zinc-850: #1F1F23;
+  --zinc-900: #18181B;
+  --zinc-950: #101013;
+  --zinc-1000:#09090B;
+
+  /* ── Thang màu ngữ nghĩa ────────────────────────────────────────────────
+     Mỗi sắc thái có đủ bốn bậc: nền nhạt, viền, chữ, và màu đặc.
+     Bốn bậc là số tối thiểu để dựng được badge, banner và nút mà vẫn đủ
+     tương phản ở cả hai theme.                                              */
+  --green-bg:  #ECFDF5;  --green-border:  #A7F3D0;  --green-text:  #047857;  --green-solid:  #059669;
+  --amber-bg:  #FFFBEB;  --amber-border:  #FDE68A;  --amber-text:  #B45309;  --amber-solid:  #D97706;
+  --red-bg:    #FEF2F2;  --red-border:    #FECACA;  --red-text:    #BE123C;  --red-solid:    #E11D48;
+  --blue-bg:   #EFF6FF;  --blue-border:   #BFDBFE;  --blue-text:   #1D4ED8;  --blue-solid:   #2563EB;
+  --violet-bg: #F5F3FF;  --violet-border: #DDD6FE;  --violet-text: #6D28D9;  --violet-solid: #7C3AED;
+
+  /* ── Bề mặt và chữ (ngữ nghĩa — component chỉ dùng nhóm này) ───────────── */
+  --surface:          var(--zinc-0);     /* nền trang */
+  --surface-raised:   var(--zinc-0);     /* thẻ, panel */
+  --surface-sunken:   var(--zinc-50);    /* vùng lõm, nền phụ */
+  --surface-hover:    var(--zinc-50);
+  --surface-active:   var(--zinc-100);
+  --surface-inverse:  var(--zinc-1000);
+
+  --text:             var(--zinc-1000);
+  --text-secondary:   var(--zinc-500);
+  --text-muted:       var(--zinc-400);
+  --text-inverse:     var(--zinc-0);
+  --text-on-accent:   var(--zinc-0);
+
+  --border:           var(--zinc-200);
+  --border-subtle:    var(--zinc-100);
+  --border-strong:    var(--zinc-300);
+
+  --accent:           var(--zinc-1000);
+  --accent-hover:     var(--zinc-800);
+  --accent-subtle:    var(--zinc-100);
+
+  --focus-ring:       var(--blue-solid);
+
+  /* ── Khoảng cách — thang 4px ────────────────────────────────────────────
+     Chỉ dùng các bậc này. Nhịp đều là thứ phân biệt sản phẩm được thiết kế
+     với sản phẩm được gõ số ngẫu hứng.                                      */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* ── Cỡ chữ — mỗi bậc đi kèm line-height đã cân ─────────────────────────
+     Ghép sẵn để không ai phải tự đoán line-height; đây là nguồn gây lệch
+     nhịp dọc phổ biến nhất.                                                 */
+  --text-2xs:  0.6875rem;  --leading-2xs: 1.45;   /* 11px — nhãn siêu nhỏ, chữ hoa */
+  --text-xs:   0.75rem;    --leading-xs:  1.5;    /* 12px — chú thích, phụ đề bảng */
+  --text-sm:   0.8125rem;  --leading-sm:  1.6;    /* 13px — nội dung phụ */
+  --text-base: 0.875rem;   --leading-base:1.65;   /* 14px — thân chính của app */
+  --text-md:   0.9375rem;  --leading-md:  1.6;    /* 15px — ô nhập, nội dung đọc */
+  --text-lg:   1.0625rem;  --leading-lg:  1.5;    /* 17px */
+  --text-xl:   1.25rem;    --leading-xl:  1.4;    /* 20px */
+  --text-2xl:  1.5rem;     --leading-2xl: 1.3;    /* 24px */
+  --text-3xl:  1.875rem;   --leading-3xl: 1.2;    /* 30px */
+  --text-4xl:  2.375rem;   --leading-4xl: 1.12;   /* 38px */
+  --text-5xl:  3rem;       --leading-5xl: 1.05;   /* 48px */
+
+  --tracking-tight:  -0.022em;
+  --tracking-normal: -0.011em;
+  --tracking-wide:    0.06em;
+
+  --weight-normal:   400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ── Bo góc ─────────────────────────────────────────────────────────────
+     Bo góc phải TỈ LỆ với kích thước phần tử. Nút nhỏ bo 8px nhìn cân;
+     thẻ lớn bo 8px nhìn cứng, nên có bậc riêng.                             */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-full: 999px;
+
+  /* ── Đổ bóng — nhiều lớp, độ mờ thấp ────────────────────────────────────
+     Bóng một lớp trông rẻ tiền. Bóng thật có một lớp viền cực nhạt (ambient)
+     cộng một lớp lệch xuống (direct), giống cách ánh sáng thực rơi.          */
+  --shadow-xs: 0 1px 2px rgba(9, 9, 11, 0.04);
+  --shadow-sm: 0 1px 2px rgba(9, 9, 11, 0.04), 0 1px 3px rgba(9, 9, 11, 0.04);
+  --shadow-md: 0 2px 4px rgba(9, 9, 11, 0.03), 0 4px 12px -2px rgba(9, 9, 11, 0.06);
+  --shadow-lg: 0 4px 8px rgba(9, 9, 11, 0.03), 0 12px 28px -6px rgba(9, 9, 11, 0.09);
+  --shadow-xl: 0 8px 16px rgba(9, 9, 11, 0.04), 0 24px 56px -12px rgba(9, 9, 11, 0.14);
+
+  /* ── Chuyển động ────────────────────────────────────────────────────────
+     Một đường cong duy nhất cho gần như mọi thứ. Nhiều đường cong khác nhau
+     làm sản phẩm cảm giác chắp vá.                                          */
+  --ease:        cubic-bezier(0.16, 1, 0.3, 1);   /* thoát nhanh, dừng êm */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-instant: 90ms;
+  --duration-fast:    150ms;
+  --duration-base:    220ms;
+  --duration-slow:    360ms;
+
+  /* ── Tầng xếp lớp ───────────────────────────────────────────────────────
+     Đặt tên để không còn z-index: 9999 rồi 10000 rồi 100001.                */
+  --z-base:     0;
+  --z-sticky:   100;
+  --z-drawer:   200;
+  --z-overlay:  300;
+  --z-modal:    400;
+  --z-toast:    500;
+
+  /* ── Bố cục ─────────────────────────────────────────────────────────────
+     Bề rộng đọc tối đa 1180px: đủ cho bảng, chưa tới mức dòng chữ dài quá
+     tầm mắt.                                                                */
+  --container:     1180px;
+  --container-narrow: 720px;
+  --nav-height:    60px;
+
+  color-scheme: light;
+}
+
+/* ============================================================================
+   THEME TỐI
+   Chỉ ánh xạ lại tầng NGỮ NGHĨA — không đụng vào thang nguyên thủy.
+
+   Hai điểm dễ sai và đã tránh ở đây:
+   1. Nền tối KHÔNG dùng đen tuyệt đối. #000 làm chữ trắng bị "rung" (halation)
+      và mọi bóng đổ biến mất. Dùng zinc-950 để còn chỗ phân tầng bề mặt.
+   2. Màu ngữ nghĩa phải đổi hẳn, không chỉ đảo sáng-tối: nền nhạt của theme
+      sáng (#ECFDF5) đặt lên nền tối sẽ chói và sai tương phản.
+   ============================================================================ */
+:root[data-theme='dark'] {
+  --surface:         var(--zinc-950);
+  --surface-raised:  var(--zinc-900);
+  --surface-sunken:  #0B0B0E;
+  --surface-hover:   var(--zinc-850);
+  --surface-active:  var(--zinc-800);
+  --surface-inverse: var(--zinc-0);
+
+  --text:            #FAFAFA;
+  --text-secondary:  var(--zinc-400);
+  --text-muted:      var(--zinc-500);
+  --text-inverse:    var(--zinc-1000);
+  --text-on-accent:  var(--zinc-1000);
+
+  --border:          #2A2A30;
+  --border-subtle:   #212126;
+  --border-strong:   #3A3A42;
+
+  --accent:          #FAFAFA;
+  --accent-hover:    var(--zinc-200);
+  --accent-subtle:   var(--zinc-800);
+
+  --focus-ring:      #60A5FA;
+
+  --green-bg:  #052E22;  --green-border:  #10593F;  --green-text:  #4ADE80;  --green-solid:  #10B981;
+  --amber-bg:  #2E1F05;  --amber-border:  #664213;  --amber-text:  #FBBF24;  --amber-solid:  #F59E0B;
+  --red-bg:    #350D16;  --red-border:    #7A1F35;  --red-text:    #FB7185;  --red-solid:    #F43F5E;
+  --blue-bg:   #0A1B33;  --blue-border:   #1E3A6B;  --blue-text:   #60A5FA;  --blue-solid:   #3B82F6;
+  --violet-bg: #1A1033;  --violet-border: #3B2A6B;  --violet-text: #A78BFA;  --violet-solid: #8B5CF6;
+
+  /* Trên nền tối, bóng đen gần như vô hình — tăng độ đậm để còn thấy phân tầng. */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.35), 0 24px 56px -12px rgba(0, 0, 0, 0.7);
+
+  color-scheme: dark;
+}
+
+/* Người dùng chưa chọn gì thì đi theo hệ điều hành. `:not([data-theme])` để lựa
+   chọn tường minh của họ luôn thắng cài đặt máy. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    --surface:         var(--zinc-950);
+    --surface-raised:  var(--zinc-900);
+    --surface-sunken:  #0B0B0E;
+    --surface-hover:   var(--zinc-850);
+    --surface-active:  var(--zinc-800);
+    --surface-inverse: var(--zinc-0);
+
+    --text:            #FAFAFA;
+    --text-secondary:  var(--zinc-400);
+    --text-muted:      var(--zinc-500);
+    --text-inverse:    var(--zinc-1000);
+    --text-on-accent:  var(--zinc-1000);
+
+    --border:          #2A2A30;
+    --border-subtle:   #212126;
+    --border-strong:   #3A3A42;
+
+    --accent:          #FAFAFA;
+    --accent-hover:    var(--zinc-200);
+    --accent-subtle:   var(--zinc-800);
+
+    --focus-ring:      #60A5FA;
+
+    --green-bg:  #052E22;  --green-border:  #10593F;  --green-text:  #4ADE80;  --green-solid:  #10B981;
+    --amber-bg:  #2E1F05;  --amber-border:  #664213;  --amber-text:  #FBBF24;  --amber-solid:  #F59E0B;
+    --red-bg:    #350D16;  --red-border:    #7A1F35;  --red-text:    #FB7185;  --red-solid:    #F43F5E;
+    --blue-bg:   #0A1B33;  --blue-border:   #1E3A6B;  --blue-text:   #60A5FA;  --blue-solid:   #3B82F6;
+    --violet-bg: #1A1033;  --violet-border: #3B2A6B;  --violet-text: #A78BFA;  --violet-solid: #8B5CF6;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+    --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.35), 0 24px 56px -12px rgba(0, 0, 0, 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+/* ── Bí danh tương thích ngược ──────────────────────────────────────────────
+   Các trang cũ còn dùng tên biến cũ. Giữ bí danh để việc chuyển đổi không phải
+   là một lần thay đổi khổng lồ dễ sót. Khi mọi trang đã chuyển xong, xoá khối
+   này. */
+:root {
+  --bg-main:      var(--surface);
+  --bg-card:      var(--surface-raised);
+  --bg-hover:     var(--surface-hover);
+  --text-primary: var(--text);
+  --border-focus: var(--border);
+  --success:      var(--green-solid);
+  --error:        var(--red-solid);
+  --warning:      var(--amber-solid);
+  --accent-primary: var(--accent);
+  --accent-primary-hover: var(--accent-hover);
+}
