@@ -53,6 +53,35 @@ BEGIN
             THROW 54002, 'sp_ApplyPromotion: Chi ap dung Promotion cho Booking dang Pending.', 1;
         END
 
+        -- 1b. Khong duoc doi gia don hang khi da co mot giao dich thanh toan DANG CHO.
+        --
+        -- sp_InitiatePayment chup lai Booking.FinalAmount vao Payment.Amount tai thoi
+        -- diem khoi tao. Neu sau do Promotion lam FinalAmount thay doi, khoan tien khach
+        -- dang tra o cong thanh toan khong con khop voi don hang nua - va khi cong bao
+        -- thu tien thanh cong thi he thong buoc phai hoan lai roi bat khach tra lai tu
+        -- dau. Do la trai nghiem hong va la duong sinh ra tien treo.
+        --
+        -- Quy tac dung theo nghiep vu thuc te: mot khi khach da buoc vao cong thanh toan,
+        -- tong tien cua don bi KHOA. Muon doi khuyen mai thi phai huy lan thanh toan do
+        -- truoc (sp_FailPayment), roi khoi tao lai - luc do Payment.Amount duoc chup lai
+        -- theo gia moi.
+        --
+        -- UPDLOCK, HOLDLOCK giu range lock tren cac Payment cua Booking nay den het
+        -- transaction, doi xung voi chinh cach sp_InitiatePayment kiem tra. Nho do hai
+        -- luong "ap khuyen mai" va "khoi tao thanh toan" chay dong thoi khong the cung
+        -- di qua: thu tu lay khoa cua ca hai SP deu la Booking -> Payment nen khong sinh
+        -- deadlock moi.
+        IF EXISTS (
+            SELECT 1
+            FROM   Payment WITH (UPDLOCK, HOLDLOCK)
+            WHERE  BookingID     = @BookingID
+              AND  PaymentStatus = 'Pending'
+        )
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 54013, 'sp_ApplyPromotion: Booking dang co giao dich thanh toan cho xu ly. Huy giao dich do truoc khi thay doi khuyen mai.', 1;
+        END
+
         -- 2. Kiem tra Promotion
         DECLARE @DiscountType    VARCHAR(32);
         DECLARE @DiscountValue   DECIMAL(18,0);
@@ -104,14 +133,37 @@ BEGIN
         END
 
         -- Kiem tra Usage Limit
+        --
+        -- QUY TAC DEM (dung chung cho ca han muc Promotion o day va han muc theo khach
+        -- hang cua DiscountCode ben duoi) - mot luot duoc tinh la DA DUNG khi:
+        --   * Booking dang Pending          -> dang giu cho, phai tinh de hai don dong
+        --                                      thoi khong cung vuot han muc;
+        --   * Booking Confirmed             -> da thanh don;
+        --   * Booking Cancelled NHUNG da tung Confirmed (ConfirmedTimestamp IS NOT NULL)
+        --                                   -> da thanh don roi moi huy: van tinh, de
+        --                                      khong the lap vong dat-huy nham xai lai
+        --                                      khuyen mai vo han.
+        -- KHONG tinh:
+        --   * Booking Expired               -> khach khong bao gio tra tien;
+        --   * Booking Cancelled tu Pending  -> huy truoc khi thanh don.
+        -- Truoc day cau lenh nay dem TAT CA BookingPromotionApplication bat ke trang thai
+        -- Booking, nen mot chuong trinh UsageLimit=100 bi dot het han muc boi nhung don
+        -- het han khong ai tra tien - chuong trinh chet yeu du chua ban duoc gi.
+        --
+        -- Ghi chu: dieu kien "Cancelled va tung Confirmed" chi bieu dien duoc nho
+        -- ConfirmedTimestamp duoc GIU LAI qua chuyen doi Confirmed -> Cancelled
+        -- (CHK_Booking_TimestampCoherence, §21 R11). Quy tac nay dong bo voi vong doi
+        -- Reserved/Consumed cua DiscountCode trong TRG_Booking_DiscountUsageGuard.
         IF @UsageLimit IS NOT NULL
         BEGIN
             DECLARE @UsageCount INT;
-            -- I-06: Do da lock Promotion, viec dem thuc te tren bang cung duoc an toan hon.
-            -- De toi uu nhat phai them cot thong ke vao Promotion, nhung hien tai dem de nguyen voi lock.
+            -- I-06: Promotion da bi lock o tren nen phep dem tai cho la an toan.
             SELECT @UsageCount = COUNT(*)
-            FROM   BookingPromotionApplication WITH (READCOMMITTEDLOCK)
-            WHERE  PromotionID = @PromotionID;
+            FROM   BookingPromotionApplication bpa WITH (READCOMMITTEDLOCK)
+            JOIN   Booking bk ON bk.BookingID = bpa.BookingID
+            WHERE  bpa.PromotionID = @PromotionID
+              AND  (    bk.BookingStatus IN ('Pending', 'Confirmed')
+                     OR (bk.BookingStatus = 'Cancelled' AND bk.ConfirmedTimestamp IS NOT NULL));
 
             IF @UsageCount >= @UsageLimit
             BEGIN
@@ -120,15 +172,23 @@ BEGIN
             END
         END
 
-        -- Kiem tra ma Discount Code neu yeu cau (FK-03)
-        IF @CodeRequired = 1
+        -- FK-03: Promotion yeu cau code thi bat buoc phai co code.
+        IF @CodeRequired = 1 AND @DiscountCodeID IS NULL
         BEGIN
-            IF @DiscountCodeID IS NULL
-            BEGIN
-                ROLLBACK TRANSACTION;
-                THROW 54008, 'sp_ApplyPromotion: Promotion yeuCode.', 1;
-            END
+            ROLLBACK TRANSACTION;
+            THROW 54008, 'sp_ApplyPromotion: Promotion nay bat buoc phai co Discount Code.', 1;
+        END
 
+        -- Kiem tra Discount Code MOI KHI co code duoc truyen vao - khong phu thuoc
+        -- CodeRequiredFlag.
+        -- Truoc day toan bo khoi nay nam trong `IF @CodeRequired = 1`, nen voi mot
+        -- Promotion khong bat buoc code ma caller van gui @DiscountCodeID thi:
+        -- GlobalUsageLimit va PerCustomerUsageLimit deu KHONG duoc kiem tra, trong khi
+        -- ReservedUsageCount o cuoi SP van tang. Han muc theo khach hang khi do bi bo
+        -- qua hoan toan, con han muc toan cuc chi bi chan muon boi CHECK constraint
+        -- duoi dang loi rang buoc tho thay vi 54011.
+        IF @DiscountCodeID IS NOT NULL
+        BEGIN
             -- Lay va lock DiscountCode
             DECLARE @DcStatus VARCHAR(32), @DcFrom DATETIME2(7), @DcTo DATETIME2(7);
             DECLARE @DcGlobalLimit INT, @DcReserved INT, @DcConsumed INT, @DcPerCustomerLimit INT;
@@ -163,12 +223,17 @@ BEGIN
             IF @DcPerCustomerLimit IS NOT NULL
             BEGIN
                 DECLARE @CustomerUsageCount INT;
+                -- Cung quy tac dem voi han muc Promotion o tren: loai Booking Expired
+                -- va Booking bi huy khi CHUA tung Confirmed. Truoc day dieu kien la
+                -- IN ('Pending','Confirmed','Cancelled') - vua bo sot Expired vua tinh
+                -- ca nhung don huy khi chua thanh don, tuc hai sai lech nguoc chieu nhau.
                 SELECT @CustomerUsageCount = COUNT(*)
                 FROM BookingPromotionApplication bpa WITH (READCOMMITTEDLOCK)
                 JOIN Booking bk ON bk.BookingID = bpa.BookingID
                 WHERE bpa.DiscountCodeID = @DiscountCodeID
                   AND bk.CustomerUserID = @CustomerID
-                  AND bk.BookingStatus IN ('Pending', 'Confirmed');
+                  AND (    bk.BookingStatus IN ('Pending', 'Confirmed')
+                        OR (bk.BookingStatus = 'Cancelled' AND bk.ConfirmedTimestamp IS NOT NULL));
 
                 IF @CustomerUsageCount >= @DcPerCustomerLimit
                 BEGIN
@@ -205,13 +270,10 @@ BEGIN
             END
         END
 
-        -- Chuan hoa DiscountType (data co the luu dang legacy 'PERCENTAGE'/'FIXED')
-        SET @DiscountType = CASE
-            WHEN UPPER(@DiscountType) IN ('PERCENTAGE', 'PERCENT')       THEN 'Percentage'
-            WHEN UPPER(@DiscountType) IN ('FIXED', 'FIXED AMOUNT')      THEN 'Fixed Amount'
-            ELSE @DiscountType
-        END;
-
+        -- Khong can chuan hoa @DiscountType tai day: CHK_Promotion_DiscountType
+        -- chi cho phep dung hai gia tri 'Percentage' / 'Fixed Amount' ton tai trong
+        -- bang, nen gia tri legacy khong the doc ra tu Promotion. Viec chuan hoa
+        -- dau vao duoc thuc hien mot lan duy nhat tai sp_CreatePromotion.
         IF @DiscountType = 'Percentage'
             -- BR36d: Tinh discount tren "running hien tai" (sau khi da gioi han MaxApplicableQuantity)
             SET @DiscountAmount = CAST(@DiscountBaseAmount * @DiscountValue / 100 AS DECIMAL(18,0));
