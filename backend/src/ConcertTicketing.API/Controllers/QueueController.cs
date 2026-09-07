@@ -45,6 +45,22 @@ public class QueueController : ControllerBase
         return Ok(entry);
     }
 
+    /// <summary>
+    /// Khách chủ động rời hàng đợi (BP11 / BR48). Giải phóng slot admission ngay
+    /// cho người kế tiếp thay vì phải chờ hết booking_ttl.
+    /// </summary>
+    [HttpPost("entries/{queueEntryId:int}/exit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Exit(int queueEntryId)
+    {
+        var customerId = GetCurrentUserId();
+        await _queue.ExitAsync(queueEntryId, customerId);
+        return NoContent();
+    }
+
     private int GetCurrentUserId()
     {
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
