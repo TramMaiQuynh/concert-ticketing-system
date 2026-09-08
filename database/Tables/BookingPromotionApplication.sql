@@ -15,5 +15,13 @@ CREATE TABLE BookingPromotionApplication (
     -- duoc dao boi UQ_DiscountCode_PromotionCodeID tren bang DiscountCode.
     CONSTRAINT FK_BPA_DiscountCode FOREIGN KEY (PromotionID, DiscountCodeID)
         REFERENCES DiscountCode(PromotionID, DiscountCodeID),
-    CONSTRAINT CHK_BPA_DiscountAmount CHECK (DiscountAmount >= 0)
+    CONSTRAINT CHK_BPA_DiscountAmount CHECK (DiscountAmount >= 0),
+    -- R23: khong duoc trung thu tu ap dung trong cung mot Booking.
+    -- ApplicationOrder la gia tri DAN XUAT (BR36d/PI06): sp_ApplyPromotion danh so
+    -- lai ca chuoi theo PromotionID tang dan sau moi lan ap dung. Rang buoc nay bien
+    -- "1..N khong trung" thanh bat bien duoc tang du lieu ep buoc, thay vi mot tinh
+    -- chat chi dung nho thu tuc viet dung. Viec danh so lai la MOT lenh UPDATE
+    -- set-based nen SQL Server chi kiem tra khi lenh ket thuc - mot hoan vi
+    -- (vi du 1,2 -> 2,1) khong sinh vi pham trung gian.
+    CONSTRAINT UQ_BPA_BookingApplicationOrder UNIQUE (BookingID, ApplicationOrder)
 );
