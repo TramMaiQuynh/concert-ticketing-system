@@ -305,4 +305,104 @@ SET @SQL = N'
     IF @new IS NULL
         THROW 59999, ''Organizer dang giu Role bi mat quyen tao Concert khi Role bi dong dau vao.'', 1;';
 EXEC test.sp_RunTest @Suite,'UpdateRoleStatus_InactiveKeepsExistingHolders_OK','SUCCESS',NULL,@SQL;
+
+-- ============================================================
+-- sp_ConfigureVenueMap (FR11a)
+--
+-- Truoc dot nay day la thu tuc GHI DU LIEU duy nhat khong co bat ky bai kiem nao
+-- cham toi - khong o test SQL, khong o test tich hop backend. Moi bai duoi day TU TAO
+-- Venue rieng bang sp_CreateVenue, nen khong bai nao phu thuoc trang thai bai khac
+-- de lai va thu tu chay khong anh huong ket qua.
+-- ============================================================
+
+-- 59801: chi Admin duoc cau hinh so do
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT=(SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM auth'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@org, @VenueID=@v, @MapWidth=100, @MapHeight=100;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_NonAdmin_Fail59801','ERROR',59801,@SQL;
+
+-- 59802: Venue khong ton tai
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=-1, @MapWidth=100, @MapHeight=100;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_VenueNotFound_Fail59802','ERROR',59802,@SQL;
+
+-- 59803: kich thuoc mat phang phai > 0
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM dim'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=0, @MapHeight=100;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_ZeroWidth_Fail59803','ERROR',59803,@SQL;
+
+-- 59805: san khau phai co du bon gia tri
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM stage partial'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100, @StageX=10;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_PartialStage_Fail59805','ERROR',59805,@SQL;
+
+-- 59806: chua co mat phang thi khong dat duoc san khau
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM no plane'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @StageX=10, @StageY=10, @StageWidth=10, @StageHeight=10;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_StageWithoutPlane_Fail59806','ERROR',59806,@SQL;
+
+-- 59807: san khau phai nam tron trong mat phang
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM stage out'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100,
+         @StageX=90, @StageY=10, @StageWidth=20, @StageHeight=10;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_StageOutsidePlane_Fail59807','ERROR',59807,@SQL;
+
+-- 59804: thu nho mat phang xuong duoi vung cac Zone dang chiem
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM shrink'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=200, @MapHeight=200;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''Khu 1'',
+         @ZoneX=150, @ZoneY=150, @ZoneWidth=40, @ZoneHeight=40, @NewZoneID=@z OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_ShrinkBelowZones_Fail59804','ERROR',59804,@SQL;
+
+-- Happy path: ghi dung ca sau gia tri
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM happy'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=800, @MapHeight=600,
+         @StageX=300, @StageY=20, @StageWidth=200, @StageHeight=80;
+    IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v
+                     AND MapWidth=800 AND MapHeight=600
+                     AND StageX=300 AND StageY=20 AND StageWidth=200 AND StageHeight=80)
+        THROW 59999, ''Sau khi cau hinh, sau gia tri so do phai duoc ghi dung'', 1;
+    IF NOT EXISTS (SELECT 1 FROM AuditRecord
+                   WHERE EntityType=''Venue'' AND EntityID=CAST(@v AS VARCHAR(64))
+                     AND EventType=''VENUE_MAP_CONFIGURED'')
+        THROW 59999, ''Phai ghi AuditRecord VENUE_MAP_CONFIGURED'', 1;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_HappyPath_OK','SUCCESS',NULL,@SQL;
+
+-- Cap nhat mot phan: chi doi mat phang thi san khau phai duoc GIU (COALESCE)
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM partial'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=800, @MapHeight=600,
+         @StageX=300, @StageY=20, @StageWidth=200, @StageHeight=80;
+    -- Chi noi rong mat phang, khong nhac gi den san khau
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=1000, @MapHeight=700;
+    IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v
+                     AND MapWidth=1000 AND MapHeight=700
+                     AND StageX=300 AND StageY=20 AND StageWidth=200 AND StageHeight=80)
+        THROW 59999, ''Cap nhat mot phan phai giu nguyen san khau da dat truoc do'', 1;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_PartialUpdateKeepsStage_OK','SUCCESS',NULL,@SQL;
 GO
