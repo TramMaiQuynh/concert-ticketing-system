@@ -855,5 +855,86 @@ SET @SQL = N'
         THROW 50000,''Khong duoc dua PreviousValue/NewValue vao index'',1;';
 EXEC test.sp_RunTest @Suite,'AuditRecord_IndexesExist','SUCCESS',NULL,@SQL;
 
+-- ============================================================
+-- 18. BR36d/PI06: thu tu ap dung Promotion phai la thu tu TAO, khong phai thu tu
+--     khach bam.
+--     Loi cu: sp_ApplyPromotion gan ApplicationOrder = MAX+1 va tinh discount tren
+--     Booking.FinalAmount doc tai thoi diem bam, nen thu tu thao tac cua nguoi dung
+--     quyet dinh so tien. Do duoc tren DB that: cung tam tinh 1.500.000 va cung hai
+--     Promotion (Fixed 200k tao truoc, Percentage 10 tao sau), bam Fixed truoc ra
+--     1.170.000 con bam Percentage truoc ra 1.150.000 - lech 20.000d.
+-- ============================================================
+SET @SQL = N'
+    DECLARE @cid INT=(SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @org INT=(SELECT OrganizerUserID FROM Concert WHERE ConcertID=@cid);
+    DECLARE @u1 INT=(SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @t0 DATETIME2(7)=DATEADD(day,-1,SYSDATETIME());
+    DECLARE @t1 DATETIME2(7)=DATEADD(day,30,SYSDATETIME());
+
+    -- Hai ghe cung gia de hai booking co cung tam tinh
+    DECLARE @s1 INT, @s2 INT, @price DECIMAL(18,0);
+    SELECT TOP 2 EventSeatID, SalePrice INTO #g FROM EventSeat
+    WHERE ConcertID=@cid AND InventoryStatus=''Available'' ORDER BY SalePrice DESC, EventSeatID;
+    IF (SELECT COUNT(*) FROM #g) < 2 THROW 50000,''Thieu ghe trong de chay bai test'',1;
+    SELECT @s1=MIN(EventSeatID), @s2=MAX(EventSeatID), @price=MIN(SalePrice) FROM #g;
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID IN (@s1,@s2);
+
+    -- Fixed duoc tao TRUOC -> PromotionID nho hon -> phai dung dau chuoi
+    DECLARE @pFix INT, @pPct INT;
+    EXEC dbo.sp_CreatePromotion @ActorUserID=@org,@ConcertID=@cid,
+         @PromotionName=N''RG18 Fixed200k'',@PromotionDescription=N''regression BR36d'',
+         @DiscountType=''Fixed Amount'',@DiscountValue=200000,@StartDatetime=@t0,@EndDatetime=@t1,
+         @UsageLimit=NULL,@MaxApplicableQuantity=NULL,@MaxDiscountAmount=NULL,
+         @CodeRequiredFlag=0,@NewPromotionID=@pFix OUTPUT;
+    EXEC dbo.sp_CreatePromotion @ActorUserID=@org,@ConcertID=@cid,
+         @PromotionName=N''RG18 Pct10'',@PromotionDescription=N''regression BR36d'',
+         @DiscountType=''Percentage'',@DiscountValue=10,@StartDatetime=@t0,@EndDatetime=@t1,
+         @UsageLimit=NULL,@MaxApplicableQuantity=NULL,@MaxDiscountAmount=NULL,
+         @CodeRequiredFlag=0,@NewPromotionID=@pPct OUTPUT;
+
+    DECLARE @bA INT, @bB INT;
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime)
+    VALUES (@u1,@cid,''Pending'',@price,@price,SYSDATETIME(),DATEADD(minute,15,SYSDATETIME()));
+    SET @bA=SCOPE_IDENTITY();
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationTimestamp,AllocationStatus,PriceSnapshot)
+    VALUES (@bA,@s1,SYSDATETIME(),''Active'',@price);
+
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime)
+    VALUES (@u1,@cid,''Pending'',@price,@price,SYSDATETIME(),DATEADD(minute,15,SYSDATETIME()));
+    SET @bB=SCOPE_IDENTITY();
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationTimestamp,AllocationStatus,PriceSnapshot)
+    VALUES (@bB,@s2,SYSDATETIME(),''Active'',@price);
+
+    -- A bam dung thu tu tao; B bam nguoc
+    EXEC dbo.sp_ApplyPromotion @BookingID=@bA,@PromotionID=@pFix,@DiscountCodeID=NULL,@ActorUserID=@u1;
+    EXEC dbo.sp_ApplyPromotion @BookingID=@bA,@PromotionID=@pPct,@DiscountCodeID=NULL,@ActorUserID=@u1;
+    EXEC dbo.sp_ApplyPromotion @BookingID=@bB,@PromotionID=@pPct,@DiscountCodeID=NULL,@ActorUserID=@u1;
+    EXEC dbo.sp_ApplyPromotion @BookingID=@bB,@PromotionID=@pFix,@DiscountCodeID=NULL,@ActorUserID=@u1;
+
+    DECLARE @fA DECIMAL(18,0)=(SELECT FinalAmount FROM Booking WHERE BookingID=@bA);
+    DECLARE @fB DECIMAL(18,0)=(SELECT FinalAmount FROM Booking WHERE BookingID=@bB);
+
+    -- Oracle: tu chay lai chuoi theo dung BR36d/BR36e, doc lap voi sp_ApplyPromotion
+    DECLARE @rem DECIMAL(18,0)=@price, @d DECIMAL(18,0);
+    SET @d = 200000;                              IF @d > @rem SET @d=@rem; SET @rem=@rem-@d;
+    SET @d = CAST(@rem * 10 / 100 AS DECIMAL(18,0)); IF @d > @rem SET @d=@rem; SET @rem=@rem-@d;
+
+    IF @fA <> @fB
+        THROW 50000,''BR36d: thu tu khach bam dang quyet dinh gia - hai booking giong het nhau ra hai so tien khac nhau'',1;
+    IF @fA <> @rem
+        THROW 50000,''BR36d: chuoi khong chay theo thu tu tao Promotion (lech voi ket qua tinh doc lap)'',1;
+
+    -- ApplicationOrder phai bam theo PromotionID tang dan o CA HAI booking
+    IF EXISTS (
+        SELECT 1
+        FROM   BookingPromotionApplication a
+        JOIN   BookingPromotionApplication b
+               ON b.BookingID = a.BookingID AND b.ApplicationOrder > a.ApplicationOrder
+        WHERE  a.BookingID IN (@bA,@bB) AND b.PromotionID < a.PromotionID)
+        THROW 50000,''ApplicationOrder khong tang dan theo PromotionID (BR36d/PI06)'',1;
+
+    DROP TABLE #g;';
+EXEC test.sp_RunTest @Suite,'Promotion_StackingOrder_FollowsCreationOrder','SUCCESS',NULL,@SQL;
+
 PRINT '== Regression Fix Tests Done ==';
 GO
