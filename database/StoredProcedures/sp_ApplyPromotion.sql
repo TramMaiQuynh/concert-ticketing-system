@@ -28,14 +28,13 @@ BEGIN
 
         -- 1. Kiem tra Booking o trang thai Pending
         DECLARE @BookingStatus  VARCHAR(32);
-        DECLARE @SubtotalAmount DECIMAL(18,0);
-        DECLARE @FinalAmount    DECIMAL(18,0);
         DECLARE @ConcertID_B    INT;
         DECLARE @CustomerID     INT;
 
+        -- UPDLOCK giu hang Booking den het transaction. Khong doc san Final/Subtotal
+        -- Amount o day: buoc 4 tinh lai ca chuoi tu Allocation nen moi con so doc
+        -- truoc deu se lac hau ngay trong chinh transaction nay.
         SELECT @BookingStatus  = BookingStatus,
-               @SubtotalAmount = SubtotalAmount,
-               @FinalAmount    = FinalAmount,
                @ConcertID_B    = ConcertID,
                @CustomerID     = CustomerUserID
         FROM   Booking WITH (UPDLOCK)
@@ -83,27 +82,25 @@ BEGIN
         END
 
         -- 2. Kiem tra Promotion
+        -- Chi doc nhung thuoc tinh dung cho viec KIEM TRA DIEU KIEN ap dung. Cac tham
+        -- so dung de TINH TIEN (DiscountType/DiscountValue/MaxApplicableQuantity/
+        -- MaxDiscountAmount) do buoc 4 doc, vi buoc do tinh cho ca chuoi chu khong
+        -- rieng Promotion nay.
         DECLARE @DiscountType    VARCHAR(32);
-        DECLARE @DiscountValue   DECIMAL(18,0);
         DECLARE @StartDatetime   DATETIME2(7);
         DECLARE @EndDatetime     DATETIME2(7);
         DECLARE @PromotionStatus VARCHAR(32);
         DECLARE @UsageLimit      INT;
         DECLARE @CodeRequired    BIT;
         DECLARE @ConcertID_P     INT;
-        DECLARE @MaxApplicableQuantity INT;
-        DECLARE @MaxDiscountAmount     DECIMAL(18,0);
 
         SELECT @DiscountType    = DiscountType,
-               @DiscountValue   = DiscountValue,
                @StartDatetime   = StartDatetime,
                @EndDatetime     = EndDatetime,
                @PromotionStatus = PromotionStatus,
                @UsageLimit      = UsageLimit,
                @CodeRequired    = CodeRequiredFlag,
-               @ConcertID_P     = ConcertID,
-               @MaxApplicableQuantity = MaxApplicableQuantity,
-               @MaxDiscountAmount     = MaxDiscountAmount
+               @ConcertID_P     = ConcertID
         FROM   Promotion WITH (UPDLOCK) -- CRIT-15: Khoa hang Promotion de ngan race condition
         WHERE  PromotionID = @PromotionID;
 
@@ -253,52 +250,18 @@ BEGIN
             THROW 54010, 'sp_ApplyPromotion: Promotion nay da duoc ap dung cho Booking.', 1;
         END
 
-        -- 3. Tinh DiscountAmount dua tren FinalAmount hien tai
+        -- 3. Ghi nhan viec ap dung Promotion nay vao chuoi cua Booking.
+        --
+        -- ApplicationOrder va DiscountAmount la GIA TRI DAN XUAT, khong phai du lieu
+        -- nhap: BR36d/PI06 quy dinh thu tu ap dung la thu tu TAO Promotion tang dan,
+        -- khong phai thu tu khach bam. Ca hai duoc buoc 4 tinh lai, nen o day chi ghi
+        -- gia tri tam de thoa NOT NULL va CHK_BPA_DiscountAmount >= 0.
         DECLARE @DiscountAmount DECIMAL(18,0);
-        DECLARE @DiscountBaseAmount DECIMAL(18,0) = @FinalAmount;
-
-        -- Tinh toan MaxApplicableQuantity (N-03)
-        IF @MaxApplicableQuantity IS NOT NULL
-        BEGIN
-            DECLARE @TotalSeats INT;
-            SELECT @TotalSeats = COUNT(*) FROM BookingEventSeatAllocation WHERE BookingID = @BookingID AND AllocationStatus = 'Active';
-            
-            IF @TotalSeats > @MaxApplicableQuantity AND @TotalSeats > 0
-            BEGIN
-                -- Binh quan gia tri DiscountBaseAmount theo so luong ghe cho phep
-                SET @DiscountBaseAmount = CAST(@FinalAmount * CAST(@MaxApplicableQuantity AS DECIMAL(18,4)) / CAST(@TotalSeats AS DECIMAL(18,4)) AS DECIMAL(18,0));
-            END
-        END
-
-        -- Khong can chuan hoa @DiscountType tai day: CHK_Promotion_DiscountType
-        -- chi cho phep dung hai gia tri 'Percentage' / 'Fixed Amount' ton tai trong
-        -- bang, nen gia tri legacy khong the doc ra tu Promotion. Viec chuan hoa
-        -- dau vao duoc thuc hien mot lan duy nhat tai sp_CreatePromotion.
-        IF @DiscountType = 'Percentage'
-            -- BR36d: Tinh discount tren "running hien tai" (sau khi da gioi han MaxApplicableQuantity)
-            SET @DiscountAmount = CAST(@DiscountBaseAmount * @DiscountValue / 100 AS DECIMAL(18,0));
-        ELSE IF @DiscountType = 'Fixed Amount'
-            SET @DiscountAmount = @DiscountValue;
-        ELSE
-            SET @DiscountAmount = 0;
-
-        -- Dam bao discount khong lon hon FinalAmount hien tai (BR36e)
-        IF @DiscountAmount > @FinalAmount SET @DiscountAmount = @FinalAmount;
-
-        -- Ap dung MaxDiscountAmount (N-03)
-        IF @MaxDiscountAmount IS NOT NULL AND @DiscountAmount > @MaxDiscountAmount
-        BEGIN
-            SET @DiscountAmount = @MaxDiscountAmount;
-        END
-
-        -- 4. INSERT BookingPromotionApplication
-        -- Xac dinh ApplicationOrder
-        DECLARE @NextOrder INT = ISNULL((SELECT MAX(ApplicationOrder) FROM BookingPromotionApplication WITH (UPDLOCK) WHERE BookingID = @BookingID), 0) + 1;
 
         INSERT INTO BookingPromotionApplication
             (BookingID, PromotionID, DiscountCodeID, ApplicationOrder, DiscountAmount, AppliedTimestamp)
         VALUES
-            (@BookingID, @PromotionID, @DiscountCodeID, @NextOrder, @DiscountAmount, @Now);
+            (@BookingID, @PromotionID, @DiscountCodeID, 0, 0, @Now);
 
         -- Cap nhat current usage count cho DiscountCode neu co (CRIT-02)
         IF @DiscountCodeID IS NOT NULL
@@ -307,6 +270,105 @@ BEGIN
             SET ReservedUsageCount = ReservedUsageCount + 1
             WHERE DiscountCodeID = @DiscountCodeID;
         END
+
+        -- 4. Tinh lai TOAN BO chuoi Promotion cua Booking theo thu tu chuan tac.
+        --
+        -- VI SAO PHAI TINH LAI CA CHUOI, khong cong don duoc:
+        -- BR36d/PI06 quy dinh thu tu ap dung la thu tu TAO Promotion tang dan. Khach
+        -- lai co the ap dung mot Promotion tao TRUOC vao SAU. Khi do Promotion vua
+        -- them chen vao GIUA chuoi, va moi Promotion dung sau no phai tinh lai tren
+        -- mot phan con lai khac. Cong don theo thu tu bam se cho ket qua phu thuoc
+        -- thao tac nguoi dung: cung mot gio hang, cung hai Promotion, bam khac thu tu
+        -- ra hai so tien khac nhau (Fixed truoc roi Percentage khong bang Percentage
+        -- truoc roi Fixed). Do la thu BR36d ton tai de ngan.
+        --
+        -- KHOA THU TU: R21 khong khai bao cot thoi diem tao cho Promotion, trong khi
+        -- BR36d/PI06/§12.16.3 lai sap theo Promotion.CreatedTimestamp. PromotionID la
+        -- IDENTITY, tang don dieu theo thu tu tao va khong bao giu trung, nen no la
+        -- hien thuc trung thuc cua "thu tu tao" ma khong can them cot moi - dong thoi
+        -- tranh bai toan trung moc thoi gian phai lay ID ra phan giai.
+        --
+        -- Khong lay UPDLOCK tren cac Promotion khac trong chuoi: he thong khong co
+        -- duong ghi nao sua DiscountType/DiscountValue/MaxDiscountAmount sau khi tao
+        -- (chi co sp_CreatePromotion va sp_UpdatePromotionStatus), nen cac tham so
+        -- dung de tinh la bat bien - khoa them chi mo rong be mat deadlock.
+
+        -- 4a. Danh so lai ApplicationOrder theo dung thu tu chuan tac.
+        --     Mot lenh set-based duy nhat: khong co trang thai trung gian nao de lo.
+        ;WITH ChuoiKhuyenMai AS (
+            SELECT ApplicationOrder,
+                   ThuTuChuan = ROW_NUMBER() OVER (ORDER BY PromotionID)
+            FROM   BookingPromotionApplication
+            WHERE  BookingID = @BookingID
+        )
+        UPDATE ChuoiKhuyenMai SET ApplicationOrder = ThuTuChuan;
+
+        -- 4b. Chay tuan tu tren PHAN CON LAI, dung nguyen bo quy tac cu cho tung buoc.
+        DECLARE @ConLai DECIMAL(18,0);
+        SELECT @ConLai = Subtotal FROM dbo.fn_CalculateBookingSubtotal(@BookingID);
+
+        DECLARE @TotalSeats INT =
+            (SELECT COUNT(*) FROM BookingEventSeatAllocation
+             WHERE  BookingID = @BookingID AND AllocationStatus = 'Active');
+
+        DECLARE @Buoc      INT = 1;
+        DECLARE @SoBuoc    INT =
+            (SELECT COUNT(*) FROM BookingPromotionApplication WHERE BookingID = @BookingID);
+
+        DECLARE @bType   VARCHAR(32);
+        DECLARE @bValue  DECIMAL(18,0);
+        DECLARE @bMaxQty INT;
+        DECLARE @bMaxAmt DECIMAL(18,0);
+        DECLARE @bBase   DECIMAL(18,0);
+        DECLARE @bGiam   DECIMAL(18,0);
+
+        WHILE @Buoc <= @SoBuoc
+        BEGIN
+            SELECT @bType   = p.DiscountType,
+                   @bValue  = p.DiscountValue,
+                   @bMaxQty = p.MaxApplicableQuantity,
+                   @bMaxAmt = p.MaxDiscountAmount
+            FROM   BookingPromotionApplication bpa
+            JOIN   Promotion p ON p.PromotionID = bpa.PromotionID
+            WHERE  bpa.BookingID = @BookingID AND bpa.ApplicationOrder = @Buoc;
+
+            -- Base cua buoc nay la phan con lai (BR36d), sau khi gioi han theo
+            -- MaxApplicableQuantity (N-03).
+            SET @bBase = @ConLai;
+            IF @bMaxQty IS NOT NULL AND @TotalSeats > @bMaxQty AND @TotalSeats > 0
+                SET @bBase = CAST(@ConLai * CAST(@bMaxQty AS DECIMAL(18,4))
+                                          / CAST(@TotalSeats AS DECIMAL(18,4)) AS DECIMAL(18,0));
+
+            -- Khong can chuan hoa @bType: CHK_Promotion_DiscountType chi cho phep hai
+            -- gia tri nay ton tai trong bang; chuan hoa dau vao lam mot lan duy nhat
+            -- tai sp_CreatePromotion.
+            IF @bType = 'Percentage'
+                -- CAST ve DECIMAL(18,0) = lam tron VND ngay sau buoc nay (BR36e/A19),
+                -- khong don lam tron ve cuoi chuoi.
+                SET @bGiam = CAST(@bBase * @bValue / 100 AS DECIMAL(18,0));
+            ELSE IF @bType = 'Fixed Amount'
+                SET @bGiam = @bValue;
+            ELSE
+                SET @bGiam = 0;
+
+            -- Cap dung bang phan con lai truoc (BR36e: payable ve 0, khong am), roi
+            -- moi ap MaxDiscountAmount (N-03) - giu nguyen thu tu hai chot nhu cu.
+            IF @bGiam > @ConLai SET @bGiam = @ConLai;
+            IF @bMaxAmt IS NOT NULL AND @bGiam > @bMaxAmt SET @bGiam = @bMaxAmt;
+
+            UPDATE BookingPromotionApplication
+            SET    DiscountAmount = @bGiam
+            WHERE  BookingID = @BookingID AND ApplicationOrder = @Buoc;
+
+            SET @ConLai = @ConLai - @bGiam;
+            SET @Buoc   = @Buoc + 1;
+        END
+
+        -- Muc giam THUC TE cua Promotion vua ap dung, doc lai sau khi ca chuoi da
+        -- on dinh - dung cho AuditRecord o buoc 6.
+        SELECT @DiscountAmount = DiscountAmount
+        FROM   BookingPromotionApplication
+        WHERE  BookingID = @BookingID AND PromotionID = @PromotionID;
 
         -- 5. Cap nhat Booking.FinalAmount bang Inline TVF
         UPDATE b
