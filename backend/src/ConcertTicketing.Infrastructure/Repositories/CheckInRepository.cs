@@ -33,6 +33,7 @@ public class CheckInRepository : ICheckInRepository
         p.Add("@CheckInStaffUserID",  staffUserId,         DbType.Int32);
         p.Add("@ValidationResult",    dbType: DbType.String, size: 32,  direction: ParameterDirection.Output);
         p.Add("@ValidationInfo",      dbType: DbType.String, size: 500, direction: ParameterDirection.Output);
+        p.Add("@CheckInTimestamp",    dbType: DbType.DateTime2,         direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync("sp_CheckInTicket", p,
             commandType: CommandType.StoredProcedure);
@@ -40,9 +41,16 @@ public class CheckInRepository : ICheckInRepository
         var result = p.Get<string>("@ValidationResult");
         var info   = p.Get<string>("@ValidationInfo");
 
+        // Thời điểm check-in phải là giá trị ĐÃ GHI vào CheckIn.CheckInTimestamp, đọc
+        // ngược ra từ tham số OUTPUT. Bản trước dùng DateTime.UtcNow — một mốc do tầng
+        // ứng dụng tự sinh SAU khi SP chạy xong, nên nhân viên soát vé nhìn thấy một
+        // con số không tồn tại trong cơ sở dữ liệu và lệch với bản ghi đúng bằng độ trễ
+        // khứ hồi. Đây cũng là mốc duy nhất trong toàn hệ thống đi ra ngoài theo quy ước
+        // UTC, trong khi mọi mốc khác đi thẳng từ DB; đọc ngược ra làm nó thống nhất với
+        // phần còn lại thay vì là ngoại lệ.
         return new CheckInResponse(
             result,
             info,
-            result == "SUCCESS" ? DateTime.UtcNow : null);
+            p.Get<DateTime?>("@CheckInTimestamp"));
     }
 }
