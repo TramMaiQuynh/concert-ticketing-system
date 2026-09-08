@@ -14,14 +14,23 @@ CREATE PROCEDURE dbo.sp_CheckInTicket
     @ConcertID           INT,
     @CheckInStaffUserID  INT,
     @ValidationResult    VARCHAR(32) OUTPUT,
-    @ValidationInfo      NVARCHAR(500) OUTPUT
+    @ValidationInfo      NVARCHAR(500) OUTPUT,
+    -- Thoi diem check-in DA GHI VAO CheckIn.CheckInTimestamp. Tra ra ngoai de tang
+    -- ung dung KHONG phai tu sinh mot moc thoi gian khac: truoc day
+    -- CheckInRepository dung DateTime.UtcNow, tuc bao cao mot gia tri do chinh no
+    -- bia ra sau khi SP da chay xong, khong phai gia tri thuc su duoc luu. Hai con
+    -- so lech nhau dung bang do tre khu hoi, va khong doi chieu duoc voi ban ghi.
+    -- Co gia tri mac dinh NULL nen moi lenh goi cu van chay duoc khong can sua.
+    -- NULL khi khong check-in duoc (khong co ban ghi CheckIn nao duoc tao).
+    @CheckInTimestamp    DATETIME2(7) = NULL OUTPUT
 )
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    SET @ValidationResult = 'FAILED';
-    SET @ValidationInfo   = '';
+    SET @ValidationResult  = 'FAILED';
+    SET @ValidationInfo    = '';
+    SET @CheckInTimestamp  = NULL;
 
     BEGIN TRY
         DECLARE @TranCounter INT = @@TRANCOUNT;
@@ -106,10 +115,17 @@ BEGIN
 
         -- --- CHECK-IN THANH CONG ---
 
+        -- MOT su kien vao cong = MOT moc thoi gian.
+        -- Truoc day ba ban ghi cua cung mot lan soat ve (Ticket.UsedTimestamp,
+        -- CheckIn.CheckInTimestamp, AuditRecord.EventTimestamp) moi cai goi
+        -- SYSDATETIME() rieng. SQL Server danh gia lai ham nay o TUNG LENH, nen ba
+        -- moc co the lech nhau - dung thu ma nhat ky kiem toan ton tai de doi chieu.
+        DECLARE @Now DATETIME2(7) = SYSDATETIME();
+
         -- 7. Chuyen Ticket -> Used
         UPDATE Ticket
         SET    TicketStatus   = 'Used',
-               UsedTimestamp  = SYSDATETIME()
+               UsedTimestamp  = @Now
         WHERE  TicketID = @TicketID;
 
         -- 8. INSERT CheckIn record
@@ -118,10 +134,11 @@ BEGIN
              CheckInTimestamp, ValidationResult, ValidationInformation)
         VALUES
             (@TicketID, @ConcertID, @CheckInStaffUserID,
-             SYSDATETIME(), 'SUCCESS', 'Ticket hop le, da check-in thanh cong.');
+             @Now, 'SUCCESS', 'Ticket hop le, da check-in thanh cong.');
 
         SET @ValidationResult = 'SUCCESS';
         SET @ValidationInfo   = 'Check-in thanh cong.';
+        SET @CheckInTimestamp = @Now;   -- tra ra dung gia tri VUA GHI, khong phai mot moc moi
 
         -- 9. Ghi AuditRecord - ADMISSION_SUCCESS
         INSERT INTO AuditRecord
@@ -129,7 +146,7 @@ BEGIN
         VALUES
             (@CheckInStaffUserID, 'ADMISSION_SUCCESS', 'Ticket',
              CAST(@TicketID AS VARCHAR(64)), 'UPDATE',
-             SYSDATETIME(),
+             @Now,
              '{"TicketStatus":"Used","ValidationResult":"SUCCESS"}');
 
         IF @TranCounter = 0
