@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Master Deployment Script -- Concert Ticketing System
     Trien khai toan bo he thong CSDL tu dau den cuoi theo dung
@@ -18,16 +18,26 @@
 
 .PARAMETER DropExisting
     Neu $true: xoa database cu truoc khi tao lai (DEPLOY SACH).
-    Neu $false (mac dinh): giu database cu, chi chay CREATE OR ALTER.
+    Neu $false (mac dinh): CHI dung cho lan deploy DAU TIEN len mot database
+    RONG (chua ton tai hoac chua co bang nao). Day KHONG phai che do "chay lai
+    an toan" hay migration: 28/28 script trong Tables\ la CREATE TABLE tran,
+    khong co guard IF NOT EXISTS, vi mot guard nhu vay se AM THAM bo qua moi
+    thay doi lược đồ thay vi ap dung chung -> lược đồ sinh ra "thanh cong" ma
+    khong con dung voi file trong repo, con nguy hiem hon la bao loi ro rang.
+    Vi vay neu database da co san bang UserAccount, script se DUNG NGAY tu
+    dau (Phase 0) voi thong bao ro rang, thay vi chet giua chung o Phase 1
+    bang mot loi SQL Server kho hieu. Muon trien khai lai len mot database da
+    ton tai: dung -DropExisting $true (XOA TOAN BO du lieu hien co) - deploy.ps1
+    chua co duong migration bao toan du lieu (xem README-DEMO.md).
 
 .EXAMPLE
-    # Windows Auth, local server:
+    # Windows Auth, LAN DAU TIEN tren mot server/database RONG:
     .\deploy.ps1
 
-    # SQL Auth:
+    # SQL Auth, lan dau tien:
     .\deploy.ps1 -Username "sa" -Password "YourPassword"
 
-    # Deploy sach len server khac:
+    # Deploy lai (XOA SACH du lieu hien co) len server da co du lieu:
     .\deploy.ps1 -ServerInstance "MYSERVER\SQLEXPRESS" -DropExisting $true
 #>
 
@@ -182,6 +192,50 @@ try {
 # PHASE 0: Tao / Reset database
 # ============================================================
 Write-Phase "PHASE 0: KHOI TAO DATABASE"
+
+# Kiem tra som: DropExisting = $false CHI danh cho lan deploy DAU TIEN len
+# database RONG (xem .PARAMETER DropExisting). Khong co kiem tra nay, script
+# se chay qua het Phase 0 roi moi chet o file Tables\UserAccount.sql (dau
+# tien cua Phase 1) voi loi SQL Server "There is already an object named
+# 'UserAccount'..." - dung nhung kho hieu va khong noi ro phai lam gi. Kiem
+# tra va bao loi RO RANG, HANH DONG DUOC ngay tai day.
+if (-not $DropExisting) {
+    $preCheckFile = [System.IO.Path]::GetTempFileName() + ".sql"
+    "SET NOCOUNT ON; IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'$DatabaseName') PRINT 'DB_EXISTS';" `
+        | Out-File -FilePath $preCheckFile -Encoding UTF8
+
+    $preCheckArgs = @("-S", $ServerInstance, "-d", "master", "-i", $preCheckFile, "-b", "-h", "-1", "-W")
+    if ($Username -ne "") { $preCheckArgs += @("-U", $Username, "-P", $Password) } else { $preCheckArgs += "-E" }
+    $dbExists = (& sqlcmd @preCheckArgs) -join "`n"
+    Remove-Item $preCheckFile -Force -ErrorAction SilentlyContinue
+
+    if ($dbExists -match "DB_EXISTS") {
+        $tblCheckFile = [System.IO.Path]::GetTempFileName() + ".sql"
+        "SET NOCOUNT ON; IF OBJECT_ID('dbo.UserAccount') IS NOT NULL PRINT 'SCHEMA_EXISTS';" `
+            | Out-File -FilePath $tblCheckFile -Encoding UTF8
+
+        $tblCheckArgs = @("-S", $ServerInstance, "-d", $DatabaseName, "-i", $tblCheckFile, "-b", "-h", "-1", "-W")
+        if ($Username -ne "") { $tblCheckArgs += @("-U", $Username, "-P", $Password) } else { $tblCheckArgs += "-E" }
+        $schemaExists = (& sqlcmd @tblCheckArgs) -join "`n"
+        Remove-Item $tblCheckFile -Force -ErrorAction SilentlyContinue
+
+        if ($schemaExists -match "SCHEMA_EXISTS") {
+            Write-Host ""
+            Write-Host "  [DUNG LAI]" -ForegroundColor Red
+            Write-Host "Database '$DatabaseName' tren '$ServerInstance' da co san lược đồ (bang UserAccount da ton tai)." -ForegroundColor Red
+            Write-Host "deploy.ps1 KHONG co migration: script trong Tables\ la CREATE TABLE tran, khong tu ap dung" -ForegroundColor Red
+            Write-Host "thay doi lược đồ len database da ton tai." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Chon mot trong hai:" -ForegroundColor Yellow
+            Write-Host "  1) Deploy sach - XOA TOAN BO du lieu hien co:"
+            Write-Host "       .\deploy.ps1 -DropExisting `$true [cac tham so khac]"
+            Write-Host "  2) Deploy len mot database/instance RONG khac:"
+            Write-Host "       .\deploy.ps1 -DatabaseName ""TenKhac"" [cac tham so khac]"
+            Write-Host ""
+            throw "Database '$DatabaseName' da co san lược đồ va DropExisting = `$false."
+        }
+    }
+}
 
 if ($DropExisting) {
     Write-Host "  DropExisting = true -> Xoa database cu (neu co)..." -ForegroundColor Yellow
