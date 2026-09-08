@@ -80,18 +80,45 @@ SET @bid = SCOPE_IDENTITY();
 EXEC test.sp_RunTest @Suite,'ApplyPromo_InvalidCode_Fail54009','ERROR',54009,@SQL;
 
 -- Happy Path sp_ApplyPromotion
+--
+-- Ban truoc cua bai test nay tao Booking KHONG co BookingEventSeatAllocation roi chi
+-- khang dinh "FinalAmount < 1.000.000". Nhung FinalAmount duoc dan xuat tu
+-- fn_CalculateBookingSubtotal = SUM(PriceSnapshot) cua cac Allocation Active, nen mot
+-- Booking khong co ghe luon ra 0 - bat ke Promotion co duoc ap dung hay khong. Bai test
+-- vi vay VAN PASS ngay ca khi DiscountAmount bang 0, tuc no khong he kiem dieu ma ten
+-- no noi. Ban nay cho Booking mot ghe that (1.000.000) va khang dinh CHINH XAC ca hai
+-- con so: giam dung 200.000 va con lai dung 800.000.
 SET @SQL = N'
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert WHERE ConcertName=''Test Concert Live 2025'');
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
     DECLARE @pid INT = (SELECT TOP 1 PromotionID FROM Promotion WHERE ConcertID=@cid);
     DECLARE @dcid INT = (SELECT TOP 1 DiscountCodeID FROM DiscountCode WHERE PromotionID=@pid AND CodeStatus=''Active'');
+
+    DECLARE @seat INT, @gia DECIMAL(18,0);
+    SELECT TOP 1 @seat = EventSeatID, @gia = SalePrice
+    FROM   EventSeat WHERE ConcertID=@cid AND InventoryStatus=''Available'' ORDER BY EventSeatID;
+    IF @seat IS NULL THROW 50000, ''Khong con ghe Available de dung cho bai test'', 1;
+    UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@seat;
+
     DECLARE @bid INT;
-    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime) VALUES (@uid,@cid,''Pending'',1000000,1000000,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
-SET @bid = SCOPE_IDENTITY();
+    INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime)
+    VALUES (@uid,@cid,''Pending'',@gia,@gia,SYSDATETIME(),DATEADD(minute, 15, SYSDATETIME()));
+    SET @bid = SCOPE_IDENTITY();
+    INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationTimestamp,AllocationStatus,PriceSnapshot)
+    VALUES (@bid,@seat,SYSDATETIME(),''Active'',@gia);
+
     EXEC sp_ApplyPromotion @BookingID=@bid, @PromotionID=@pid,
          @DiscountCodeID=@dcid, @ActorUserID=@uid;
+
     DECLARE @final DECIMAL(18,0) = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
-    IF @final >= 1000000 THROW 50000, ''FinalAmount phai giam xuong'', 1;';
+    DECLARE @giam  DECIMAL(18,0) = (SELECT DiscountAmount FROM BookingPromotionApplication WHERE BookingID=@bid AND PromotionID=@pid);
+
+    IF @giam IS NULL
+        THROW 50000, ''Khong ghi nhan BookingPromotionApplication'', 1;
+    IF @giam <> 200000
+        THROW 50000, ''DiscountAmount phai dung 200000 (Promotion mock la Fixed Amount 200k)'', 1;
+    IF @final <> @gia - 200000
+        THROW 50000, ''FinalAmount phai bang Subtotal tru dung 200000'', 1;';
 EXEC test.sp_RunTest @Suite,'ApplyPromo_HappyPath','SUCCESS',NULL,@SQL;
 
 -- ============================================================
@@ -151,6 +178,68 @@ SET @SQL = N'
     IF @vresult NOT IN (''ALREADY_USED'',''DUPLICATE_CHECKIN'')
         BEGIN DECLARE @m7 NVARCHAR(200)=''Expected ALREADY_USED/DUPLICATE, got: ''+@vresult; THROW 50000, @m7, 1; END;';
 EXEC test.sp_RunTest @Suite,'CheckIn_Duplicate_ALREADYUSED','SUCCESS',NULL,@SQL;
+
+-- Moc thoi gian check-in phai la gia tri DA GHI, va mot su kien chi mang MOT moc.
+--
+-- Loi cu: CheckInRepository tra ve DateTime.UtcNow - mot moc do tang ung dung tu sinh
+-- SAU khi SP chay xong, khong ton tai trong CSDL. Ngoai ra ba ban ghi cua cung mot lan
+-- soat ve (Ticket.UsedTimestamp, CheckIn.CheckInTimestamp, AuditRecord.EventTimestamp)
+-- moi cai goi SYSDATETIME() rieng nen co the lech nhau.
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @staff INT = (SELECT UserID FROM UserAccount WHERE Username=''test_staff'');
+    DECLARE @es INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE ConcertID=@cid AND InventoryStatus=''Available'' ORDER BY EventSeatID);
+    IF @es IS NULL THROW 50000,''Khong con ghe Available cho bai test'',1;
+    DECLARE @bid INT, @pid INT, @fa DECIMAL(18,0);
+    DECLARE @seatstr NVARCHAR(MAX) = CAST(@es AS NVARCHAR);
+    EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
+    SET @fa = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-TS-TEST'');
+    SET @pid = SCOPE_IDENTITY();
+    EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;
+
+    DECLARE @tcode VARCHAR(64) = (SELECT TOP 1 TicketCode FROM Ticket WHERE BookingID=@bid);
+    DECLARE @tid INT = (SELECT TOP 1 TicketID FROM Ticket WHERE BookingID=@bid);
+    DECLARE @vresult VARCHAR(32), @vinfo NVARCHAR(500), @ts DATETIME2(7);
+    EXEC sp_CheckInTicket @TicketCode=@tcode, @ConcertID=@cid,
+         @CheckInStaffUserID=@staff, @ValidationResult=@vresult OUT, @ValidationInfo=@vinfo OUT,
+         @CheckInTimestamp=@ts OUT;
+
+    IF @vresult <> ''SUCCESS'' THROW 50000,''Check-in phai thanh cong o bai test nay'',1;
+
+    DECLARE @db  DATETIME2(7) = (SELECT CheckInTimestamp FROM CheckIn WHERE TicketID=@tid);
+    DECLARE @use DATETIME2(7) = (SELECT UsedTimestamp    FROM Ticket  WHERE TicketID=@tid);
+    DECLARE @aud DATETIME2(7) = (SELECT TOP 1 EventTimestamp FROM AuditRecord
+                                 WHERE EntityType=''Ticket'' AND EntityID=CAST(@tid AS VARCHAR(64))
+                                   AND EventType=''ADMISSION_SUCCESS'');
+
+    IF @ts IS NULL
+        THROW 50000,''sp_CheckInTicket phai tra ve moc thoi gian check-in qua tham so OUTPUT'',1;
+    IF @ts <> @db
+        THROW 50000,''Moc tra ra khong bang gia tri da ghi vao CheckIn.CheckInTimestamp'',1;
+    IF @use <> @db OR @aud <> @db
+        THROW 50000,''Mot lan soat ve phai mang DUNG MOT moc thoi gian tren ca ba ban ghi'',1;
+
+    -- Phep so sanh ba moc o tren KHONG du de bat loi: SYSDATETIME() tren Windows chi
+    -- nhich sau moi ~1ms, nen ba lenh chay lien tiep thuong tra ve cung mot gia tri va
+    -- phep so sanh van dung ke ca khi SP goi SYSDATETIME() ba lan rieng le. Da kiem
+    -- chung bang dot bien: bai test van PASS. Vi vay bo sung mot phep kiem CAU TRUC,
+    -- tat dinh: ca ba lenh ghi cua nhanh thanh cong phai dung CHUNG bien @Now
+    -- (DECLARE + UsedTimestamp + CheckIn + tham so OUTPUT + AuditRecord = 5 lan).
+    DECLARE @def NVARCHAR(MAX) = OBJECT_DEFINITION(OBJECT_ID(''dbo.sp_CheckInTicket''));
+    DECLARE @soLanNow INT = (LEN(@def) - LEN(REPLACE(@def, ''@Now'', ''''))) / LEN(''@Now'');
+    IF @soLanNow < 5
+        THROW 50000,''Nhanh thanh cong phai dung chung mot moc thoi gian @Now cho ca ba ban ghi va tham so OUTPUT'',1;
+
+    -- Nhanh that bai: khong co ban ghi CheckIn nao -> phai tra NULL
+    DECLARE @vr2 VARCHAR(32), @vi2 NVARCHAR(500), @ts2 DATETIME2(7) = ''2000-01-01'';
+    EXEC sp_CheckInTicket @TicketCode=''KHONG_TON_TAI_TS'', @ConcertID=@cid,
+         @CheckInStaffUserID=@staff, @ValidationResult=@vr2 OUT, @ValidationInfo=@vi2 OUT,
+         @CheckInTimestamp=@ts2 OUT;
+    IF @ts2 IS NOT NULL
+        THROW 50000,''Check-in that bai thi khong duoc tra ve moc thoi gian'',1;';
+EXEC test.sp_RunTest @Suite,'CheckIn_Timestamp_MatchesPersistedValue','SUCCESS',NULL,@SQL;
 
 -- ============================================================
 -- sp_ProcessRefund
