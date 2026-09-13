@@ -136,6 +136,11 @@
   box-shadow: 0 0 0 3px var(--red-bg);
 }
 
+/* Edge tự chèn icon "hiện mật khẩu" riêng vào input password — chặn để không
+   chồng lên nút hiện/ẩn của chính trang (xem pages/Auth.jsx). Chrome/Firefox
+   không có phần tử tương ứng nên quy tắc này không ảnh hưởng gì ở đó. */
+.input::-ms-reveal, .input::-ms-clear { display: none; }
+
 /* Mũi tên riêng cho select: mũi tên mặc định của mỗi hệ điều hành một khác,
    khiến select là phần tử lệch nhất giữa các nền tảng. */
 .select {
