@@ -91,6 +91,49 @@ export const BOOKING_STATUS_LABEL = {
   [BookingStatus.Cancelled]: 'Đã hủy',
 };
 
+// ── Payment Status (CHK_Payment_Status) ─────────────────────────────────────
+/**
+ * BookingStatus KHÔNG suy ra được PaymentStatus, nhất là ở Cancelled: huỷ một
+ * Booking Confirmed chỉ tạo Refund ở trạng thái Pending (sp_ProcessRefund) —
+ * Payment vẫn giữ nguyên Confirmed cho tới khi ban tổ chức xác nhận tiền đã
+ * thực sự về tài khoản khách (sp_ConfirmRefund mới chuyển Refunded /
+ * PartiallyRefunded). Cùng là "Đã hủy" nhưng "tiền đã về" và "tiền chưa về"
+ * là hai trạng thái hoàn toàn khác nhau với khách hàng.
+ */
+export const PaymentStatus = {
+  Pending: 'Pending',
+  Confirmed: 'Confirmed',
+  Failed: 'Failed',
+  PartiallyRefunded: 'PartiallyRefunded',
+  Refunded: 'Refunded',
+};
+
+export const PAYMENT_STATUS_LABEL = {
+  [PaymentStatus.Pending]: 'Chờ thanh toán',
+  [PaymentStatus.Confirmed]: 'Đã thanh toán',
+  [PaymentStatus.Failed]: 'Thanh toán thất bại',
+  [PaymentStatus.PartiallyRefunded]: 'Đã hoàn một phần',
+  [PaymentStatus.Refunded]: 'Đã hoàn tiền',
+};
+
+// ── Ticket Status (CHK_Ticket_Status / FR31) ────────────────────────────────
+/**
+ * Ticket chỉ tồn tại SAU KHI Booking Confirmed (sp_ConfirmPayment bước 5) — một
+ * Booking Pending/Expired chưa từng có Ticket nào, nên trường ticketStatus ở FE
+ * luôn null/undefined cho tới lúc đó. Đừng nhầm null với một trạng thái hợp lệ.
+ */
+export const TicketStatus = {
+  Issued: 'Issued',
+  Used: 'Used',
+  Cancelled: 'Cancelled',
+};
+
+export const TICKET_STATUS_LABEL = {
+  [TicketStatus.Issued]: 'Còn hiệu lực',
+  [TicketStatus.Used]: 'Đã sử dụng',
+  [TicketStatus.Cancelled]: 'Đã hủy',
+};
+
 // ── Queue Entry Status (§18.4.1) ────────────────────────────────────────────
 export const QueueEntryStatus = {
   Waiting: 'Waiting',
