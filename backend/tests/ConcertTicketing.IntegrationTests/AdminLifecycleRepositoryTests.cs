@@ -51,6 +51,25 @@ public sealed class AdminLifecycleRepositoryTests : IClassFixture<DbFixture>
             .Should().Be("Inactive");
     }
 
+    [Fact(DisplayName = "UpdateArtist: chuyển được sang Retired (FR59b)")]
+    public async Task UpdateArtist_RetireWorks()
+    {
+        // UpdateArtistAsync truoc day KHONG co integration test nao, nghia la duong
+        // Dapper -> sp_UpdateArtist (rieng tham so @ArtistStatus) chua tung duoc chay
+        // that lan nao. Bo sung de khep lo hong do: day la tham so duy nhat trong 24
+        // cho vua sua kieu DbType ma khong co bai kiem nao cham toi.
+        var s = NewSeeder();
+        var admin = await s.CreateUserAsync("Admin");
+        var repo = Repo();
+
+        var artistId = await repo.CreateArtistAsync(admin, new CreateArtistRequest($"IT-Artist-{Guid.NewGuid():N}"));
+
+        await repo.UpdateArtistAsync(admin, artistId, new UpdateArtistRequest(ArtistStatus: "Retired"));
+
+        (await _fx.QueryAdminAsync<string>("SELECT ArtistStatus FROM Artist WHERE ArtistID = @id", new { id = artistId }))
+            .Should().Be("Retired");
+    }
+
     [Fact(DisplayName = "UpdateSeat: Retire ghế đang nằm trong kho vé Concert chưa kết thúc → 59425")]
     public async Task RetireSeatInUse_Throws59425()
     {
