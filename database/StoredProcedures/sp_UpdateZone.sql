@@ -64,8 +64,18 @@ BEGIN
             IF @ZoneWidth <= 0 OR @ZoneHeight <= 0
                 THROW 59813, 'sp_UpdateZone: Kich thuoc khu phai lon hon 0.', 1;
 
+            -- WITH (UPDLOCK): tranh chap dong thoi voi sp_ConfigureVenueMap (chinh no
+            -- cung khoa dong Venue nay bang UPDLOCK khi doc). Neu doc thuong (khong
+            -- khoa), mot lenh thu nho mat phang dang chay song song co the chua kip
+            -- COMMIT gia tri moi luc dong nay doc, nen khu duoc di chuyen hop le voi
+            -- mat phang CU roi mat phang bi thu nho ngay sau do - khu troi ra ngoai
+            -- bien ma khong bi bat o dau ca. Da chung minh bang thuc nghiem: dong bo
+            -- hoa qua sys.dm_exec_requests, tao ra vi pham that. Voi UPDLOCK, hai giao
+            -- dich cung tranh chap DUNG DONG Venue nay se xep hang tuan tu - ben nao
+            -- chay xong truoc thi ben sau doc duoc gia tri MOI NHAT, khong con doc
+            -- duoc gia tri cu da lac hau.
             DECLARE @VW INT, @VH INT;
-            SELECT @VW = MapWidth, @VH = MapHeight FROM Venue WHERE VenueID = @TargetVenueID;
+            SELECT @VW = MapWidth, @VH = MapHeight FROM Venue WITH (UPDLOCK) WHERE VenueID = @TargetVenueID;
 
             IF @VW IS NULL OR @VH IS NULL
                 THROW 59814,
