@@ -68,13 +68,34 @@ Tạo thư mục `database/Scripts/` và `database/Security/`:
 ---
 
 ## Bước 3: Thực Thi Cơ Sở Dữ Liệu
-Sử dụng SSMS hoặc lệnh `sqlcmd` để chạy các file vừa tạo vào SQL Server:
-1. Chạy `CreateDatabase.sql` để tạo Database `ConcertTicketingDB`.
-2. Chạy toàn bộ file trong `database/Tables/`.
-3. Chạy các file trong `database/Functions/`, `StoredProcedures/`, `Triggers/`, `Views/`.
-4. Chạy script tạo Dữ liệu mẫu `SeedData.sql`.
-5. Chạy `setup_api_permissions.sql` và `GrantPermissions.sql`.
-6. Chạy `Run-All-Tests.ps1` để đảm bảo 100% test cases pass.
+
+**Cách được khuyến nghị — chạy một lệnh duy nhất:**
+
+```powershell
+.\database\deploy.ps1 -ServerInstance ".\SQLEXPRESS" -DropExisting $true
+```
+
+`deploy.ps1` chạy đúng thứ tự phụ thuộc của toàn bộ 8 giai đoạn (Tables → Indexes → Functions
+→ Triggers → Stored Procedures → Views → Hangfire → Security → Seed), tự sinh mật khẩu ngẫu
+nhiên cho 5 SQL login và ghi ra `.deploy/db-credentials.json`. Đây là đường triển khai được
+duy trì và kiểm chứng; chạy tay từng file rất dễ sai thứ tự.
+
+**Nếu vẫn muốn chạy tay từng file:** `CreateDatabase.sql` nhận tên database qua biến sqlcmd
+`$(DbName)` (để `deploy.ps1 -DatabaseName` có tác dụng), nên phải truyền biến đó:
+
+```powershell
+sqlcmd -S ".\SQLEXPRESS" -E -d master -i database\Scripts\CreateDatabase.sql -b -v DbName="ConcertTicketingDB"
+```
+
+Chạy thiếu `-v DbName=...` sẽ dừng ngay với lỗi `'DbName' scripting variable not defined` —
+cố ý fail-loud để không âm thầm tạo nhầm database. Với SSMS phải bật **SQLCMD Mode**
+(menu Query → SQLCMD Mode) thì `$(DbName)` mới được thay thế. Các bước còn lại:
+
+1. Chạy toàn bộ file trong `database/Tables/`.
+2. Chạy các file trong `database/Functions/`, `StoredProcedures/`, `Triggers/`, `Views/`.
+3. Chạy script tạo Dữ liệu mẫu `SeedData.sql`.
+4. Chạy `CreateDBUsers.sql` rồi `GrantPermissions.sql`.
+5. Chạy `Run-All-Tests.ps1` để đảm bảo 100% test cases pass.
 
 ---
 
