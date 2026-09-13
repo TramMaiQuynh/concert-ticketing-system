@@ -86,6 +86,9 @@ if ($process.ExitCode -eq 0) {
 Write-Host "`nRunning Concurrency Test..." -ForegroundColor Yellow
 .\11_Test_Concurrency.ps1 -ServerInstance $ServerInstance -Database $Database
 
+Write-Host "`nRunning Venue Map Concurrency Test..." -ForegroundColor Yellow
+.\14_Test_VenueMap_Concurrency.ps1 -ServerInstance $ServerInstance -Database $Database
+
 # Chi xoa FILE SQL tam da ghep, KHONG dong vao database.
 # Du lieu mock (concert/tai khoan test) CO Y o lai sau khi chay: de con soi khi co test
 # do, va vi 01_SetupMockData.sql da xoa sach o dau moi lan chay nen no tu lam sach.
