@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api, { apiError } from '../api/client';
-import { BookingStatus, BOOKING_STATUS_LABEL } from '../domain/enums';
-import { BOOKING_TONE } from '../domain/tone';
+import { BookingStatus, BOOKING_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '../domain/enums';
+import { BOOKING_TONE, PAYMENT_TONE } from '../domain/tone';
 import { formatMoney, formatDateTime, bookingReference } from '../lib/format';
 import {
   Badge, Button, Card, Alert, Skeleton, EmptyState, PageHeader, ConfirmDialog, Input,
@@ -152,6 +152,15 @@ function BookingRow({ booking: b, onCancel }) {
   const canCancel = b.bookingStatus === BookingStatus.Confirmed;
   const isPending = b.bookingStatus === BookingStatus.Pending;
 
+  // Chỉ hiện huy hiệu thanh toán phụ khi Booking đã Cancelled: đây là chỗ DUY
+  // NHẤT PaymentStatus mang thông tin mà BookingStatus không nói được — "đã
+  // hủy" không cho biết tiền đã về tay khách hay còn đang chờ ban tổ chức xác
+  // nhận hoàn (sp_ProcessRefund tạo Refund Pending nhưng KHÔNG đổi PaymentStatus
+  // ngay; phải đợi sp_ConfirmRefund). Ở Confirmed, PaymentStatus luôn trùng
+  // khớp Confirmed nên không thêm thông tin; ở Pending/Expired thì chưa từng
+  // có Payment hiệu lực nên trường này rỗng.
+  const showPaymentBadge = b.bookingStatus === BookingStatus.Cancelled && b.paymentStatus;
+
   return (
     <Card>
       <div className="card__body row wrap gap-4" style={{ justifyContent: 'space-between' }}>
@@ -160,6 +169,11 @@ function BookingRow({ booking: b, onCancel }) {
             <Badge tone={BOOKING_TONE[b.bookingStatus] ?? 'neutral'}>
               {BOOKING_STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
             </Badge>
+            {showPaymentBadge && (
+              <Badge tone={PAYMENT_TONE[b.paymentStatus] ?? 'neutral'}>
+                {PAYMENT_STATUS_LABEL[b.paymentStatus] ?? b.paymentStatus}
+              </Badge>
+            )}
             <span className="pill tabular">{bookingReference(b.bookingID)}</span>
           </div>
           <h3>{b.concertName}</h3>
