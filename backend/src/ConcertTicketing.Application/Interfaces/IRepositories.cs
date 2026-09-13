@@ -75,6 +75,11 @@ public interface IAdminRepository
     Task<IEnumerable<VenueZoneListItem>> ListVenueZonesAsync(int venueId);
     Task<IEnumerable<ArtistListItem>> ListArtistsAsync(bool includeRetired);
 
+    // ── Bao cao (FR55/FR56/BP14) — RLS qua SESSION_CONTEXT, khong nhan ActorUserID ──
+    Task<ConcertSalesSummaryDto?> GetConcertSalesSummaryAsync(int concertId);
+    Task<ConcertCheckInReportDto?> GetConcertCheckInReportAsync(int concertId);
+    Task<IEnumerable<AttendeeListItem>> ListConcertAttendeesAsync(int concertId);
+
     Task<int> CreateConcertAsync(int actorUserId, CreateConcertRequest request);
     Task UpdateConcertAsync(int concertId, int actorUserId, UpdateConcertRequest request);
     Task UpdateConcertStatusAsync(int concertId, int actorUserId, string status);
