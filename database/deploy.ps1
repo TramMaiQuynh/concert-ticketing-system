@@ -249,7 +249,10 @@ END
 "@ -Database "master"
 }
 
-Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Database "master"
+# -DatabaseName phai toi duoc CreateDatabase.sql qua bien sqlcmd $(DbName), khong
+# phai qua "-d" (o day "-d master" la co y, vi database dich chua ton tai).
+Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Database "master" `
+    -Variables @{ DbName = $DatabaseName }
 
 # ============================================================
 # PHASE 1: TABLES (theo dung thu tu FK dependency)
@@ -461,10 +464,11 @@ Write-Host "  Tong cong: 43 Stored Procedures da duoc tao." -ForegroundColor Gre
 # PHASE 6: VIEWS
 # Views phu thuoc Tables, khong phu thuoc SP/Trigger/Function.
 # ============================================================
-Write-Phase "PHASE 6: VIEWS (2 file, 11 view)"
+Write-Phase "PHASE 6: VIEWS (3 file, 12 view)"
 
 $viewDir = Join-Path $DbRoot "Views"
 Invoke-SqlFile "$viewDir\VW_ConcertSalesSummary.sql"
+Invoke-SqlFile "$viewDir\VW_ConcertAttendeeList.sql"
 Invoke-SqlFile "$viewDir\VW_Others.sql"   # Chua 5 view: ActiveInventoryStatus,
                                            # CustomerBookingHistory, CheckInReport,
                                            # WaitlistQueue, AuditTrail
