@@ -435,7 +435,14 @@ public class ErrorHandlingMiddleware
             // Lỗi cấu hình hệ thống (thiếu bản ghi SystemConfiguration bắt buộc — §23.7).
             // Đây thực sự là 500: không phải người gọi làm sai, mà dữ liệu nền chưa đủ.
             // Vẫn map tường minh để thông báo nói đúng nguyên nhân thay vì "lỗi cơ sở dữ liệu".
-            58705 or 59301 or 59701 => (HttpStatusCode.InternalServerError, "System Configuration Missing",
+            //
+            // CHỈ còn 59701 (sp_AllocateWaitlist — thiếu Waitlist_Opportunity_Duration):
+            // 58705 và 59301 đã có nhánh RIÊNG với thông điệp cụ thể hơn ở trên (dòng
+            // ~249, ~257) và switch khớp theo thứ tự khai báo — nhánh đứng trước luôn
+            // thắng, nên khi hai mã đó từng đứng chung "or" với 59701 ở đây, phần của
+            // chúng trong cụm là code chết, không bao giờ chạy tới. Đã dọn bỏ, không
+            // đổi hành vi: hai mã đó vẫn được xử lý đúng bởi nhánh riêng của mình.
+            59701 => (HttpStatusCode.InternalServerError, "System Configuration Missing",
                       "Thiếu bản ghi cấu hình hệ thống bắt buộc. Liên hệ quản trị viên."),
 
             // Duplicate Key (2627 = constraint, 2601 = unique index)
