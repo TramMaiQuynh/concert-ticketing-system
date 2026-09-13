@@ -257,15 +257,25 @@ BEGIN
 
     IF NOT UPDATE(RefundStatus) RETURN;
 
+    -- Refund la entity DUY NHAT trong §10.1 co hai gia tri khoi tao hop le trong
+    -- ban truoc (Pending VA Confirmed) - moi entity khac trong file nay chi co
+    -- DUNG MOT trang thai khoi tao. Ra soat toan bo 5 diem INSERT INTO Refund
+    -- (sp_ConfirmPayment x3 nhanh auto-refund, sp_ProcessRefund, sp_UpdateConcertStatus
+    -- nhanh huy Concert) cho thay ca 5 deu ghi 'Pending' - khong co duong nao tao
+    -- thang mot Refund da Confirmed. §10.1 cung khong mo ta duong tao truc tiep do.
+    -- Cho phep 'Confirmed' lam gia tri khoi tao la mot ke ho phong thu thua, sai
+    -- lech so voi dung mot trang thai khoi tao ('Pending') ma moi rang buoc khac
+    -- trong file nay tuan thu - siet lai cho dung khit voi §10.1 va voi chinh cac
+    -- diem ghi du lieu thuc te.
     IF EXISTS (
         SELECT 1
         FROM   inserted i
         LEFT JOIN deleted d ON d.RefundID = i.RefundID
-        WHERE  d.RefundID IS NULL AND i.RefundStatus NOT IN ('Pending', 'Confirmed')
+        WHERE  d.RefundID IS NULL AND i.RefundStatus <> 'Pending'
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50006, 'BR49 Violation: Trang thai khoi tao cua Refund phai la Pending hoac Confirmed.', 1;
+        THROW 50006, 'BR49 Violation: Trang thai khoi tao cua Refund phai la Pending.', 1;
     END
 
     IF EXISTS (
