@@ -382,7 +382,7 @@ function CategorySection() {
         <div className="field-grid">
           <IdPicker label="Concert" items={options} value={concertId} onChange={setConcertId} />
           <Field label="ID hạng vé" hint="Bỏ trống = tạo mới. Điền = cập nhật hạng vé đó.">
-            <input type="number" min="1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} placeholder="để trống để tạo mới" />
+            <input type="number" min="1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} placeholder="Bỏ trống để tạo mới" />
           </Field>
         </div>
         <div className="field-grid" style={{ marginTop: '16px' }}>
@@ -712,7 +712,7 @@ function SeatAvailabilitySection() {
                         setUnavailable(s.inventoryStatus === InventoryStatus.Available);
                       }}
                     >
-                      chọn
+                      Chọn
                     </button>
                   </td>
                 </tr>
