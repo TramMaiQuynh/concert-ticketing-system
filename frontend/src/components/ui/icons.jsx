@@ -133,6 +133,21 @@ export const IconScan = make(
 
 export const IconPlus = make(<path d="M12 5v14M5 12h14" />);
 
+export const IconEye = make(
+  <>
+    <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </>,
+);
+
+export const IconEyeOff = make(
+  <>
+    <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M3 3l18 18" />
+  </>,
+);
+
 export const IconTrash = make(
   <>
     <path d="M4 7h16M10 11v6M14 11v6" />
