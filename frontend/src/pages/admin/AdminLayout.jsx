@@ -10,6 +10,7 @@ import Concerts from './Concerts';
 import Promotions from './Promotions';
 import Users from './Users';
 import Refunds from './Refunds';
+import Reports from './Reports';
 
 /**
  * Khu quản trị.
@@ -39,16 +40,24 @@ export default function AdminLayout() {
     );
   }
 
+  // Tuyệt đối, không tương đối: khu này dựng bằng MỘT <Routes> con lồng bên
+  // trong route cha "/admin/*" (App.jsx), không phải bằng <Outlet> của một cây
+  // route cha-con thật. Với route cha dùng "*" (không tiền tố tĩnh), một `to`
+  // tương đối như "concerts" không thay thế đoạn cuối của URL — nó bị NỐI THÊM
+  // vào nguyên vẹn pathname hiện tại. Rơi vào Route path="*" bên dưới rồi lặp
+  // lại là cách chuỗi "/admin/concerts/catalog/concerts/concerts/concerts/…"
+  // dài vô hạn được sinh ra. Tuyệt đối hoá triệt tiêu toàn bộ sự mập mờ đó.
   const items = [
-    { to: 'concerts', label: 'Concert', desc: 'Vòng đời, hạng vé, kho ghế' },
-    { to: 'catalog', label: 'Danh mục', desc: 'Nghệ sĩ, địa điểm, khu vực, ghế' },
+    { to: '/admin/concerts', label: 'Concert', desc: 'Vòng đời, hạng vé, kho ghế' },
+    { to: '/admin/catalog', label: 'Danh mục', desc: 'Nghệ sĩ, địa điểm, khu vực, ghế' },
     // Chỉ Admin: sp_ConfigureVenueMap / sp_CreateZone / sp_CreateSeat đều tự chặn
     // vai trò khác ở tầng database, nên hiện mục này cho Organizer chỉ dẫn họ vào
     // một trang chắc chắn trả 403.
-    ...(isAdmin ? [{ to: 'venue-map', label: 'Sơ đồ địa điểm', desc: 'Mặt phẳng, sân khấu, khu, ghế' }] : []),
-    { to: 'promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá' },
-    { to: 'refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn' },
-    ...(isAdmin ? [{ to: 'users', label: 'Người dùng', desc: 'Vai trò, khóa tài khoản, soát vé' }] : []),
+    ...(isAdmin ? [{ to: '/admin/venue-map', label: 'Sơ đồ địa điểm', desc: 'Mặt phẳng, sân khấu, khu, ghế' }] : []),
+    { to: '/admin/promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá' },
+    { to: '/admin/refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn' },
+    { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé' },
+    ...(isAdmin ? [{ to: '/admin/users', label: 'Người dùng', desc: 'Vai trò, khóa tài khoản, soát vé' }] : []),
   ];
 
   return (
@@ -90,20 +99,21 @@ export default function AdminLayout() {
 
       <main style={{ minWidth: 0 }}>
         <Routes>
-          <Route index element={<Navigate to="concerts" replace />} />
+          <Route index element={<Navigate to="/admin/concerts" replace />} />
           <Route path="concerts" element={<Concerts />} />
           <Route path="catalog" element={<Catalog isAdmin={isAdmin} />} />
           <Route
             path="venue-map"
-            element={isAdmin ? <VenueMap /> : <Navigate to="../concerts" replace />}
+            element={isAdmin ? <VenueMap /> : <Navigate to="/admin/concerts" replace />}
           />
           <Route path="promotions" element={<Promotions />} />
           <Route path="refunds" element={<Refunds />} />
+          <Route path="reports" element={<Reports />} />
           <Route
             path="users"
-            element={isAdmin ? <Users /> : <Navigate to="../concerts" replace />}
+            element={isAdmin ? <Users /> : <Navigate to="/admin/concerts" replace />}
           />
-          <Route path="*" element={<Navigate to="concerts" replace />} />
+          <Route path="*" element={<Navigate to="/admin/concerts" replace />} />
         </Routes>
       </main>
 
