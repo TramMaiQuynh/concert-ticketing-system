@@ -49,6 +49,40 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> ListArtists([FromQuery] bool includeRetired = false)
         => Ok(await _admin.ListArtistsAsync(includeRetired));
 
+    // ── Báo cáo (FR55/FR56/BP14) ─────────────────────────────────────────────
+    //
+    // Không truyền UserID của actor: cả 3 nguồn đọc (VW_ConcertSalesSummary,
+    // VW_CheckInReport, VW_ConcertAttendeeList) tự lọc theo SESSION_CONTEXT mà
+    // SqlConnectionFactory đã đặt sẵn từ JWT. Trả 404 khi null — quy về CÙNG một
+    // mã lỗi cho "không sở hữu Concert này" và "ConcertID không tồn tại", để
+    // không lộ việc một Concert của Organizer khác có tồn tại hay không.
+
+    /// <summary>Tóm tắt doanh thu/tồn kho của một Concert thuộc phạm vi sở hữu.</summary>
+    [HttpGet("concerts/{id:int}/summary")]
+    [ProducesResponseType(typeof(ConcertSalesSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConcertSalesSummary(int id)
+    {
+        var summary = await _admin.GetConcertSalesSummaryAsync(id);
+        return summary is null ? NotFound() : Ok(summary);
+    }
+
+    /// <summary>Tỷ lệ check-in của một Concert thuộc phạm vi sở hữu.</summary>
+    [HttpGet("concerts/{id:int}/checkin-report")]
+    [ProducesResponseType(typeof(ConcertCheckInReportDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConcertCheckInReport(int id)
+    {
+        var report = await _admin.GetConcertCheckInReportAsync(id);
+        return report is null ? NotFound() : Ok(report);
+    }
+
+    /// <summary>Danh sách người giữ từng vé của một Concert thuộc phạm vi sở hữu.</summary>
+    [HttpGet("concerts/{id:int}/attendees")]
+    [ProducesResponseType(typeof(IEnumerable<AttendeeListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListConcertAttendees(int id)
+        => Ok(await _admin.ListConcertAttendeesAsync(id));
+
     // ── Concert ──────────────────────────────────────────────────────────────
 
     [HttpPost("concerts")]
