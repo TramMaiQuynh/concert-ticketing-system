@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api, { apiError } from '../api/client';
-import { BookingStatus, BOOKING_STATUS_LABEL } from '../domain/enums';
-import { BOOKING_TONE } from '../domain/tone';
+import { BookingStatus, BOOKING_STATUS_LABEL, TicketStatus, TICKET_STATUS_LABEL } from '../domain/enums';
+import { BOOKING_TONE, TICKET_TONE } from '../domain/tone';
 import { formatMoney, formatCountdown, msUntil } from '../lib/format';
 import {
   Badge, Button, Card, Alert, Input, Skeleton, EmptyState, ConfirmDialog,
 } from '../components/ui';
+import TicketQr from '../components/ui/TicketQr';
 import { useToast } from '../components/ui/Toast';
 import { IconClock, IconArrowRight, IconChevronLeft, IconCheck } from '../components/ui/icons';
 
@@ -231,14 +232,58 @@ export default function Checkout() {
             <div className="overline" style={{ marginBottom: 'var(--space-3)' }}>Chi tiết đơn hàng</div>
             <div className="stack gap-3">
               {booking.seats?.map((s) => (
-                <div key={s.seatID} className="row gap-4" style={{ justifyContent: 'space-between' }}>
-                  <span className="text-sm">
-                    <strong>{s.seatNumber}</strong>
-                    <span className="text-secondary">
-                      {s.sectionName ? ` · ${s.sectionName}` : ''} · {s.categoryName}
+                <div key={s.seatID} className="stack gap-2">
+                  <div className="row gap-4" style={{ justifyContent: 'space-between' }}>
+                    <span className="text-sm">
+                      <strong>{s.seatNumber}</strong>
+                      <span className="text-secondary">
+                        {s.sectionName ? ` · ${s.sectionName}` : ''} · {s.categoryName}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-sm tabular">{formatMoney(s.priceAtBooking)}</span>
+                    <span className="text-sm tabular">{formatMoney(s.priceAtBooking)}</span>
+                  </div>
+
+                  {/* ticketCode chỉ khác null khi Booking đã Confirmed (FR31) — Booking
+                      Pending/Expired chưa từng có Ticket nên khối này tự ẩn, không cần
+                      kiểm tra lại bookingStatus ở đây.
+
+                      CHỈ vẽ QR cho vé còn hiệu lực. Vé Used/Cancelled vẫn giữ nguyên
+                      ticket_code trong database (mã là duy nhất vĩnh viễn theo BR27,
+                      không bị xoá khi huỷ), nên nếu cứ thấy có mã là vẽ thì một vé đã
+                      huỷ vẫn hiện QR quét được y hệt vé thật — khách mang ra cổng rồi
+                      mới bị từ chối. Cổng vẫn chặn đúng (sp_CheckInTicket đòi 'Issued'),
+                      nhưng giao diện không được mời người ta vào thế đó. */}
+                  {s.ticketCode && (
+                    <div
+                      className="row gap-3"
+                      style={{
+                        alignItems: 'center', padding: 'var(--space-3)',
+                        borderRadius: 'var(--radius-lg)', background: 'var(--surface-sunken)',
+                        border: '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      {s.ticketStatus === TicketStatus.Issued && (
+                        <TicketQr value={s.ticketCode} size={88} />
+                      )}
+                      <div className="stack gap-1" style={{ minWidth: 0 }}>
+                        <Badge tone={TICKET_TONE[s.ticketStatus] ?? 'neutral'}>
+                          {TICKET_STATUS_LABEL[s.ticketStatus] ?? s.ticketStatus}
+                        </Badge>
+                        {s.ticketStatus === TicketStatus.Issued ? (
+                          <span
+                            className="text-xs text-muted tabular"
+                            style={{ wordBreak: 'break-all' }}
+                          >
+                            {s.ticketCode}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">
+                            Mã vé không còn dùng để vào cổng được.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
