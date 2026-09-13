@@ -90,12 +90,19 @@ public record BookingDetail(
     string BookingReference,
     List<BookingAllocationDto> Seats);
 
+/// <summary>
+/// TicketCode/TicketStatus NULL khi Booking chưa Confirmed — Ticket (FR31) chỉ được
+/// sp_ConfirmPayment phát hành tại bước 5, sau khi Booking đổi trạng thái. Không NULL
+/// nghĩa là suy đoán sai lệch vòng đời: Pending/Expired chưa từng có Ticket nào.
+/// </summary>
 public record BookingAllocationDto(
     int SeatID,
     string SeatNumber,
     string? SectionName,
     string CategoryName,
-    decimal PriceAtBooking);
+    decimal PriceAtBooking,
+    string? TicketCode,
+    string? TicketStatus);
 
 /// <summary>
 /// Một dòng trong lịch sử đặt vé của chính Customer (FR50), đọc từ
@@ -391,6 +398,60 @@ public record ArtistListItem(
     string ArtistName,
     string? ArtistDescription,
     string ArtistStatus);
+
+// ── Bao cao Organizer (FR55/FR56/BP14) ──────────────────────────────────────
+//
+// Doc qua VW_ConcertSalesSummary/VW_CheckInReport/VW_ConcertAttendeeList — ca ba
+// deu tu loc theo SESSION_CONTEXT(N'UserID') (RLS: Organizer chi thay Concert cua
+// minh, Admin thay toan bo), nen repository KHONG truyen ActorUserID/OrganizerID:
+// 0 dong tra ve dong nghia "khong so huu hoac khong ton tai" (fail-closed), va
+// controller quy ve cung mot 404 cho ca hai truong hop de khong lo thong tin ve
+// su ton tai cua Concert nguoi khac.
+
+public record ConcertSalesSummaryDto(
+    int ConcertID,
+    string ConcertName,
+    string? ArtistName,
+    string? VenueName,
+    string ConcertStatus,
+    DateTime StartDatetime,
+    int TotalInventorySeats,
+    int AvailableSeats,
+    int BookedSeats,
+    int OnHoldSeats,
+    decimal TotalRevenue,
+    int ConfirmedBookings,
+    int CancelledBookings,
+    int ExpiredBookings);
+
+public record ConcertCheckInReportDto(
+    int ConcertID,
+    string ConcertName,
+    DateTime StartDatetime,
+    int TotalIssuedTickets,
+    int TotalCheckedIn,
+    int PendingEntry,
+    decimal CheckInRatePct);
+
+/// <summary>
+/// KHONG co TicketCode: BP9 chi giao doc ticket_code/QR cho Check-in Staff/Admin
+/// tai cong; bao cao Organizer (BP14) chi can trang thai/thong ke "ticket usage",
+/// khong phai ma tho. Xem VW_ConcertAttendeeList.sql.
+/// </summary>
+public record AttendeeListItem(
+    int TicketID,
+    int BookingID,
+    int ConcertID,
+    string TicketStatus,
+    DateTime IssuedTimestamp,
+    DateTime? UsedTimestamp,
+    DateTime? CancelledTimestamp,
+    string SeatCode,
+    string ZoneName,
+    string CategoryName,
+    int CustomerUserID,
+    string Username,
+    string DisplayName);
 
 // ── So do cho ngoi (FR11a) ───────────────────────────────────────────────────
 //
