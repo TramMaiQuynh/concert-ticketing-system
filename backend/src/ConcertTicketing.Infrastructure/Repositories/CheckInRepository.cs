@@ -31,7 +31,9 @@ public class CheckInRepository : ICheckInRepository
         p.Add("@TicketCode",          request.TicketCode,  DbType.AnsiString, size: 64);
         p.Add("@ConcertID",           request.ConcertId,   DbType.Int32);
         p.Add("@CheckInStaffUserID",  staffUserId,         DbType.Int32);
-        p.Add("@ValidationResult",    dbType: DbType.String, size: 32,  direction: ParameterDirection.Output);
+        // @ValidationResult la ma ket qua thuan ASCII ("SUCCESS", "ALREADY_USED"...),
+        // khac @ValidationInfo (thong diep NVARCHAR co the co tieng Viet) ngay ben duoi.
+        p.Add("@ValidationResult",    dbType: DbType.AnsiString, size: 32,  direction: ParameterDirection.Output);
         p.Add("@ValidationInfo",      dbType: DbType.String, size: 500, direction: ParameterDirection.Output);
         p.Add("@CheckInTimestamp",    dbType: DbType.DateTime2,         direction: ParameterDirection.Output);
 
