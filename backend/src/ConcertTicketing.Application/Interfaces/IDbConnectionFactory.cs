@@ -7,10 +7,13 @@ namespace ConcertTicketing.Application.Interfaces;
 /// bất kỳ câu lệnh nghiệp vụ nào chạy.
 ///
 /// Vì sao cần: hệ thống dùng principal DUNG CHUNG (api_service) cho mọi request,
-/// nên bản thân connection không nói được "ai đang thao tác". Bốn view Row-Level
-/// Security (VW_CustomerBookingHistory, VW_OrganizerBooking/Payment/Ticket) và
-/// TRG_AuditRecord_SecurityGuard đều đọc SESSION_CONTEXT(N'UserID') để biết điều đó.
-/// Nếu không set, các view trả về 0 dòng (fail-closed) và trigger từ chối ghi Audit.
+/// nên bản thân connection không nói được "ai đang thao tác". Chín view Row-Level
+/// Security trong database và TRG_AuditRecord_SecurityGuard đều đọc
+/// SESSION_CONTEXT(N'UserID') để biết điều đó. Bốn view đang thực sự được backend
+/// truy vấn là VW_CustomerBookingHistory (lịch sử đặt vé của chính khách),
+/// VW_ConcertSalesSummary, VW_CheckInReport và VW_ConcertAttendeeList (ba báo cáo
+/// của Organizer/Admin). Nếu không set, các view trả về 0 dòng (fail-closed) và
+/// trigger từ chối ghi Audit.
 ///
 /// Mọi repository PHẢI lấy connection qua factory này thay vì tự new SqlConnection.
 /// </summary>

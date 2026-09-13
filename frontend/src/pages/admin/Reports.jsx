@@ -2,7 +2,7 @@ import { useState } from 'react';
 import api from '../../api/client';
 import { useConcertOptions } from '../../lib/concertOptions';
 import { Panel, Banner, IdPicker, useAction } from '../../components/form';
-import { TICKET_STATUS_LABEL } from '../../domain/enums';
+import { TICKET_STATUS_LABEL, WAITLIST_STATUS_LABEL } from '../../domain/enums';
 import { formatMoney, formatDateTime } from '../../lib/format';
 
 /**
@@ -23,22 +23,26 @@ export default function Reports() {
   const [summary, setSummary] = useState(null);
   const [checkin, setCheckin] = useState(null);
   const [attendees, setAttendees] = useState(null);
+  const [waitlist, setWaitlist] = useState(null);
 
   const load = (e) => {
     e.preventDefault();
     setSummary(null);
     setCheckin(null);
     setAttendees(null);
+    setWaitlist(null);
     act.run(async () => {
       const id = Number(concertId);
-      const [s, c, a] = await Promise.all([
+      const [s, c, a, w] = await Promise.all([
         api.get(`/admin/concerts/${id}/summary`),
         api.get(`/admin/concerts/${id}/checkin-report`),
         api.get(`/admin/concerts/${id}/attendees`),
+        api.get(`/admin/concerts/${id}/waitlist`),
       ]);
       setSummary(s.data);
       setCheckin(c.data);
       setAttendees(a.data);
+      setWaitlist(w.data);
     });
   };
 
@@ -106,6 +110,47 @@ export default function Reports() {
                       <td>{a.displayName} <span className="text-muted">({a.username})</span></td>
                       <td>{TICKET_STATUS_LABEL[a.ticketStatus] ?? a.ticketStatus}</td>
                       <td>{a.usedTimestamp ? formatDateTime(a.usedTimestamp) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {waitlist && (
+        <Panel
+          title={`Danh sách chờ (${waitlist.length})`}
+          subtitle="Ai đang xếp hàng cho hạng vé nào, ở vị trí thứ mấy, đã được cấp cơ hội mua hay chưa. Cơ hội hết hạn sẽ được hệ thống tự chuyển cho người kế tiếp."
+        >
+          {waitlist.length === 0 ? (
+            <div className="field-hint">
+              Chưa có ai đăng ký danh sách chờ cho Concert này (hoặc Concert chưa bật tính năng này).
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Vị trí</th><th>Khách</th><th>Hạng vé</th><th>Số ghế muốn</th>
+                    <th>Trạng thái</th><th>Ghế đang giữ</th><th>Cơ hội hết hạn lúc</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waitlist.map((w) => (
+                    <tr key={w.waitlistEntryID}>
+                      <td className="tabular">{w.queuePosition ?? '—'}</td>
+                      <td>{w.displayName} <span className="text-muted">({w.username})</span></td>
+                      <td>{w.categoryName}</td>
+                      <td className="tabular">{w.requestedQuantity}</td>
+                      <td>{WAITLIST_STATUS_LABEL[w.entryStatus] ?? w.entryStatus}</td>
+                      <td className="tabular">{w.activeAllocationCount}</td>
+                      <td>
+                        {w.opportunityExpiryTimestamp
+                          ? formatDateTime(w.opportunityExpiryTimestamp)
+                          : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

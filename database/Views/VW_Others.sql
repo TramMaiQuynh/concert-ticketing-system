@@ -160,12 +160,42 @@ WHERE  c.OrganizerUserID = CAST(SESSION_CONTEXT(N'UserID') AS INT)
                  AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active');
 GO
 
--- VW_AuditTrail: Nhat ky kiem toan toan he thong (chi Admin duoc GRANT - §23.7)
+-- VW_AuditTrail: Nhat ky kiem toan toan he thong (FR59/FR59a, BO10)
+--
+-- VI SAO VIEW NAY PHAI TU LOC THEO ROLE ADMIN:
+-- §23.7 ban dau bao ve nhat ky bang cach KHONG cap view cho api_service, vi
+-- api_service da bi DENY SELECT tren bang AuditRecord. Da do thuc nghiem: mot view
+-- thuoc so huu dbo VAN doc duoc bang bi DENY nho ownership chaining - tuc chi can
+-- cap view la DENY o bang goc mat tac dung. Bao ve that su vi vay phai nam BEN TRONG
+-- view, khong the nam o cho cap quyen.
+--
+-- Nhung FR59a lai doi hoi Admin truy van duoc lich su thay doi cua mot entity, va
+-- backend chi ket noi bang DUY NHAT principal api_service - khong co duong nao de
+-- "ket noi voi tu cach Admin" o tang database. Hai yeu cau nay chi dung dong thoi khi
+-- pham vi duoc quyet dinh theo NGUOI DANG DANG NHAP (SESSION_CONTEXT) thay vi theo
+-- principal ket noi.
+--
+-- Day dung la cach du an da khep lai mau thuan y het nhu vay cho bon view bao cao
+-- (§23.9): bo sung RLS vao chinh view thay vi dua vao grant cap principal. Ap dung
+-- lai tien le do o day:
+--   - Phien khong phai Admin dang hoat dong -> 0 dong (fail-closed), ke ca khi
+--     SESSION_CONTEXT chua duoc set (tien trinh nen chay bang tai khoan 'system',
+--     tai khoan nay khong giu role nao).
+--   - Endpoint doc view nay van phai [Authorize(Roles = "Admin")] - phong thu hai lop.
+--   - DENY SELECT tren bang AuditRecord VAN giu nguyen: khong ai doc thang bang duoc.
 CREATE OR ALTER VIEW dbo.VW_AuditTrail AS
 SELECT ar.AuditID, ar.EventTimestamp, ar.EventType, ar.Action,
        ar.EntityType, ar.EntityID,
        ua.UserID AS ActorUserID, ua.Username AS ActorUsername,
        ar.PreviousValue, ar.NewValue, ar.TransactionReference
 FROM   AuditRecord  ar
-JOIN   UserAccount  ua ON ua.UserID = ar.ActorUserID;
+JOIN   UserAccount  ua ON ua.UserID = ar.ActorUserID
+WHERE  EXISTS (SELECT 1
+               FROM   dbo.UserRoleAssignment ura
+               JOIN   dbo.Role        r     ON r.RoleID   = ura.RoleID
+               JOIN   dbo.UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+               WHERE  ura.UserID = CAST(SESSION_CONTEXT(N'UserID') AS INT)
+                 AND  r.RoleName = 'Admin'
+                 AND  ura.AssignmentStatus = 'Active'
+                 AND  uaAdm.AccountStatus  = 'Active');
 GO

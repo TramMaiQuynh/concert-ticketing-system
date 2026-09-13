@@ -58,8 +58,9 @@ ON Booking (CustomerUserID, ConcertID, BookingStatus);
 CREATE NONCLUSTERED INDEX IX_AuditRecord_Entity
 ON AuditRecord (EntityType, EntityID, EventTimestamp);
 
--- (2) Truy van theo khoang thoi gian / hoat dong gan day (VW_AuditTrail khong loc
---     thuong duyet theo thoi gian).
+-- (2) Truy van theo khoang thoi gian / hoat dong gan day: endpoint tra cuu nhat ky
+--     (FR56) loc bang [From, To) va sap xep EventTimestamp DESC khi khong chi dinh
+--     entity cu the.
 CREATE NONCLUSTERED INDEX IX_AuditRecord_Timestamp
 ON AuditRecord (EventTimestamp);
 

@@ -108,6 +108,84 @@ public class AdminRepository : IAdminRepository
             new { ConcertID = concertId });
     }
 
+    /// <summary>
+    /// Danh sách chờ của một Concert (BO11–BO12). Như ba báo cáo ở trên, không truyền
+    /// ActorUserID: VW_WaitlistQueue tự lọc theo Concert.OrganizerUserID hoặc Role Admin
+    /// bằng SESSION_CONTEXT. Organizer không sở hữu Concert này nhận mảng rỗng, không lỗi —
+    /// cùng lý do với ListConcertAttendeesAsync.
+    /// </summary>
+    public async Task<IEnumerable<WaitlistQueueItem>> ListConcertWaitlistAsync(int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+        return await conn.QueryAsync<WaitlistQueueItem>(@"
+            SELECT WaitlistID, ConcertID, ConcertName, WaitlistStatus, AllocationPolicy,
+                   WaitlistEntryID, CustomerUserID, Username, DisplayName,
+                   JoinedTimestamp, QueuePosition, EntryStatus,
+                   TicketCategoryID, CategoryName, RequestedQuantity, ActiveAllocationCount,
+                   OpportunityGrantedTimestamp, OpportunityExpiryTimestamp, ResultingBookingID
+            FROM   VW_WaitlistQueue
+            WHERE  ConcertID = @ConcertID
+            ORDER  BY QueuePosition;",
+            new { ConcertID = concertId });
+    }
+
+    /// <summary>
+    /// Tra cứu nhật ký kiểm toán (FR59/FR59a).
+    ///
+    /// Không truyền ActorUserID để lọc quyền: VW_AuditTrail chỉ trả dữ liệu khi người
+    /// đang đăng nhập giữ Role Admin đang hoạt động — phiên khác nhận 0 dòng (fail-closed).
+    /// Endpoint gọi vào đây vẫn phải [Authorize(Roles = "Admin")]: hai lớp độc lập.
+    ///
+    /// DbType.AnsiString cho EntityType/EntityID: hai cột này là VARCHAR(64) và là hai cột
+    /// dẫn đầu của IX_AuditRecord_Entity. Tham số NVARCHAR sẽ buộc SQL Server ép kiểu CỘT
+    /// và vô hiệu hoá index seek trên chính bảng lớn nhất hệ thống.
+    /// </summary>
+    public async Task<IEnumerable<AuditRecordItem>> QueryAuditTrailAsync(AuditQueryRequest r)
+    {
+        // Trần cứng phía máy chủ: người gọi không được phép yêu cầu số dòng tuỳ ý.
+        const int DefaultLimit = 100;
+        const int MaxLimit     = 500;
+        var limit = Math.Clamp(r.Limit ?? DefaultLimit, 1, MaxLimit);
+
+        using var conn = await _factory.OpenAsync();
+        var p = new DynamicParameters();
+        p.Add("@Limit", limit, DbType.Int32);
+        p.Add("@EntityType", string.IsNullOrWhiteSpace(r.EntityType) ? null : r.EntityType,
+              DbType.AnsiString, size: 64);
+        p.Add("@EntityID", string.IsNullOrWhiteSpace(r.EntityId) ? null : r.EntityId,
+              DbType.AnsiString, size: 64);
+        p.Add("@ActorUserID", r.ActorUserId, DbType.Int32);
+        p.Add("@From", r.From, DbType.DateTime2);
+        p.Add("@To", r.To, DbType.DateTime2);
+
+        return await conn.QueryAsync<AuditRecordItem>(@"
+            SELECT TOP (@Limit)
+                   AuditID, EventTimestamp, EventType, Action, EntityType, EntityID,
+                   ActorUserID, ActorUsername, PreviousValue, NewValue, TransactionReference
+            FROM   VW_AuditTrail
+            WHERE  (@EntityType  IS NULL OR EntityType  = @EntityType)
+              AND  (@EntityID    IS NULL OR EntityID    = @EntityID)
+              AND  (@ActorUserID IS NULL OR ActorUserID = @ActorUserID)
+              AND  (@From        IS NULL OR EventTimestamp >= @From)
+              AND  (@To          IS NULL OR EventTimestamp <  @To)
+            -- AuditID phá hoà: hai bản ghi cùng một mốc thời gian vẫn phải có thứ tự
+            -- xác định, nếu không phân trang/đối soát sẽ cho kết quả khác nhau mỗi lần.
+            ORDER  BY EventTimestamp DESC, AuditID DESC
+            -- Mẫu `(@p IS NULL OR cot = @p)` buộc SQL Server dựng MỘT kế hoạch dùng chung
+            -- cho mọi tổ hợp tham số, nên nó không dám seek trên IX_AuditRecord_Entity —
+            -- đã đo trên 40.000 bản ghi: tra cứu lịch sử của MỘT entity tốn 418 logical
+            -- reads (quét bảng). Với RECOMPILE, kế hoạch được dựng theo đúng giá trị tham
+            -- số của lần gọi này: còn 11 reads — giảm 38 lần.
+            --
+            -- LƯU Ý: đây là quyết định NGƯỢC với TRG_StateTransition (nơi RECOMPILE đã bị
+            -- loại bỏ để chọn HASH JOIN hint), và ngược có căn cứ chứ không mâu thuẫn:
+            -- trigger chạy ở MỌI lần cập nhật một dòng nên chi phí biên dịch lấn át tất cả
+            -- (đo được chậm 17 lần); còn đây là tra cứu thủ công của Admin, tần suất rất
+            -- thấp, và độ chọn lọc chênh nhau hàng nghìn lần giữa các tổ hợp tham số —
+            -- đúng trường hợp mà RECOMPILE sinh ra để giải quyết.
+            OPTION (RECOMPILE);", p);
+    }
+
     public async Task<IEnumerable<ArtistListItem>> ListArtistsAsync(bool includeRetired)
     {
         using var conn = await _factory.OpenAsync();

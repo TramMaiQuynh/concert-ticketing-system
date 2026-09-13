@@ -453,6 +453,69 @@ public record AttendeeListItem(
     string Username,
     string DisplayName);
 
+/// <summary>
+/// Mot dong trong danh sach cho cua Concert (BO11-BO12, doc qua VW_WaitlistQueue).
+/// View tu gioi han pham vi theo Concert.OrganizerUserID hoac Role Admin, nen
+/// repository khong truyen ActorUserID - giong ba bao cao o tren.
+/// </summary>
+public record WaitlistQueueItem(
+    int WaitlistID,
+    int ConcertID,
+    string ConcertName,
+    string WaitlistStatus,
+    string AllocationPolicy,
+    int WaitlistEntryID,
+    int CustomerUserID,
+    string Username,
+    string? DisplayName,
+    DateTime JoinedTimestamp,
+    // int? chu khong phai int: WaitlistEntry.QueuePosition cho phep NULL o tang lugc do
+    // (da kiem chung: ghi thang mot dong NULL thanh cong va view tra ve NULL). Hien khong
+    // co duong nao tao ra dong nhu vay - sp_JoinWaitlist la noi ghi DUY NHAT va luon gan
+    // MAX+1 - nhung hop dong kieu phai phan anh dung thu database CO THE tra ve, neu khong
+    // Dapper se nem loi ngay luc dung record va lam sap endpoint.
+    int? QueuePosition,
+    string EntryStatus,
+    int TicketCategoryID,
+    string CategoryName,
+    int RequestedQuantity,
+    int ActiveAllocationCount,
+    DateTime? OpportunityGrantedTimestamp,
+    DateTime? OpportunityExpiryTimestamp,
+    int? ResultingBookingID);
+
+// ── Nhat ky kiem toan (FR59/FR59a, BP15) ─────────────────────────────────────
+
+/// <summary>
+/// Tieu chi tra cuu nhat ky. Moi tieu chi deu tuy chon va duoc AND voi nhau;
+/// FR59a ("lich su thay doi cua MOT entity") ung voi cap EntityType + EntityID,
+/// FR56 ("loc theo khoang thoi gian") ung voi From/To.
+///
+/// Limit khong phai tuy chon trang tri: AuditRecord la bang lon nhanh nhat he thong
+/// (moi thao tac nghiep vu deu ghi mot dong), nen mot truy van khong chan tren co the
+/// keo ve hang trieu dong. Repository ap tran cung phia may chu.
+/// </summary>
+public record AuditQueryRequest(
+    string? EntityType = null,
+    string? EntityId = null,
+    int? ActorUserId = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    int? Limit = null);
+
+public record AuditRecordItem(
+    int AuditID,
+    DateTime EventTimestamp,
+    string EventType,
+    string Action,
+    string EntityType,
+    string EntityID,
+    int ActorUserID,
+    string ActorUsername,
+    string? PreviousValue,
+    string? NewValue,
+    string? TransactionReference);
+
 // ── So do cho ngoi (FR11a) ───────────────────────────────────────────────────
 //
 // Vi sao la mot endpoint rieng chu khong phai mo rong GET /concerts/{id}/seats:

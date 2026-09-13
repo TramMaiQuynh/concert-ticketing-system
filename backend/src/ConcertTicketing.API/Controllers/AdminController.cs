@@ -83,6 +83,36 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> ListConcertAttendees(int id)
         => Ok(await _admin.ListConcertAttendeesAsync(id));
 
+    /// <summary>
+    /// Danh sách chờ của một Concert thuộc phạm vi sở hữu (BO11–BO12): ai đang xếp hàng,
+    /// ở vị trí nào, đăng ký hạng vé và số lượng bao nhiêu, đã được cấp cơ hội hay chưa.
+    /// Mảng rỗng khi Concert không thuộc phạm vi — không phân biệt với "chưa ai đăng ký",
+    /// cùng nguyên tắc không lộ sự tồn tại như ba báo cáo ở trên.
+    /// </summary>
+    [HttpGet("concerts/{id:int}/waitlist")]
+    [ProducesResponseType(typeof(IEnumerable<WaitlistQueueItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListConcertWaitlist(int id)
+        => Ok(await _admin.ListConcertWaitlistAsync(id));
+
+    // ── Nhật ký kiểm toán (FR59/FR59a, BP15) ─────────────────────────────────
+    //
+    // Chỉ Admin. Hai lớp độc lập cùng bảo vệ: [Authorize] chặn ở tầng HTTP, và
+    // VW_AuditTrail tự trả 0 dòng cho phiên không giữ Role Admin (fail-closed) —
+    // nên kể cả nếu thuộc tính này bị gỡ nhầm, dữ liệu vẫn không rò ra.
+
+    /// <summary>
+    /// Tra cứu nhật ký kiểm toán. Không tham số = các sự kiện gần nhất; truyền
+    /// entityType + entityId để lấy toàn bộ lịch sử thay đổi của một đối tượng (FR59a);
+    /// from/to để giới hạn khoảng thời gian (FR56). Số dòng trả về bị chặn trên phía
+    /// máy chủ vì đây là bảng lớn nhanh nhất hệ thống.
+    /// </summary>
+    [HttpGet("audit")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(IEnumerable<AuditRecordItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> QueryAuditTrail([FromQuery] AuditQueryRequest request)
+        => Ok(await _admin.QueryAuditTrailAsync(request));
+
     // ── Concert ──────────────────────────────────────────────────────────────
 
     [HttpPost("concerts")]
@@ -224,10 +254,12 @@ public class AdminController : ControllerBase
         return NoContent();
     }
 
-    // ── Check-in Staff Assignment — Admin only (BR39 / FR51) ───────────────────
+    // ── Check-in Staff Assignment (BR39 / FR51) ─────────────────────────────────
+    // Admin: mọi Concert. Organizer: chỉ Concert do chính mình sở hữu (SP kiểm tra
+    // toàn bộ danh sách ConcertID trước khi ghi — xem sp_AddCheckinStaffAssignment).
 
     [HttpPost("checkin-staff-assignments")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Organizer")]
     public async Task<IActionResult> AddCheckinStaffAssignment([FromBody] AddCheckinStaffAssignmentRequest request)
     {
         var actor = GetActorUserId();

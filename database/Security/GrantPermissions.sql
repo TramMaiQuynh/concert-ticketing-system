@@ -68,6 +68,10 @@ GRANT EXECUTE ON dbo.sp_ConfigureQueue            TO app_organizer;
 GRANT EXECUTE ON dbo.sp_ConfigureWaitlist         TO app_organizer;
 GRANT EXECUTE ON dbo.sp_UpdatePromotionStatus     TO app_organizer;
 GRANT EXECUTE ON dbo.sp_UpdateDiscountCodeStatus  TO app_organizer;
+-- Phan cong nhan vien soat ve (BR39/FR51) cho Concert cua chinh minh. Viec CAP Role
+-- 'Check-in Staff' van chi Admin (sp_AssignRole) - day chi la buoc xep ca lam viec
+-- cho nguoi da duoc cap Role, nen SP tu kiem tra Concert.OrganizerUserID.
+GRANT EXECUTE ON dbo.sp_AddCheckinStaffAssignment TO app_organizer;
 
 -- Chặn truy cap AuditRecord truc tiep (chi Admin duoc doc)
 DENY SELECT ON dbo.AuditRecord TO app_organizer;
@@ -183,16 +187,25 @@ GRANT SELECT ON dbo.Refund                     TO api_service;
 GRANT SELECT ON dbo.CheckIn                    TO api_service;
 GRANT SELECT ON dbo.WaitlistEntryEventSeatAllocation TO api_service;
 
--- Quyen doc cac View bao cao (neu sau nay backend doc truc tiep).
--- KHONG grant VW_AuditTrail: view nay doc AuditRecord (chi Admin duoc doc,
--- theo FR59). Grant VIEW se cho phep doc qua ownership chaining, vo hieu hoa
--- DENY tren bang AuditRecord -> do do phai loai tru va REVOKE neu dang co.
+-- Quyen doc cac View bao cao. Moi view duoi day tu loc pham vi bang
+-- SESSION_CONTEXT(N'UserID') nen cap cho api_service khong lam mat gioi han du lieu:
+-- phien khong du dieu kien chi nhan 0 dong (fail-closed).
 GRANT SELECT ON dbo.VW_ConcertSalesSummary     TO api_service;
 GRANT SELECT ON dbo.VW_CheckInReport           TO api_service;
 GRANT SELECT ON dbo.VW_CustomerBookingHistory  TO api_service;
 GRANT SELECT ON dbo.VW_WaitlistQueue           TO api_service;
 GRANT SELECT ON dbo.VW_ConcertAttendeeList     TO api_service;
-REVOKE SELECT ON dbo.VW_AuditTrail FROM api_service;
+
+-- VW_AuditTrail (FR59/FR59a): truoc day bi REVOKE voi ly do "grant view se vuot DENY
+-- tren bang AuditRecord qua ownership chaining". Ly do do DUNG - da do thuc nghiem -
+-- nhung he qua cua no la FR59a khong the thuc hien duoc, vi backend chi ket noi bang
+-- mot principal duy nhat (api_service) va khong co cach nao "ket noi voi tu cach Admin".
+--
+-- Cach khep lai dung nhu §23.9 da lam cho bon view bao cao: dua pham vi vao BEN TRONG
+-- view thay vi dat o cap principal. VW_AuditTrail nay chi tra du lieu khi nguoi dang
+-- dang nhap (SESSION_CONTEXT) giu Role Admin dang hoat dong; moi phien khac nhan 0 dong.
+-- DENY SELECT tren bang AuditRecord VAN GIU NGUYEN - doc thang bang van bi chan.
+GRANT SELECT ON dbo.VW_AuditTrail TO api_service;
 
 -- 3. Quyen Ghi Ngoại lệ (Operational Data)
 -- CHỈ cho phép C# thao tác trực tiếp trên bảng RefreshToken

@@ -100,6 +100,8 @@ public interface IAdminRepository
     Task SetEventSeatUnavailableAsync(int actorUserId, int eventSeatId, SetEventSeatUnavailableRequest request);
     Task UpdateUserStatusAsync(int actorUserId, int targetUserId, UpdateUserStatusRequest request);
     Task AddCheckinStaffAssignmentAsync(int actorUserId, AddCheckinStaffAssignmentRequest request);
+    Task<IEnumerable<WaitlistQueueItem>> ListConcertWaitlistAsync(int concertId);
+    Task<IEnumerable<AuditRecordItem>> QueryAuditTrailAsync(AuditQueryRequest request);
     Task UpdateRoleStatusAsync(int actorUserId, string roleName, string status);
 
     // Vong doi du lieu danh muc (FR59b / BR50e): ngung su dung thay vi xoa vat ly.

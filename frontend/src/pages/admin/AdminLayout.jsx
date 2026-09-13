@@ -11,6 +11,7 @@ import Promotions from './Promotions';
 import Users from './Users';
 import Refunds from './Refunds';
 import Reports from './Reports';
+import Audit from './Audit';
 
 /**
  * Khu quản trị.
@@ -56,8 +57,19 @@ export default function AdminLayout() {
     ...(isAdmin ? [{ to: '/admin/venue-map', label: 'Sơ đồ địa điểm', desc: 'Mặt phẳng, sân khấu, khu, ghế' }] : []),
     { to: '/admin/promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá' },
     { to: '/admin/refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn' },
-    { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé' },
-    ...(isAdmin ? [{ to: '/admin/users', label: 'Người dùng', desc: 'Vai trò, khóa tài khoản, soát vé' }] : []),
+    { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé, danh sách chờ' },
+    // Chỉ Admin: VW_AuditTrail tự trả 0 dòng cho phiên không giữ Role Admin, nên hiện
+    // mục này cho Organizer chỉ dẫn họ vào một trang chắc chắn rỗng.
+    ...(isAdmin ? [{ to: '/admin/audit', label: 'Nhật ký', desc: 'Tra cứu lịch sử thay đổi (FR59)' }] : []),
+    // Cả hai vai trò đều vào được, nhưng thấy khác nhau: Organizer chỉ có khối phân
+    // công soát vé cho concert của mình (sp_AddCheckinStaffAssignment mở cho Organizer
+    // sở hữu), còn cấp vai trò / khóa tài khoản vẫn là việc riêng của Admin. Nhãn đổi
+    // theo vai trò để không hứa một trang "Người dùng" mà Organizer không quản trị được.
+    {
+      to: '/admin/users',
+      label: isAdmin ? 'Người dùng' : 'Soát vé',
+      desc: isAdmin ? 'Vai trò, khóa tài khoản, soát vé' : 'Phân công nhân viên soát vé',
+    },
   ];
 
   return (
@@ -110,9 +122,10 @@ export default function AdminLayout() {
           <Route path="refunds" element={<Refunds />} />
           <Route path="reports" element={<Reports />} />
           <Route
-            path="users"
-            element={isAdmin ? <Users /> : <Navigate to="/admin/concerts" replace />}
+            path="audit"
+            element={isAdmin ? <Audit /> : <Navigate to="/admin/concerts" replace />}
           />
+          <Route path="users" element={<Users isAdmin={isAdmin} />} />
           <Route path="*" element={<Navigate to="/admin/concerts" replace />} />
         </Routes>
       </main>

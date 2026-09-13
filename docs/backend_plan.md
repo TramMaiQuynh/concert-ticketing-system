@@ -715,7 +715,7 @@ Thứ tự trong `Program.cs` (quan trọng — sai thứ tự gây lỗi tinh v
 | 58701-58703 | sp_JoinQueue | Fair Access Queue | 404/409 |
 | 58801-58804 | sp_SetEventSeatUnavailable | Khả dụng EventSeat | 400/403/404 |
 | 58901-58904 | sp_AdminUpdateUserStatus | Trạng thái User (chỉ Admin) | 400/403/404 |
-| 59001-59004 | sp_AddCheckinStaffAssignment | Gán Check-in Staff (chỉ Admin) | 400/403/404 |
+| 59001-59004 | sp_AddCheckinStaffAssignment | Gán Check-in Staff (Admin mọi Concert; Organizer chỉ Concert của mình) | 400/403/404 |
 | **2627** | DB Constraint | Duplicate Key — Webhook đã xử lý | **409** |
 | *(khác)* | — | Lỗi DB không xác định | 500 |
 
