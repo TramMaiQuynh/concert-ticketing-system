@@ -60,6 +60,54 @@ public class AdminRepository : IAdminRepository
             new { VenueID = venueId });
     }
 
+    /// <summary>
+    /// Tóm tắt doanh thu/tồn kho một Concert (FR55) — đọc VW_ConcertSalesSummary.
+    /// View tự lọc theo SESSION_CONTEXT(N'UserID') (RLS: Organizer chỉ thấy Concert
+    /// của mình, Admin thấy toàn bộ), nên KHÔNG cần thêm điều kiện sở hữu ở đây.
+    /// 0 dòng = không sở hữu HOẶC ConcertID không tồn tại — controller quy về 404.
+    /// </summary>
+    public async Task<ConcertSalesSummaryDto?> GetConcertSalesSummaryAsync(int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+        return await conn.QuerySingleOrDefaultAsync<ConcertSalesSummaryDto>(@"
+            SELECT ConcertID, ConcertName, ArtistName, VenueName, ConcertStatus, StartDatetime,
+                   TotalInventorySeats, AvailableSeats, BookedSeats, OnHoldSeats,
+                   TotalRevenue, ConfirmedBookings, CancelledBookings, ExpiredBookings
+            FROM   VW_ConcertSalesSummary
+            WHERE  ConcertID = @ConcertID;",
+            new { ConcertID = concertId });
+    }
+
+    /// <summary>Tỷ lệ check-in một Concert (FR56) — đọc VW_CheckInReport, cùng RLS.</summary>
+    public async Task<ConcertCheckInReportDto?> GetConcertCheckInReportAsync(int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+        return await conn.QuerySingleOrDefaultAsync<ConcertCheckInReportDto>(@"
+            SELECT ConcertID, ConcertName, StartDatetime,
+                   TotalIssuedTickets, TotalCheckedIn, PendingEntry, CheckInRatePct
+            FROM   VW_CheckInReport
+            WHERE  ConcertID = @ConcertID;",
+            new { ConcertID = concertId });
+    }
+
+    /// <summary>
+    /// Danh sách người giữ từng vé của một Concert (BP14) — đọc VW_ConcertAttendeeList,
+    /// cùng RLS. Mảng rỗng là kết quả hợp lệ (Concert chưa phát hành vé nào), không
+    /// phải lỗi — khác GetConcertSalesSummaryAsync/GetConcertCheckInReportAsync vốn
+    /// luôn có đúng 1 dòng cho mọi Concert tồn tại.
+    /// </summary>
+    public async Task<IEnumerable<AttendeeListItem>> ListConcertAttendeesAsync(int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+        return await conn.QueryAsync<AttendeeListItem>(@"
+            SELECT TicketID, BookingID, ConcertID, TicketStatus, IssuedTimestamp, UsedTimestamp, CancelledTimestamp,
+                   SeatCode, ZoneName, CategoryName, CustomerUserID, Username, DisplayName
+            FROM   VW_ConcertAttendeeList
+            WHERE  ConcertID = @ConcertID
+            ORDER  BY ZoneName, SeatCode;",
+            new { ConcertID = concertId });
+    }
+
     public async Task<IEnumerable<ArtistListItem>> ListArtistsAsync(bool includeRetired)
     {
         using var conn = await _factory.OpenAsync();
@@ -135,7 +183,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ConcertID", concertId, DbType.Int32);
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
-        p.Add("@NewStatus", status, DbType.String, size: 32);
+        p.Add("@NewStatus", status, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_UpdateConcertStatus", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -157,9 +205,9 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@VenueID", venueId, DbType.Int32);
-        p.Add("@ZoneCode", r.ZoneCode, DbType.String, size: 64);
+        p.Add("@ZoneCode", r.ZoneCode, DbType.AnsiString, size: 64);
         p.Add("@ZoneName", r.ZoneName, DbType.String, size: 255);
-        p.Add("@ZoneType", r.ZoneType, DbType.String, size: 24);
+        p.Add("@ZoneType", r.ZoneType, DbType.AnsiString, size: 24);
         p.Add("@ZoneLevel", r.ZoneLevel, DbType.Int32);
         p.Add("@ZoneX", r.ZoneX, DbType.Int32);
         p.Add("@ZoneY", r.ZoneY, DbType.Int32);
@@ -178,7 +226,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@ZoneID", zoneId, DbType.Int32);
-        p.Add("@SeatCode", r.SeatCode, DbType.String, size: 64);
+        p.Add("@SeatCode", r.SeatCode, DbType.AnsiString, size: 64);
         p.Add("@SeatLabel", r.SeatLabel, DbType.String, size: 255);
         p.Add("@SeatRowLabel", r.SeatRowLabel, DbType.String, size: 16);
         p.Add("@SeatColumnNumber", r.SeatColumnNumber, DbType.Int32);
@@ -198,7 +246,7 @@ public class AdminRepository : IAdminRepository
         // BasePrice là nguồn sự thật của giá vé (BR10a) — bắt buộc, cascade xuống EventSeat.SalePrice.
         p.Add("@BasePrice", r.BasePrice, DbType.Decimal);
         // FR12: Active | Inactive. NULL = giữ nguyên (cập nhật) / 'Active' (tạo mới).
-        p.Add("@CategoryStatus", r.CategoryStatus, DbType.String, size: 32);
+        p.Add("@CategoryStatus", r.CategoryStatus, DbType.AnsiString, size: 32);
         // @TicketCategoryID vừa là input (NULL = tạo mới, có giá trị = cập nhật) vừa là output.
         p.Add("@TicketCategoryID", r.TicketCategoryId, dbType: DbType.Int32,
               direction: ParameterDirection.InputOutput);
@@ -227,7 +275,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ConcertID", concertId, DbType.Int32);
         p.Add("@PromotionName", r.PromotionName, DbType.String, size: 255);
         p.Add("@PromotionDescription", r.PromotionDescription, DbType.String, size: 500);
-        p.Add("@DiscountType", r.DiscountType, DbType.String, size: 32);
+        p.Add("@DiscountType", r.DiscountType, DbType.AnsiString, size: 32);
         p.Add("@DiscountValue", r.DiscountValue, DbType.Decimal);
         p.Add("@StartDatetime", r.StartDatetime, DbType.DateTime2);
         p.Add("@EndDatetime", r.EndDatetime, DbType.DateTime2);
@@ -260,7 +308,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ArtistID", artistId, DbType.Int32);
         p.Add("@ArtistName", r.ArtistName, DbType.String, size: 255);
         p.Add("@ArtistDescription", r.ArtistDescription, DbType.String, size: 500);
-        p.Add("@ArtistStatus", r.ArtistStatus, DbType.String, size: 32);
+        p.Add("@ArtistStatus", r.ArtistStatus, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_UpdateArtist", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -271,7 +319,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@TargetUserID", r.TargetUserId, DbType.Int32);
         p.Add("@RoleName", r.RoleName, DbType.String, size: 255);
-        p.Add("@GrantOrRevoke", r.GrantOrRevoke, DbType.String, size: 10);
+        p.Add("@GrantOrRevoke", r.GrantOrRevoke, DbType.AnsiString, size: 10);
         await conn.ExecuteAsync("sp_AssignRole", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -283,7 +331,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@PromotionID", promotionId, DbType.Int32);
-        p.Add("@CodeValue", r.CodeValue, DbType.String, size: 64);
+        p.Add("@CodeValue", r.CodeValue, DbType.AnsiString, size: 64);
         p.Add("@ValidFromDatetime", r.ValidFromDatetime, DbType.DateTime2);
         p.Add("@ValidToDatetime", r.ValidToDatetime, DbType.DateTime2);
         p.Add("@GlobalUsageLimit", r.GlobalUsageLimit, DbType.Int32);
@@ -310,7 +358,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@TargetUserID", targetUserId, DbType.Int32);
-        p.Add("@NewStatus", r.Status, DbType.String, size: 32);
+        p.Add("@NewStatus", r.Status, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_AdminUpdateUserStatus", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -322,7 +370,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@StaffUserID", r.StaffUserId, DbType.Int32);
         p.Add("@ConcertIDs", string.Join(",", r.ConcertIds), DbType.String, size: -1);
         // BR39/FR51: 'Active' = phân công, 'Revoked' = thu hồi.
-        p.Add("@AssignmentStatus", r.AssignmentStatus, DbType.String, size: 32);
+        p.Add("@AssignmentStatus", r.AssignmentStatus, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_AddCheckinStaffAssignment", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -336,7 +384,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@VenueID", venueId, DbType.Int32);
         p.Add("@VenueName", r.VenueName, DbType.String, size: 255);
         p.Add("@Address", r.Address, DbType.String, size: 500);
-        p.Add("@VenueStatus", r.VenueStatus, DbType.String, size: 32);
+        p.Add("@VenueStatus", r.VenueStatus, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_UpdateVenue", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -348,8 +396,8 @@ public class AdminRepository : IAdminRepository
         p.Add("@ZoneID", zoneId, DbType.Int32);
         p.Add("@ZoneName", r.ZoneName, DbType.String, size: 255);
         p.Add("@ZoneDescription", r.ZoneDescription, DbType.String, size: 500);
-        p.Add("@ZoneStatus", r.ZoneStatus, DbType.String, size: 32);
-        p.Add("@ZoneType", r.ZoneType, DbType.String, size: 24);
+        p.Add("@ZoneStatus", r.ZoneStatus, DbType.AnsiString, size: 32);
+        p.Add("@ZoneType", r.ZoneType, DbType.AnsiString, size: 24);
         p.Add("@ZoneLevel", r.ZoneLevel, DbType.Int32);
         p.Add("@ZoneX", r.ZoneX, DbType.Int32);
         p.Add("@ZoneY", r.ZoneY, DbType.Int32);
@@ -367,7 +415,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@SeatID", seatId, DbType.Int32);
         p.Add("@SeatLabel", r.SeatLabel, DbType.String, size: 255);
-        p.Add("@SeatStatus", r.SeatStatus, DbType.String, size: 32);
+        p.Add("@SeatStatus", r.SeatStatus, DbType.AnsiString, size: 32);
         p.Add("@SeatRowLabel", r.SeatRowLabel, DbType.String, size: 16);
         p.Add("@SeatColumnNumber", r.SeatColumnNumber, DbType.Int32);
         await conn.ExecuteAsync("sp_UpdateSeat", p, commandType: CommandType.StoredProcedure);
@@ -405,10 +453,10 @@ public class AdminRepository : IAdminRepository
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@ConcertID", concertId, DbType.Int32);
         p.Add("@AdmissionCapacity", r.AdmissionCapacity, DbType.Int32);
-        p.Add("@FairAccessPolicy", r.FairAccessPolicy, DbType.String, size: 32);
+        p.Add("@FairAccessPolicy", r.FairAccessPolicy, DbType.AnsiString, size: 32);
         p.Add("@AdmissionValiditySeconds", r.AdmissionValiditySeconds, DbType.Int32);
         p.Add("@InheritGlobalAdmissionValidity", r.InheritGlobalAdmissionValidity, DbType.Boolean);
-        p.Add("@QueueStatus", r.QueueStatus, DbType.String, size: 32);
+        p.Add("@QueueStatus", r.QueueStatus, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_ConfigureQueue", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -418,8 +466,8 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@ConcertID", concertId, DbType.Int32);
-        p.Add("@AllocationPolicy", r.AllocationPolicy, DbType.String, size: 32);
-        p.Add("@WaitlistStatus", r.WaitlistStatus, DbType.String, size: 32);
+        p.Add("@AllocationPolicy", r.AllocationPolicy, DbType.AnsiString, size: 32);
+        p.Add("@WaitlistStatus", r.WaitlistStatus, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_ConfigureWaitlist", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -443,7 +491,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@PromotionID", promotionId, DbType.Int32);
-        p.Add("@NewStatus", status, DbType.String, size: 32);
+        p.Add("@NewStatus", status, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_UpdatePromotionStatus", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -453,7 +501,7 @@ public class AdminRepository : IAdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@DiscountCodeID", discountCodeId, DbType.Int32);
-        p.Add("@NewStatus", status, DbType.String, size: 32);
+        p.Add("@NewStatus", status, DbType.AnsiString, size: 32);
         await conn.ExecuteAsync("sp_UpdateDiscountCodeStatus", p, commandType: CommandType.StoredProcedure);
     }
 }
