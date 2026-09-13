@@ -1,6 +1,6 @@
 import {
   ConcertStatus, BookingStatus, InventoryStatus, QueueEntryStatus,
-  WaitlistEntryStatus, RefundStatus,
+  WaitlistEntryStatus, RefundStatus, PaymentStatus, TicketStatus,
 } from './enums';
 
 /**
@@ -67,6 +67,20 @@ export const REFUND_TONE = {
   [RefundStatus.Confirmed]: 'green',
   [RefundStatus.Failed]:    'red',
   [RefundStatus.Cancelled]: 'neutral',
+};
+
+export const PAYMENT_TONE = {
+  [PaymentStatus.Pending]:            'amber',
+  [PaymentStatus.Confirmed]:          'green',
+  [PaymentStatus.Failed]:             'red',
+  [PaymentStatus.PartiallyRefunded]:  'violet',
+  [PaymentStatus.Refunded]:           'neutral',
+};
+
+export const TICKET_TONE = {
+  [TicketStatus.Issued]:    'green',
+  [TicketStatus.Used]:      'neutral',
+  [TicketStatus.Cancelled]: 'red',
 };
 
 /** Kết quả soát vé — chỉ SUCCESS là xanh, mọi kết quả khác đều là từ chối. */
