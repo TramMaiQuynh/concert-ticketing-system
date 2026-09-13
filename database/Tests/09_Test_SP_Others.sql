@@ -476,10 +476,17 @@ SET @SQL = N'
     VALUES (@bid,''Pending'',500000,''REF-CR-G53102'',1);
     UPDATE Payment SET PaymentStatus=''Confirmed'', ConfirmationTimestamp=SYSDATETIME() WHERE BookingID=@bid AND PaymentReference=''REF-CR-G53102'';
     SET @pid=SCOPE_IDENTITY();
-    INSERT INTO Refund (PaymentID,RefundStatus,RefundAmount,RefundConfirmationTimestamp)
-    VALUES (@pid,''Confirmed'',200000,SYSDATETIME());
+    -- Dung trang thai Confirmed QUA DUNG DUONG NGHIEP VU (Pending -> sp_ConfirmRefund)
+    -- thay vi INSERT thang ''Confirmed''. Refund LUON sinh ra o Pending: ca 5 diem
+    -- INSERT INTO Refund trong stored procedure that (sp_ConfirmPayment x3 nhanh
+    -- auto-refund, sp_ProcessRefund, sp_UpdateConcertStatus) deu ghi ''Pending'', va
+    -- §10.1 chi cong nhan MOT trang thai khoi tao. Dung tat bang INSERT thang trang
+    -- thai cuoi tao ra mot trang thai the gioi khong the ton tai that, va bi
+    -- TRG_Refund_StateTransition tu choi dung (loi 50006).
+    INSERT INTO Refund (PaymentID,RefundStatus,RefundAmount) VALUES (@pid,''Pending'',200000);
     SET @rid=SCOPE_IDENTITY();
-    EXEC sp_ConfirmRefund @RefundID=@rid, @ActorUserID=@org;';
+    EXEC sp_ConfirmRefund @RefundID=@rid, @ActorUserID=@org;   -- lan 1: Pending -> Confirmed
+    EXEC sp_ConfirmRefund @RefundID=@rid, @ActorUserID=@org;'; -- lan 2: phai idempotent
 -- Refund da Confirmed: goi lai KHONG phai loi (idempotent voi webhook settlement
 -- gui lap, cung mau voi sp_ConfirmPayment/sp_FailPayment).
 EXEC test.sp_RunTest @Suite,'ConfirmRefund_AlreadyConfirmed_Idempotent','SUCCESS',NULL,@SQL;
