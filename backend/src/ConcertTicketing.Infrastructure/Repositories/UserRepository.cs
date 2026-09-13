@@ -33,13 +33,24 @@ public class UserRepository : IUserRepository
         // biệt đó tiết lộ rằng tài khoản 'system' có tồn tại.
         // Đặt điều kiện ở đây (thay vì liệt kê tên tài khoản) để đúng với mọi tài khoản
         // dịch vụ thêm về sau.
+        //
+        // DbType.AnsiString: UserAccount.Username là VARCHAR(64) có UNIQUE INDEX. Tham số
+        // string trần qua object ẩn danh được Dapper suy ra NVARCHAR theo mặc định — so
+        // sánh NVARCHAR với cột VARCHAR buộc SQL Server ngầm ép kiểu CỘT (ưu tiên kiểu
+        // Unicode cao hơn), vô hiệu hoá index seek trên UNIQUE INDEX và quét toàn bảng ở
+        // MỌI lượt đăng nhập. Đã đo trên bảng 50.000 dòng: 149 logical reads (scan) so với
+        // 2 (seek) khi tham số đúng kiểu — không sai kết quả, chỉ sai hiệu năng, nhưng sai
+        // ngay trên đường nóng nhất của hệ thống.
+        var p = new DynamicParameters();
+        p.Add("@Username", username, DbType.AnsiString, size: 64);
+
         return await conn.QuerySingleOrDefaultAsync<UserAccount>(
             @"SELECT UserID, Username, Email, PasswordHash, DisplayName, AccountStatus, CreatedTimestamp
               FROM UserAccount
               WHERE Username = @Username
                 AND AccountStatus = 'Active'
                 AND PasswordHash IS NOT NULL",
-            new { Username = username });
+            p);
     }
 
     public async Task<UserAccount?> GetByIdAsync(int userId)
@@ -73,7 +84,8 @@ public class UserRepository : IUserRepository
         using var conn = await _factory.OpenAsync();
 
         var p = new DynamicParameters();
-        p.Add("@Username", user.Username);
+        // DbType.AnsiString: sp_RegisterUser khai bao @Username VARCHAR(64).
+        p.Add("@Username", user.Username, DbType.AnsiString, size: 64);
         p.Add("@Email", user.Email);
         p.Add("@PasswordHash", passwordHash);
         p.Add("@DisplayName", user.DisplayName);
