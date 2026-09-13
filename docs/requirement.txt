@@ -141,7 +141,7 @@ Ví dụ:
 
 SELECT CalculateTotal(order_id);
 
-Thầy có thể hỏi:
+Có thể được hỏi:
 
 Tại sao cái này dùng Function mà không dùng Procedure?
 
@@ -182,9 +182,7 @@ Khi trạng thái đơn hàng chuyển sang Completed, tự động ghi lịch s
 
 4. Transaction
 
-Đây là phần thầy nhấn mạnh rất rõ:
-
-Tức là hệ thống của không được chỉ có những câu SQL đơn lẻ.
+Hệ thống của không được chỉ có những câu SQL đơn lẻ.
 
 Phải có những nghiệp vụ gồm nhiều thao tác CSDL nhưng được xem như một đơn vị công việc.
 
@@ -317,11 +315,11 @@ Tức là:
 
 Người dùng nhìn thấy vấn đề → truy ngược xuống transaction → DBMS xử lý.
 
-10. Câu "tập trung vào HỆ QUẢN TRỊ, chứ không phải UI/UX hay AI/ML"
+10. Ttập trung vào HỆ QUẢN TRỊ, chứ không phải UI/UX hay AI/ML.
 
 Đây là một chỉ dẫn rất rõ về trọng tâm của đồ án.
 
-Không đánh giá cao việc các bạn dành phần lớn thời gian cho:
+Không đánh giá cao việc dành phần lớn thời gian cho:
 
 UI đẹp
 animation
