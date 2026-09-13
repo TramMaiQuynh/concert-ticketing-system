@@ -9,6 +9,20 @@ using ConcertTicketing.Domain.Models;
 
 namespace ConcertTicketing.Application.Services;
 
+/// <summary>
+/// Sai tên đăng nhập hoặc mật khẩu (LoginAsync). Kiểu riêng thay vì ném thẳng
+/// UnauthorizedAccessException: ErrorHandlingMiddleware cố tình thay MỌI
+/// UnauthorizedAccessException bằng một câu chung "Bạn không có quyền thực hiện
+/// thao tác này." — đúng cho các endpoint bị chặn quyền, nhưng vô hiệu hoá câu
+/// message.Message đã được cân nhắc kỹ của LoginAsync ("Tên đăng nhập hoặc mật
+/// khẩu không đúng.", cố tình GIỐNG HỆT nhau cho mọi lý do thất bại để không lộ
+/// tên tài khoản có tồn tại hay không). Người dùng thật gõ sai mật khẩu vì vậy
+/// luôn thấy một câu không liên quan gì đến việc đăng nhập. Kiểu con này được
+/// middleware nhận diện riêng và trả đúng Message, mà không đụng tới hành vi ẩn
+/// lý do của mọi UnauthorizedAccessException khác (token sai, chữ ký webhook sai).
+/// </summary>
+public class InvalidCredentialsException(string message) : UnauthorizedAccessException(message);
+
 public interface IAuthService
 {
     // Trả về (AuthResponse, rawRefreshToken).
@@ -60,7 +74,7 @@ public class AuthService : IAuthService
         // Thông báo giống hệt nhau cho mọi lý do thất bại: sai tên, sai mật khẩu, tài
         // khoản bị khóa, hay tài khoản dịch vụ không có mật khẩu.
         if (user is null || !passwordOk)
-            throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng.");
+            throw new InvalidCredentialsException("Tên đăng nhập hoặc mật khẩu không đúng.");
 
         var roles = await _userRepository.GetRolesAsync(user.UserID);
         return await IssueTokenPairAsync(user, roles);
