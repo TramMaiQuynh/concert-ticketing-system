@@ -64,13 +64,20 @@ public class BookingRepository : IBookingRepository
                 s.SeatCode       AS SeatNumber,
                 z.ZoneName       AS SectionName,
                 tc.CategoryName,
-                besa.PriceSnapshot AS PriceAtBooking
+                besa.PriceSnapshot AS PriceAtBooking,
+                t.TicketCode,
+                t.TicketStatus
             FROM BookingEventSeatAllocation besa
             JOIN EventSeat      es ON es.EventSeatID      = besa.EventSeatID
             JOIN Seat           s  ON s.SeatID            = es.SeatID
             JOIN Zone           z  ON z.ZoneID            = s.ZoneID
             JOIN TicketCategory tc ON tc.ConcertID        = es.ConcertID
                                    AND tc.TicketCategoryID = es.TicketCategoryID
+            -- LEFT JOIN, khong INNER: Ticket (FR31) chi ton tai sau khi sp_ConfirmPayment
+            -- phat hanh (buoc 5), nen Booking con Pending/Expired se khong co dong Ticket
+            -- nao - dung 1:0-hoac-1 vi PK_BookingEventSeatAllocation(BookingID, EventSeatID)
+            -- va sp_ConfirmPayment chi phat hanh Ticket dung MOT lan cho moi Booking.
+            LEFT JOIN Ticket t ON t.BookingID = besa.BookingID AND t.EventSeatID = besa.EventSeatID
             WHERE besa.BookingID = @BookingID;";
 
         using var multi = await conn.QueryMultipleAsync(sql,
