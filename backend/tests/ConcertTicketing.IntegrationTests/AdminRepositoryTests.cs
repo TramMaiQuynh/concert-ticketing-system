@@ -14,7 +14,7 @@ namespace ConcertTicketing.IntegrationTests;
 /// - Promotion + DiscountCode
 /// - AssignRole (chỉ Admin — 58401)
 /// - UpdateUserStatus (chỉ Admin — 58901)
-/// - AddCheckinStaffAssignment (chỉ Admin — 59001)
+/// - AddCheckinStaffAssignment (Admin: mọi Concert; Organizer: chỉ Concert của mình — 59001)
 /// </summary>
 public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
 {
@@ -243,5 +243,70 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         var act = () => repo.AddCheckinStaffAssignmentAsync(customer,
             new AddCheckinStaffAssignmentRequest(staff, new List<int> { concertId }));
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 59001);
+    }
+
+    [Fact(DisplayName = "AddCheckinStaffAssignment: Organizer assign vào Concert của mình OK; vào Concert của Organizer khác → 59001")]
+    public async Task AddCheckinStaffAssignment_OrganizerOwnershipScope()
+    {
+        var s = NewSeeder();
+        var repo = Repo();
+
+        var organizerA = await s.CreateUserAsync("Organizer", instance: 1);
+        var organizerB = await s.CreateUserAsync("Organizer", instance: 2);
+        var artist = await s.CreateArtistAsync();
+        var venue = await s.CreateVenueAsync();
+        var start = DateTime.UtcNow.AddDays(30);
+
+        var concertOfA = await repo.CreateConcertAsync(organizerA, new CreateConcertRequest(
+            artist, venue, s.ConcertName, start, start.AddHours(3)));
+
+        var staff = await s.CreateUserAsync("Check-in Staff");
+
+        // Organizer A phan cong staff cho DUNG Concert cua minh -> OK
+        await repo.AddCheckinStaffAssignmentAsync(organizerA,
+            new AddCheckinStaffAssignmentRequest(staff, new List<int> { concertOfA }));
+
+        var count = await _fx.QueryAdminAsync<int>(
+            "SELECT COUNT(*) FROM CheckinStaffAssignment WHERE UserID = @uid AND ConcertID = @cid",
+            new { uid = staff, cid = concertOfA });
+        count.Should().Be(1);
+
+        // Organizer B (khong so huu Concert nay) thu phan cong -> 59001, KHONG duoc
+        // dot bien thanh cong du chi co 1 Concert trong danh sach.
+        var act = () => repo.AddCheckinStaffAssignmentAsync(organizerB,
+            new AddCheckinStaffAssignmentRequest(staff, new List<int> { concertOfA }));
+        await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 59001);
+    }
+
+    [Fact(DisplayName = "AddCheckinStaffAssignment: người không có quyền luôn nhận 59001, không dò được sự tồn tại của tài khoản khác")]
+    public async Task AddCheckinStaffAssignment_DeniesBeforeRevealingStaffInfo()
+    {
+        var s = NewSeeder();
+        var repo = Repo();
+
+        var organizerA = await s.CreateUserAsync("Organizer", instance: 1);
+        var outsider = await s.CreateUserAsync("Organizer", instance: 2);
+        var artist = await s.CreateArtistAsync();
+        var venue = await s.CreateVenueAsync();
+        var start = DateTime.UtcNow.AddDays(30);
+        var concertOfA = await repo.CreateConcertAsync(organizerA, new CreateConcertRequest(
+            artist, venue, s.ConcertName, start, start.AddHours(3)));
+
+        // Ba dau vao @StaffUserID khac han nhau, cung mot nguoi goi khong co quyen:
+        //   (a) UserID chac chan khong ton tai
+        //   (b) UserID co that nhung KHONG co Role Check-in Staff
+        //   (c) UserID co that VA co Role Check-in Staff
+        // Ca ba PHAI tra ve cung 59001. Neu SP kiem tra staff truoc phan quyen, ba
+        // truong hop nay se lan luot tra 59002 / 59003 / 59001 - du de do ra ai ton
+        // tai va ai dang giu Role soat ve.
+        var realCustomer = await s.CreateUserAsync("Customer");
+        var realStaff = await s.CreateUserAsync("Check-in Staff");
+
+        foreach (var staffId in new[] { 2_000_000_000, realCustomer, realStaff })
+        {
+            var probe = () => repo.AddCheckinStaffAssignmentAsync(outsider,
+                new AddCheckinStaffAssignmentRequest(staffId, new List<int> { concertOfA }));
+            (await probe.Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(59001);
+        }
     }
 }

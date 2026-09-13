@@ -392,7 +392,8 @@ public class ErrorHandlingMiddleware
             59115 => (HttpStatusCode.Conflict, "Artist In Use", "Không thể ngừng sử dụng nghệ sĩ đang gắn với Concert chưa kết thúc."),
 
             // sp_AddCheckinStaffAssignment (BP9 / BR39 / FR51)
-            59001 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin thực hiện thao tác này."),
+            59001 => (HttpStatusCode.Forbidden, "Checkin Staff Assignment Not Authorized",
+                      "Bạn không có quyền phân công Check-in Staff cho một hoặc nhiều Concert trong danh sách (chỉ Admin hoặc Organizer sở hữu Concert đó)."),
             59002 => (HttpStatusCode.NotFound, "Staff Not Found", "Staff không tồn tại."),
             59003 => (HttpStatusCode.BadRequest, "Staff Role Missing", "User không có role Check-in Staff."),
             59004 => (HttpStatusCode.BadRequest, "Empty Concert List", "Danh sách Concert không được trống."),

@@ -1,6 +1,7 @@
 -- ============================================================
 -- sp_AddCheckinStaffAssignment (BP9 / BR39 / FR51)
--- Gan Check-in Staff cho danh sach Concert. Chi Admin.
+-- Gan Check-in Staff cho danh sach Concert. Admin (moi Concert) hoac Organizer
+-- (chi Concert do chinh minh so huu - kiem tra TOAN BO danh sach truoc khi ghi).
 -- Khong gan tai khoan he thong.
 -- ============================================================
 CREATE OR ALTER PROCEDURE dbo.sp_AddCheckinStaffAssignment
@@ -22,19 +23,14 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
-                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
-            THROW 59001, 'sp_AddCheckinStaffAssignment: Chi Admin thuc hien duoc.', 1;
-
-        IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE UserID = @StaffUserID AND Username <> 'system')
-            THROW 59002, 'sp_AddCheckinStaffAssignment: Staff khong ton tai.', 1;
-
-        -- Phai co Role Check-in Staff
-        IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
-                       WHERE ura.UserID = @StaffUserID AND r.RoleName = 'Check-in Staff' AND ura.AssignmentStatus = 'Active')
-            THROW 59003, 'sp_AddCheckinStaffAssignment: User khong co role Check-in Staff.', 1;
-
+        -- THU TU KIEM TRA CO CHU DICH: phan quyen TRUOC, thong tin ve nguoi khac SAU.
+        -- Neu kiem tra @StaffUserID truoc, mot nguoi goi khong co quyen van phan biet
+        -- duoc 59002 ("UserID nay khong ton tai") voi 59003 ("ton tai nhung khong co
+        -- Role Check-in Staff") voi 59001 ("ton tai VA co Role") - tuc bien SP nay
+        -- thanh cong cu do danh sach tai khoan va vai tro. Cung ly do ma AuthService
+        -- (tang backend) dung chung MOT thong bao "Ten dang nhap hoac mat khau khong
+        -- dung" cho moi ly do dang nhap that bai. Chi parse danh sach ConcertID truoc
+        -- (thao tac tren chinh dau vao cua nguoi goi, khong lo thong tin gi).
         DECLARE @ConcertIdList TABLE (ConcertID INT NOT NULL PRIMARY KEY);
         INSERT INTO @ConcertIdList (ConcertID)
         SELECT DISTINCT CAST(value AS INT)
@@ -43,6 +39,34 @@ BEGIN
 
         IF NOT EXISTS (SELECT 1 FROM @ConcertIdList)
             THROW 59004, 'sp_AddCheckinStaffAssignment: Danh sach Concert rong.', 1;
+
+        -- Quyen: Admin duoc tren MOI Concert; Organizer CHI duoc tren Concert cua
+        -- chinh minh. Kiem tra TOAN BO danh sach truoc khi ghi bat ky dong nao -
+        -- "tat ca hoac khong gi", cung nguyen tac voi sp_AddEventSeats xac thuc ca
+        -- danh sach Seat truoc khi INSERT: khong de mot yeu cau gom nhieu Concert
+        -- thanh cong mot phan trong pham vi so huu va am tham bo qua phan ngoai
+        -- pham vi - nguoi goi phai biet ngay va sua lai toan bo yeu cau.
+        --
+        -- Concert KHONG TON TAI va Concert CUA NGUOI KHAC cung tra ve 59001: nguoi goi
+        -- khong duoc suy ra su ton tai cua Concert thuoc Organizer khac, dung nguyen tac
+        -- da ap dung cho 3 endpoint bao cao (404 chung cho ca hai truong hop).
+        IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
+                       JOIN UserAccount uaAdm ON uaAdm.UserID = ura.UserID
+                       WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
+        BEGIN
+            IF EXISTS (SELECT 1 FROM @ConcertIdList c
+                       LEFT JOIN Concert co ON co.ConcertID = c.ConcertID
+                       WHERE co.ConcertID IS NULL OR co.OrganizerUserID <> @ActorUserID)
+                THROW 59001, 'sp_AddCheckinStaffAssignment: Actor khong co quyen tren mot hoac nhieu Concert trong danh sach (chi Admin hoac Organizer so huu Concert do).', 1;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE UserID = @StaffUserID AND Username <> 'system')
+            THROW 59002, 'sp_AddCheckinStaffAssignment: Staff khong ton tai.', 1;
+
+        -- Phai co Role Check-in Staff
+        IF NOT EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
+                       WHERE ura.UserID = @StaffUserID AND r.RoleName = 'Check-in Staff' AND ura.AssignmentStatus = 'Active')
+            THROW 59003, 'sp_AddCheckinStaffAssignment: User khong co role Check-in Staff.', 1;
 
         IF @AssignmentStatus NOT IN ('Active', 'Revoked')
             THROW 59005, 'sp_AddCheckinStaffAssignment: AssignmentStatus phai la Active hoac Revoked.', 1;

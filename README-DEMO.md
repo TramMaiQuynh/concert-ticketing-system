@@ -26,7 +26,7 @@ cd T:\coding\concert_ticketing_system
 Script làm tuần tự:
 
 1. Kiểm tra công cụ bắt buộc.
-2. Deploy database sạch (28 bảng · 33 trigger · 3 function · 41 stored procedure · 11 view · RBAC · dữ liệu nền).
+2. Deploy database sạch (28 bảng · 33 trigger · 3 function · 43 stored procedure · 12 view · RBAC · dữ liệu nền).
 3. **Sinh mật khẩu ngẫu nhiên** cho 5 SQL login → ghi `.deploy/db-credentials.json`.
 4. **Sinh JWT secret và Payment signature secret** (256-bit) → ghi `backend/.../appsettings.Local.json`.
 5. Ghi `frontend/.env` trỏ tới API.

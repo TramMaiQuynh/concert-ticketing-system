@@ -7,22 +7,34 @@ import {
 } from '../../domain/enums';
 
 /**
- * Người dùng và phân quyền — chỉ dành cho Admin.
+ * Người dùng và phân quyền.
  *
- * Ba endpoint ở đây đều là những thao tác không đảo ngược dễ dàng, nên giao diện
- * nói rõ hậu quả trước khi bấm thay vì để người dùng tự đoán.
+ * Các thao tác ở đây đều là những việc không đảo ngược dễ dàng, nên giao diện nói
+ * rõ hậu quả trước khi bấm thay vì để người dùng tự đoán.
+ *
+ * PHÂN QUYỀN TRONG TRANG: ba khối đầu (cấp/thu hồi vai trò, trạng thái vai trò,
+ * khóa tài khoản) là việc CẤP DANH TÍNH ở phạm vi toàn hệ thống — chỉ Admin, đúng
+ * như sp_AssignRole / sp_UpdateRoleStatus / sp_AdminUpdateUserStatus tự chặn ở tầng
+ * database. Riêng khối phân công soát vé là việc VẬN HÀNH theo từng sự kiện, nên
+ * Organizer cũng làm được cho concert thuộc sở hữu của mình (sp_AddCheckinStaffAssignment
+ * kiểm tra Concert.OrganizerUserID). Cùng khuôn với Catalog: hiện cả trang cho hai
+ * vai trò rồi ẩn đúng phần Admin-only, thay vì chặn cả trang.
  *
  * Lưu ý về ID người dùng: API không có endpoint tra cứu người dùng, nên phải nhập
  * UserID bằng số. Đây là giới hạn của backend chứ không phải lựa chọn thiết kế —
  * nói thẳng trên giao diện để người dùng biết phải lấy ID từ đâu.
  */
-export default function Users() {
+export default function Users({ isAdmin }) {
   return (
     <>
-      <RoleSection />
-      <RoleStatusSection />
-      <UserStatusSection />
-      <StaffAssignmentSection />
+      {isAdmin && (
+        <>
+          <RoleSection />
+          <RoleStatusSection />
+          <UserStatusSection />
+        </>
+      )}
+      <StaffAssignmentSection isAdmin={isAdmin} />
     </>
   );
 }
@@ -200,7 +212,7 @@ function UserStatusSection() {
 
 /* ── Phân công soát vé ───────────────────────────────────────────────────── */
 
-function StaffAssignmentSection() {
+function StaffAssignmentSection({ isAdmin }) {
   const { options: merged } = useConcertOptions();
   const act = useAction();
 
@@ -217,7 +229,14 @@ function StaffAssignmentSection() {
   return (
     <Panel
       title="Phân công nhân viên soát vé"
-      subtitle="Nhân viên chỉ soát được vé của concert mình được phân công — stored procedure trả về UNAUTHORIZED nếu quét vé của concert khác. Chọn trạng thái Revoked để thu hồi phân công."
+      subtitle={
+        'Nhân viên chỉ soát được vé của concert mình được phân công — stored procedure trả về '
+        + 'UNAUTHORIZED nếu quét vé của concert khác. Chọn trạng thái Revoked để thu hồi phân công.'
+        + (isAdmin
+          ? ''
+          : ' Bạn chỉ phân công được cho concert do chính mình tổ chức; nếu danh sách có concert'
+            + ' của người khác thì cả yêu cầu bị từ chối, không phân công một phần.')
+      }
     >
       <form
         onSubmit={(e) => {
@@ -251,13 +270,19 @@ function StaffAssignmentSection() {
 
         {merged.length > 0 && (
           <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            <button
-              type="button" className="btn-outline"
-              style={{ padding: '4px 12px', fontSize: '0.75rem' }}
-              onClick={() => setConcertIds(merged.map((c) => c.id).join(', '))}
-            >
-              Chọn tất cả ({merged.length})
-            </button>
+            {/* Chỉ Admin: danh sách gợi ý lấy từ GET /concerts (công khai, gồm concert của
+                mọi Organizer) và không kèm thông tin sở hữu, nên client không thể lọc ra
+                "concert của tôi". Với Organizer, "Chọn tất cả" gần như chắc chắn kéo theo
+                concert của người khác và làm cả yêu cầu bị từ chối. */}
+            {isAdmin && (
+              <button
+                type="button" className="btn-outline"
+                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                onClick={() => setConcertIds(merged.map((c) => c.id).join(', '))}
+              >
+                Chọn tất cả ({merged.length})
+              </button>
+            )}
             {merged.slice(0, 20).map((c) => (
               <button
                 key={c.id} type="button" className="id-pill"
