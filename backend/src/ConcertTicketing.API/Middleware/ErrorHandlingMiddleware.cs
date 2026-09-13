@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
+using ConcertTicketing.Application.Services;
 
 namespace ConcertTicketing.API.Middleware;
 
@@ -40,6 +41,11 @@ public class ErrorHandlingMiddleware
         {
             SqlException sqlEx => MapSqlException(sqlEx),
             ArgumentException argEx => (HttpStatusCode.BadRequest, "Invalid Argument", argEx.Message),
+            // Phải đứng TRƯỚC nhánh UnauthorizedAccessException chung bên dưới: switch khớp
+            // theo thứ tự khai báo, và InvalidCredentialsException LÀ MỘT UnauthorizedAccessException
+            // (kế thừa) nên nhánh chung phía sau sẽ khớp trước nếu đổi chỗ, nuốt mất Message
+            // đã được AuthService cân nhắc kỹ cho riêng lỗi đăng nhập.
+            InvalidCredentialsException credEx => (HttpStatusCode.Unauthorized, "Unauthorized", credEx.Message),
             UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized", "Bạn không có quyền thực hiện thao tác này."),
             _ => (HttpStatusCode.InternalServerError, "Internal Server Error", "Đã có lỗi xảy ra. Vui lòng thử lại sau.")
         };
