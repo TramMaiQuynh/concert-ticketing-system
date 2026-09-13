@@ -29,6 +29,7 @@ GRANT SELECT ON dbo.TicketCategory       TO app_organizer;
 GRANT SELECT ON dbo.VW_OrganizerBooking  TO app_organizer;
 GRANT SELECT ON dbo.VW_OrganizerPayment  TO app_organizer;
 GRANT SELECT ON dbo.VW_OrganizerTicket   TO app_organizer;
+GRANT SELECT ON dbo.VW_ConcertAttendeeList TO app_organizer;
 
 -- KHONG doc truc tiep bang giao dich
 DENY SELECT ON dbo.Booking TO app_organizer;
@@ -190,6 +191,7 @@ GRANT SELECT ON dbo.VW_ConcertSalesSummary     TO api_service;
 GRANT SELECT ON dbo.VW_CheckInReport           TO api_service;
 GRANT SELECT ON dbo.VW_CustomerBookingHistory  TO api_service;
 GRANT SELECT ON dbo.VW_WaitlistQueue           TO api_service;
+GRANT SELECT ON dbo.VW_ConcertAttendeeList     TO api_service;
 REVOKE SELECT ON dbo.VW_AuditTrail FROM api_service;
 
 -- 3. Quyen Ghi Ngoại lệ (Operational Data)
