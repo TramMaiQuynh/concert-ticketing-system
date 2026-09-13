@@ -6,6 +6,37 @@
 --              Ticket, Refund, Waitlist, WaitlistEntry,
 --              Queue, QueueEntry.
 -- (Da cap nhat AFTER INSERT, UPDATE va validate init state)
+--
+-- HASH JOIN o moi cho JOIN voi inserted/deleted (KHONG dung cho JOIN voi bang
+-- that nhu Concert o cuoi EventSeat - bang that da co PK/index, Nested Loop Seek
+-- van toi uu o do):
+--
+-- Voi mot lenh UPDATE set-based doi trang thai NHIEU dong cung luc (sp_ReleaseExpiredHolds
+-- la tac vu NEN dinh ky het han hang loat Booking qua han giu cho; cascade huy
+-- Concert trong sp_UpdateConcertStatus doi hang loat Booking/Ticket/WaitlistEntry/
+-- QueueEntry cung luc), SQL Server Query Optimizer uoc luong cardinality cua hai
+-- pseudo-table inserted/deleted rat kem (khong co statistics nhu bang that) va co
+-- xu huong chon NESTED LOOP JOIN giua chung. Voi N dong duoc UPDATE, Nested Loop
+-- quet lai deleted MOT LAN CHO MOI dong cua inserted - O(N^2).
+--
+-- DA DO THUC NGHIEM (TRG_Booking_StateTransition, tach rieng, N dong Pending ->
+-- Expired trong MOT cau UPDATE):
+--   500 dong ~0.3s | 1.000 dong ~0.9s | 2.000 dong ~3.9s | 4.000 dong ~15.3s
+--   (~x4 thoi gian moi lan gap doi dau vao - dung chu ky O(n^2))
+-- Ngoai suy 30.000 dong (mot dot huy/het han hang loat that su cua mot concert
+-- lon) roi vao ~14 PHUT cho DUNG MOT cau UPDATE; voi concert hang tram nghin ve
+-- co the len toi hang gio - treo ca sp_ReleaseExpiredHolds lan cascade huy Concert.
+--
+-- DA THU OPTION (RECOMPILE): giai quyet dung O(n^2) (4.000 dong con 296ms), NHUNG
+-- lam CHAM DI ~17 LAN duong PHO BIEN NHAT - cap nhat DUNG MOT dong (dung tinh
+-- huong sp_ConfirmPayment/sp_ProcessRefund goi that: 528 -> 8.988 micro-giay/lan
+-- do thuc te tren 500 lan goi rieng le). Danh doi sai: lam cham cai xay ra o MOI
+-- request de doi lay toc do cho cai hiem khi xay ra.
+--
+-- HASH JOIN hint (khong RECOMPILE) giai quyet ca hai: batch 3.000 dong con 228ms
+-- (tuong duong RECOMPILE), con duong mot-dong chi cham hon ~2,6 lan (528 -> 1.366
+-- micro-giay/lan) - khong dang ke so voi chi phi network/JSON cua mot request
+-- HTTP, va khong co chi phi bien dich lai moi lan goi.
 -- ============================================================
 
 -- --- Concert ---
@@ -22,7 +53,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.ConcertID = i.ConcertID
+        LEFT HASH JOIN deleted d ON d.ConcertID = i.ConcertID
         WHERE  d.ConcertID IS NULL AND i.ConcertStatus <> 'Draft'
     )
     BEGIN
@@ -34,7 +65,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.ConcertID = i.ConcertID
+        INNER HASH JOIN deleted  d ON d.ConcertID = i.ConcertID
         WHERE  NOT (
                    (d.ConcertStatus = 'Draft'       AND i.ConcertStatus IN ('Published', 'Cancelled'))
                 OR (d.ConcertStatus = 'Published'   AND i.ConcertStatus IN ('OnSale', 'Cancelled'))
@@ -51,7 +82,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.ConcertID = i.ConcertID
+        INNER HASH JOIN deleted  d ON d.ConcertID = i.ConcertID
         WHERE  d.ConcertStatus = 'Draft' AND i.ConcertStatus = 'Published'
           AND  (i.OrganizerUserID IS NULL OR i.ArtistID IS NULL OR i.VenueID IS NULL
                 OR i.StartDatetime IS NULL OR i.EndDatetime IS NULL
@@ -77,7 +108,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.BookingID = i.BookingID
+        LEFT HASH JOIN deleted d ON d.BookingID = i.BookingID
         WHERE  d.BookingID IS NULL AND i.BookingStatus <> 'Pending'
     )
     BEGIN
@@ -88,7 +119,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.BookingID = i.BookingID
+        INNER HASH JOIN deleted  d ON d.BookingID = i.BookingID
         WHERE  NOT (
                    (d.BookingStatus = 'Pending'   AND i.BookingStatus IN ('Confirmed', 'Expired', 'Cancelled'))
                 OR (d.BookingStatus = 'Confirmed' AND i.BookingStatus IN ('Cancelled'))
@@ -115,7 +146,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.PaymentID = i.PaymentID
+        LEFT HASH JOIN deleted d ON d.PaymentID = i.PaymentID
         WHERE  d.PaymentID IS NULL AND i.PaymentStatus <> 'Pending'
     )
     BEGIN
@@ -126,7 +157,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.PaymentID = i.PaymentID
+        INNER HASH JOIN deleted  d ON d.PaymentID = i.PaymentID
         WHERE  NOT (
                    (d.PaymentStatus = 'Pending'   AND i.PaymentStatus IN ('Confirmed', 'Failed'))
                 OR (d.PaymentStatus = 'Confirmed' AND i.PaymentStatus IN ('PartiallyRefunded', 'Refunded'))
@@ -154,7 +185,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.TicketID = i.TicketID
+        LEFT HASH JOIN deleted d ON d.TicketID = i.TicketID
         WHERE  d.TicketID IS NULL AND i.TicketStatus <> 'Issued'
     )
     BEGIN
@@ -165,7 +196,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.TicketID = i.TicketID
+        INNER HASH JOIN deleted  d ON d.TicketID = i.TicketID
         WHERE  NOT (
                    (d.TicketStatus = 'Issued' AND i.TicketStatus IN ('Used', 'Cancelled'))
                 OR (d.TicketStatus = i.TicketStatus)
@@ -191,7 +222,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.EventSeatID = i.EventSeatID
+        LEFT HASH JOIN deleted d ON d.EventSeatID = i.EventSeatID
         WHERE  d.EventSeatID IS NULL AND i.InventoryStatus <> 'Available'
     )
     BEGIN
@@ -202,7 +233,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.EventSeatID = i.EventSeatID
+        INNER HASH JOIN deleted  d ON d.EventSeatID = i.EventSeatID
         WHERE  NOT (
                 -- Danh sach nay phai TRUNG KHIT bang §10.1, khong duoc rong hon.
                 -- BR49: "cac trang thai ... CHI duoc chuyen doi theo cac state
@@ -232,10 +263,12 @@ BEGIN
         THROW 50005, 'BR49 Violation: Chuyen doi trang thai EventSeat khong hop le.', 1;
     END
 
+    -- JOIN voi Concert (bang THAT, co PK/index) khong dung hint - Nested Loop Seek
+    -- van toi uu o day, khac hai JOIN inserted/deleted o tren.
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.EventSeatID = i.EventSeatID
+        INNER HASH JOIN deleted  d ON d.EventSeatID = i.EventSeatID
         JOIN   Concert c ON c.ConcertID = i.ConcertID
         WHERE  d.InventoryStatus = 'Unavailable' AND i.InventoryStatus = 'Available'
           AND  c.ConcertStatus NOT IN ('Draft', 'Published', 'OnSale')
@@ -270,7 +303,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.RefundID = i.RefundID
+        LEFT HASH JOIN deleted d ON d.RefundID = i.RefundID
         WHERE  d.RefundID IS NULL AND i.RefundStatus <> 'Pending'
     )
     BEGIN
@@ -281,7 +314,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.RefundID = i.RefundID
+        INNER HASH JOIN deleted  d ON d.RefundID = i.RefundID
         WHERE  NOT (
                    (d.RefundStatus = 'Pending' AND i.RefundStatus IN ('Confirmed', 'Failed', 'Cancelled'))
                 OR (d.RefundStatus = i.RefundStatus)
@@ -307,7 +340,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.WaitlistEntryID = i.WaitlistEntryID
+        LEFT HASH JOIN deleted d ON d.WaitlistEntryID = i.WaitlistEntryID
         WHERE  d.WaitlistEntryID IS NULL AND i.EntryStatus <> 'Active'
     )
     BEGIN
@@ -318,7 +351,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.WaitlistEntryID = i.WaitlistEntryID
+        INNER HASH JOIN deleted  d ON d.WaitlistEntryID = i.WaitlistEntryID
         WHERE  NOT (
                 -- §10.1 (Trang thai Waitlist Entry): Active -> Granted, Cancelled.
                 -- KHONG co Active -> Expired, va do la dung ve nghia: 'Expired' nghia la
@@ -354,7 +387,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.QueueEntryID = i.QueueEntryID
+        LEFT HASH JOIN deleted d ON d.QueueEntryID = i.QueueEntryID
         WHERE  d.QueueEntryID IS NULL AND i.QueueStatus <> 'Waiting'
     )
     BEGIN
@@ -365,7 +398,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.QueueEntryID = i.QueueEntryID
+        INNER HASH JOIN deleted  d ON d.QueueEntryID = i.QueueEntryID
         WHERE  NOT (
                    (d.QueueStatus = 'Waiting'  AND i.QueueStatus IN ('Admitted', 'Expired', 'Cancelled', 'Exited'))
                 OR (d.QueueStatus = 'Admitted' AND i.QueueStatus IN ('Exited', 'Expired', 'Cancelled'))
@@ -392,7 +425,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.WaitlistID = i.WaitlistID
+        LEFT HASH JOIN deleted d ON d.WaitlistID = i.WaitlistID
         WHERE  d.WaitlistID IS NULL AND i.WaitlistStatus <> 'Open'
     )
     BEGIN
@@ -403,7 +436,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.WaitlistID = i.WaitlistID
+        INNER HASH JOIN deleted  d ON d.WaitlistID = i.WaitlistID
         WHERE  NOT (
                    (d.WaitlistStatus = 'Open' AND i.WaitlistStatus IN ('Closed'))
                 OR (d.WaitlistStatus = i.WaitlistStatus)
@@ -429,7 +462,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        LEFT JOIN deleted d ON d.QueueID = i.QueueID
+        LEFT HASH JOIN deleted d ON d.QueueID = i.QueueID
         WHERE  d.QueueID IS NULL AND i.QueueStatus <> 'Open'
     )
     BEGIN
@@ -440,7 +473,7 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM   inserted i
-        JOIN   deleted  d ON d.QueueID = i.QueueID
+        INNER HASH JOIN deleted  d ON d.QueueID = i.QueueID
         WHERE  NOT (
                    (d.QueueStatus = 'Open' AND i.QueueStatus IN ('Closed'))
                 OR (d.QueueStatus = i.QueueStatus)

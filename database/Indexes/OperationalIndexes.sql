@@ -7,8 +7,20 @@ ON Ticket (EventSeatID)
 WHERE TicketStatus = 'Issued';
 
 -- (BookingID) trên Payment
-CREATE NONCLUSTERED INDEX IX_Payment_Booking 
+CREATE NONCLUSTERED INDEX IX_Payment_Booking
 ON Payment (BookingID);
+
+-- (BookingID, TicketStatus) trên Ticket: TRG_TicketCountOnConfirm doi chieu so
+-- Ticket Issued voi so Allocation Active cua tung Booking vua Confirmed. Truoc khi
+-- co index nay, Ticket khong co duong SEEK nao theo BookingID - JOIN cau usng
+-- quet toan bang moi lan, va vi trigger nay chay TRONG cung mot statement UPDATE
+-- set-based (sp_ReleaseExpiredHolds, cascade huy Concert co the doi trang thai
+-- nhieu Booking cung luc), thieu index nay bien mot phep GROUP BY set-based thanh
+-- gan nhu O(n^2) tren thuc te (do thuc nghiem: 4.000 dong ~15s, ngoai suy 30.000
+-- dong ~14 phut). Composite (BookingID, TicketStatus) phu luon dieu kien loc
+-- TicketStatus='Issued' cua chinh trigger, khong can key lookup.
+CREATE NONCLUSTERED INDEX IX_Ticket_Booking_Status
+ON Ticket (BookingID, TicketStatus);
 
 -- (ConcertID) trên Ticket/Check-in để truy vấn theo Concert (BO9/FR55)
 CREATE NONCLUSTERED INDEX IX_Ticket_Concert ON Ticket (ConcertID);
