@@ -54,6 +54,16 @@ CREATE TABLE Zone (
         (ZoneX IS NULL AND ZoneY IS NULL AND ZoneWidth IS NULL AND ZoneHeight IS NULL)
      OR (ZoneX IS NOT NULL AND ZoneY IS NOT NULL AND ZoneWidth IS NOT NULL AND ZoneHeight IS NOT NULL)
     ),
+    -- Toa do khong duoc am: mot khu tai X=-50 nam mot phan ngoai mat phang tu dinh
+    -- nghia, bat ke mat phang lon bao nhieu. Truoc khi co rang buoc nay, tang bang
+    -- chap nhan ZoneX/Y am - da kiem chung bang INSERT truc tiep thanh cong.
+    -- Chi kiem duoc TOA DO cua rieng Zone o day: "Zone nam TRONG Venue map" la bat
+    -- bien khac bang (Zone.ZoneX+Width so voi Venue.MapWidth) nen CHECK cua SQL
+    -- Server khong the bieu dien - bat bien do da duoc bao ve boi sp_CreateZone/
+    -- sp_UpdateZone, dong bo bang WITH (UPDLOCK) tren Venue.
+    CONSTRAINT CHK_Zone_PositionNonNegative CHECK (
+        ZoneX IS NULL OR (ZoneX >= 0 AND ZoneY >= 0)
+    ),
     -- Suc chua chi thuoc ve khu ve dung, va khu ve dung thi bat buoc phai co: khong
     -- co so nay thi khu do khong ban duoc gi, vi no khong co ghe de dem.
     CONSTRAINT CHK_Zone_CapacityMatchesType CHECK (
