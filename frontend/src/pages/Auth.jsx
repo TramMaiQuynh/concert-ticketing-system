@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { apiError } from '../api/client';
 import { Button, Card, Alert, Field, Input, Tabs } from '../components/ui';
-import { IconTicket, IconArrowRight } from '../components/ui/icons';
+import { IconTicket, IconArrowRight, IconEye, IconEyeOff } from '../components/ui/icons';
 
 const EMPTY = { username: '', password: '', email: '', displayName: '' };
 
@@ -24,6 +24,9 @@ export default function Auth() {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Ẩn theo mặc định — dùng chung cho cả đăng nhập và đăng ký vì hai chế độ
+  // dùng chung một ô mật khẩu (xem comment đầu file).
+  const [showPassword, setShowPassword] = useState(false);
 
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -126,15 +129,29 @@ export default function Auth() {
             hint={isLogin ? undefined : 'Tối thiểu 8 ký tự, có ít nhất 1 chữ hoa và 1 chữ số.'}
           >
             {(a) => (
-              <Input
-                {...a}
-                type="password"
-                value={form.password}
-                onChange={set('password')}
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-                required
-                minLength={isLogin ? undefined : 8}
-              />
+              <div style={{ position: 'relative' }}>
+                <Input
+                  {...a}
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={set('password')}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  required
+                  minLength={isLogin ? undefined : 8}
+                  style={{ paddingRight: 'var(--space-10)' }}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  icon={showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                  style={{
+                    position: 'absolute', right: 'var(--space-1)', top: '50%',
+                    transform: 'translateY(-50%)',
+                  }}
+                />
+              </div>
             )}
           </Field>
 
