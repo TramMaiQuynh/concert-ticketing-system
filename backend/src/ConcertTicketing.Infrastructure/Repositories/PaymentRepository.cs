@@ -29,7 +29,8 @@ public class PaymentRepository : IPaymentRepository
         p.Add("@BookingID", bookingId, DbType.Int32);
         p.Add("@CustomerUserID", customerUserId, DbType.Int32);
         p.Add("@NewPaymentID", dbType: DbType.Int32, direction: ParameterDirection.Output);
-        p.Add("@PaymentReference", dbType: DbType.String, size: 64, direction: ParameterDirection.Output);
+        // @PaymentReference la ma tham chieu noi bo, thuan ASCII; SP khai bao VARCHAR(64).
+        p.Add("@PaymentReference", dbType: DbType.AnsiString, size: 64, direction: ParameterDirection.Output);
         p.Add("@Amount", dbType: DbType.Decimal, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync("sp_InitiatePayment", p, commandType: CommandType.StoredProcedure);
@@ -80,8 +81,11 @@ public class PaymentRepository : IPaymentRepository
         var p = new DynamicParameters();
         p.Add("@BookingID", bookingId, DbType.Int32);
         p.Add("@PaymentID", paymentId, DbType.Int32);
-        p.Add("@ProviderReference", providerReference, DbType.String, size: 64);
-        p.Add("@Outcome", dbType: DbType.String, size: 48, direction: ParameterDirection.Output);
+        // DbType.AnsiString: @ProviderReference la du lieu tu cong thanh toan ben ngoai,
+        // va SP khai bao VARCHAR(64) (khong Unicode) - khop dung kieu de tranh ep kieu ngam.
+        p.Add("@ProviderReference", providerReference, DbType.AnsiString, size: 64);
+        // @Outcome la ma ket qua thuan ASCII ("Confirmed", "AutoRefunded_..."); SP khai bao VARCHAR(48).
+        p.Add("@Outcome", dbType: DbType.AnsiString, size: 48, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync("sp_ConfirmPayment", p, commandType: CommandType.StoredProcedure);
 
@@ -188,7 +192,9 @@ public class PaymentRepository : IPaymentRepository
 
         var p = new DynamicParameters();
         p.Add("@PaymentID", paymentId, DbType.Int32);
-        p.Add("@ProviderReference", providerReference, DbType.String, size: 64);
+        // DbType.AnsiString: @ProviderReference la du lieu tu cong thanh toan ben ngoai,
+        // va SP khai bao VARCHAR(64) (khong Unicode) - khop dung kieu de tranh ep kieu ngam.
+        p.Add("@ProviderReference", providerReference, DbType.AnsiString, size: 64);
 
         await conn.ExecuteAsync("sp_FailPayment", p, commandType: CommandType.StoredProcedure);
     }
