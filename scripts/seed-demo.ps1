@@ -1,16 +1,20 @@
-﻿<#
+<#
 .SYNOPSIS
-    Nạp dữ liệu demo cho buổi bảo vệ đồ án.
+    Nạp dữ liệu demo sẵn (tùy chọn — KHÔNG dùng trong luồng bảo vệ chính).
 
 .DESCRIPTION
-    Toàn bộ dữ liệu được tạo QUA API THẬT, không INSERT thẳng vào bảng.
+    Script này phục vụ demo NHANH khi cần dữ liệu sẵn (3 concert, 4 tài khoản).
+    Luồng bảo vệ chính dùng database HOÀN TOÀN TRỐNG và xây dựng mọi thứ LIVE
+    trên giao diện — xem README-DEMO.md §4 để biết chi tiết.
 
-    Đây là lựa chọn có chủ đích: đi qua API nghĩa là mọi stored procedure, trigger,
-    ràng buộc CHECK và kiểm tra phân quyền đều được thực thi đúng như lúc vận hành.
-    Nếu có bất kỳ bất biến nào bị vi phạm, script này sẽ DỪNG ngay tại đó — nên bản
-    thân việc seed chạy trót lọt đã là một bằng chứng cho tính đúng đắn của hệ thống.
-    (Ngoại lệ duy nhất: gán quyền Admin đầu tiên phải làm bằng SQL, vì sp_AssignRole
-     đòi người gọi đã là Admin — bài toán "con gà quả trứng" không tránh được.)
+    Nếu vẫn muốn dùng script này: chạy SAU bootstrap-admin.ps1, vì script này
+    tạo thêm 3 tài khoản demo_admin / demo_organizer / demo_customer / demo_staff.
+    KHÔNG idempotent — chạy lần hai mà chưa deploy lại database sẽ lỗi trùng tài khoản.
+
+    Toàn bộ dữ liệu được tạo QUA API THẬT, không INSERT thẳng vào bảng.
+    Đi qua API nghĩa là mọi stored procedure, trigger, ràng buộc CHECK và kiểm tra
+    phân quyền đều được thực thi — bản thân việc seed chạy trót lọt đã là bằng chứng.
+    (Ngoại lệ: gán quyền Admin đầu tiên phải làm bằng SQL — bài toán "con gà quả trứng".)
 
 .PARAMETER ApiBaseUrl
     Địa chỉ gốc của API. Mặc định http://localhost:5295/api
