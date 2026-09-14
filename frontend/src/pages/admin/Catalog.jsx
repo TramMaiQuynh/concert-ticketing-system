@@ -242,7 +242,15 @@ function ZoneSection({ isAdmin }) {
                 zoneCode: code.trim(),
                 zoneName: name.trim() || null,
               });
-              remember({ id: res.data.id, name: `${code.trim()}${name.trim() ? ` — ${name.trim()}` : ''}` });
+              // Ghi kèm ĐỊA ĐIỂM vào nhãn: hai địa điểm khác nhau đều có thể có khu mã
+              // 'A', và khi đó danh sách chọn ở phần tạo ghế hiện hai dòng giống hệt
+              // nhau — người dùng không có cách nào biết mình đang đổ ghế vào khu nào.
+              const venueName = venues.items.find((v) => String(v.id) === String(venueId))?.name;
+              remember({
+                id: res.data.id,
+                name: `${code.trim()}${name.trim() ? ` — ${name.trim()}` : ''}`
+                    + ` · ${venueName ?? `địa điểm #${venueId}`}`,
+              });
               setCode(''); setName('');
               return res.data.id;
             }, (id) => `Đã tạo khu vực. ID = ${id} — dùng ID này để tạo ghế bên dưới.`);
@@ -412,7 +420,15 @@ function SeatSection({ isAdmin }) {
             API chỉ tạo được từng ghế một, nên phần lặp do giao diện làm và gọi tuần tự.
             Dựng một khu 12 ghế bằng tay là 12 lần điền form — đây là chỗ đáng tự động.
           </p>
-          <div className="field-grid">
+
+          {/* Cùng một biến zoneId với form bên trên, cố ý. Trước đây ô chọn khu chỉ có ở
+              form "Tạo một ghế", còn phần tạo hàng loạt dùng ké mà không hiện gì — nhìn
+              vào đây không biết ghế sẽ vào khu nào, và chưa chọn khu thì nút chỉ bị mờ
+              đi không kèm lý do. Hiện lại ngay tại chỗ đang thao tác; sửa ở một trong
+              hai nơi thì nơi kia đổi theo, nên không thể lệch nhau. */}
+          <IdPicker label="Thuộc khu vực" items={zones.items} value={zoneId} onChange={setZoneId} />
+
+          <div className="field-grid" style={{ marginTop: '16px' }}>
             <Field label="Tiền tố mã ghế" hint="Ví dụ 'A' sẽ ra A1, A2, A3…" required>
               <input value={bulkPrefix} onChange={(e) => setBulkPrefix(e.target.value)} maxLength={32} required />
             </Field>
@@ -429,6 +445,11 @@ function SeatSection({ isAdmin }) {
           >
             {bulk.busy ? 'Đang tạo hàng loạt…' : `Tạo ${Math.max(0, Number(bulkTo) - Number(bulkFrom) + 1)} ghế`}
           </button>
+          {!zoneId && (
+            <div className="field-hint" style={{ color: 'var(--warning)' }}>
+              Chọn khu vực ở trên trước — ghế phải nằm trong một khu cụ thể.
+            </div>
+          )}
           {!rangeValid && (
             <div className="field-hint" style={{ color: 'var(--warning)' }}>
               Khoảng số không hợp lệ (tối đa 200 ghế mỗi lần).
