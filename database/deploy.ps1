@@ -434,7 +434,7 @@ Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (44 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (48 SP)"
 $spStart = $script:DeployedFileCount
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
@@ -472,6 +472,12 @@ Invoke-SqlFile "$spDir\sp_AddEventSeats.sql"
 Invoke-SqlFile "$spDir\sp_CreatePromotion.sql"
 Invoke-SqlFile "$spDir\sp_AssignRole.sql"
 Invoke-SqlFile "$spDir\sp_UpdateRoleStatus.sql"
+
+# --- StagePass venue template SPs (D.2: vong doi VenueTemplate/VenueTemplateVersion) ---
+Invoke-SqlFile "$spDir\sp_CreateVenueTemplate.sql"
+Invoke-SqlFile "$spDir\sp_CreateVenueTemplateVersion.sql"
+Invoke-SqlFile "$spDir\sp_PublishVenueTemplateVersion.sql"
+Invoke-SqlFile "$spDir\sp_DeleteVenueTemplateVersionDraft.sql"
 
 # --- Customer self-service SPs ---
 Invoke-SqlFile "$spDir\sp_JoinWaitlist.sql"
