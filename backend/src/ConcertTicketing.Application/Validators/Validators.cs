@@ -98,7 +98,8 @@ public class CreateConcertValidator : AbstractValidator<CreateConcertRequest>
 {
     public CreateConcertValidator()
     {
-        RuleFor(x => x.ArtistId).GreaterThan(0);
+        RuleFor(x => x.ArtistIds).NotNull().NotEmpty();
+        RuleForEach(x => x.ArtistIds).GreaterThan(0);
         RuleFor(x => x.VenueId).GreaterThan(0);
         RuleFor(x => x.ConcertName).NotEmpty().MaximumLength(255);
         RuleFor(x => x.StartDatetime).NotEmpty();
@@ -126,6 +127,13 @@ public class UpdateConcertValidator : AbstractValidator<UpdateConcertRequest>
             .WithMessage("EndDatetime phải sau StartDatetime.");
         RuleFor(x => x.PurchaseLimit)
             .GreaterThan(0).When(x => x.PurchaseLimit is not null);
+        RuleFor(x => x.ArtistIds)
+            .NotEmpty()
+            .Must(ids => ids is null || ids.Distinct().Count() == ids.Count)
+            .When(x => x.ArtistIds is not null)
+            .WithMessage("ArtistIds phải không rỗng và không được trùng.");
+        RuleForEach(x => x.ArtistIds!).GreaterThan(0)
+            .When(x => x.ArtistIds is not null);
     }
 }
 
@@ -148,14 +156,49 @@ public class CreateVenueValidator : AbstractValidator<CreateVenueRequest>
 
 public class CreateZoneValidator : AbstractValidator<CreateZoneRequest>
 {
-    public CreateZoneValidator() =>
+    public CreateZoneValidator()
+    {
         RuleFor(x => x.ZoneCode).NotEmpty().MaximumLength(64);
+        RuleFor(x => x.ZoneType)
+            .Must(type => type is null or "Seated")
+            .WithMessage("ZoneType hiện chỉ hỗ trợ 'Seated'.");
+        RuleFor(x => x.ZoneLevel).GreaterThan(0).When(x => x.ZoneLevel is not null);
+        RuleFor(x => x.ZoneCapacity).Null()
+            .WithMessage("Sức chứa khu được tính từ số ghế, không nhập trực tiếp.");
+    }
+}
+
+public class UpdateZoneValidator : AbstractValidator<UpdateZoneRequest>
+{
+    public UpdateZoneValidator()
+    {
+        RuleFor(x => x.ZoneType)
+            .Must(type => type is null or "Seated")
+            .WithMessage("ZoneType hiện chỉ hỗ trợ 'Seated'.");
+        RuleFor(x => x.ZoneLevel).GreaterThan(0).When(x => x.ZoneLevel is not null);
+        RuleFor(x => x.ZoneCapacity).Null()
+            .WithMessage("Sức chứa khu được tính từ số ghế, không nhập trực tiếp.");
+    }
 }
 
 public class CreateSeatValidator : AbstractValidator<CreateSeatRequest>
 {
-    public CreateSeatValidator() =>
+    public CreateSeatValidator()
+    {
         RuleFor(x => x.SeatCode).NotEmpty().MaximumLength(64);
+        RuleFor(x => x.SeatRowLabel).NotEmpty().MaximumLength(16);
+        RuleFor(x => x.SeatColumnNumber).NotNull().GreaterThan(0);
+    }
+}
+
+public class CreateSeatsBatchValidator : AbstractValidator<CreateSeatsBatchRequest>
+{
+    public CreateSeatsBatchValidator()
+    {
+        RuleFor(x => x.Seats).NotNull().NotEmpty().Must(seats => seats.Count <= 3600)
+            .WithMessage("Một lần chỉ tạo tối đa 3.600 ghế.");
+        RuleForEach(x => x.Seats).SetValidator(new CreateSeatValidator());
+    }
 }
 
 public class ConfigureTicketCategoryValidator : AbstractValidator<ConfigureTicketCategoryRequest>
