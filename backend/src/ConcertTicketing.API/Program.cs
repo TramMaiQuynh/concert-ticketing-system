@@ -203,6 +203,22 @@ try
                     QueueLimit           = 0
                 }));
 
+        // Tra cứu vé trước khi check-in: bucket RIÊNG, không dùng chung với "checkin".
+        // Dùng chung sẽ khiến mỗi lượt tra cứu trước khi xác nhận ăn vào đúng ngân sách
+        // của thao tác check-in thật — một nhân viên vừa tra cứu vừa check-in mỗi vé sẽ
+        // chỉ còn tối đa 50 vé/phút thay vì 100. Đây là hai loại thao tác khác bản chất
+        // (đọc và ghi) nên phải tách ngân sách, dù vẫn giữ cùng giới hạn để chặn dò mã vé.
+        options.AddPolicy("checkin-preview", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientPartitionKey(httpContext, useUserId: true),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    Window               = TimeSpan.FromMinutes(1),
+                    PermitLimit          = 100,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit           = 0
+                }));
+
         // Response khi bị rate limit
         options.OnRejected = async (ctx, _) =>
         {
