@@ -23,6 +23,7 @@ GRANT SELECT ON dbo.Venue                TO app_organizer;
 GRANT SELECT ON dbo.Zone                 TO app_organizer;
 GRANT SELECT ON dbo.Seat                 TO app_organizer;
 GRANT SELECT ON dbo.Artist               TO app_organizer;
+GRANT SELECT ON dbo.ConcertArtist        TO app_organizer;
 GRANT SELECT ON dbo.EventSeat            TO app_organizer;
 GRANT SELECT ON dbo.TicketCategory       TO app_organizer;
 -- Quyen xem du lieu qua RLS View (CRIT-20)
@@ -85,6 +86,7 @@ DENY SELECT ON dbo.AuditRecord TO app_organizer;
 GRANT SELECT ON dbo.Concert          TO app_customer;
 GRANT SELECT ON dbo.Venue            TO app_customer;
 GRANT SELECT ON dbo.Artist           TO app_customer;
+GRANT SELECT ON dbo.ConcertArtist    TO app_customer;
 GRANT SELECT ON dbo.EventSeat        TO app_customer;
 GRANT SELECT ON dbo.TicketCategory   TO app_customer;
 GRANT SELECT ON dbo.VW_ActivePromotions TO app_customer;
@@ -166,6 +168,7 @@ GRANT SELECT ON dbo.UserRoleAssignment         TO api_service;  -- Auth: Roles
 GRANT SELECT ON dbo.Role                       TO api_service;  -- Auth: JOIN Roles
 GRANT SELECT ON dbo.RefreshToken               TO api_service;  -- Auth: validate refresh token
 GRANT SELECT ON dbo.Concert                    TO api_service;  -- /concerts
+GRANT SELECT ON dbo.ConcertArtist              TO api_service;  -- danh sach nghe si cua concert
 GRANT SELECT ON dbo.Artist                     TO api_service;  -- JOIN
 GRANT SELECT ON dbo.Venue                      TO api_service;  -- JOIN
 GRANT SELECT ON dbo.EventSeat                  TO api_service;  -- /seats
