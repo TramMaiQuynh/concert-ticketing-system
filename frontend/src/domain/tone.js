@@ -111,10 +111,12 @@ export function checkinTone(result) {
  * để không bao giờ ra màu chói hay đục.
  */
 export function coverGradient(id) {
-  const hue = (Number(id) * 137.508) % 360;
-  return `linear-gradient(135deg,
-    hsl(${hue.toFixed(1)} 64% 52%) 0%,
-    hsl(${((hue + 32) % 360).toFixed(1)} 58% 42%) 100%)`;
+  // Không có ảnh bìa trong dữ liệu, nên dùng một poster trung tính thay vì
+  // gradient nhiều màu. ID chỉ thay đổi độ sáng rất nhẹ để các card vẫn có nhịp riêng.
+  const shift = Math.abs(Number(id) || 0) % 4;
+  const top = 19 + shift;
+  const bottom = 10 + shift;
+  return `linear-gradient(135deg, hsl(240 7% ${top}%) 0%, hsl(240 9% ${bottom}%) 100%)`;
 }
 
 /**
