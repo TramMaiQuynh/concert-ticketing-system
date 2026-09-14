@@ -19,7 +19,7 @@
 --   CHK_DiscountCode_UsageCounts du chua ai thuc su dung het han muc.
 --   => Bat buoc GOM NHOM (GROUP BY) truoc, roi tru theo dung so luong dem duoc.
 -- ============================================================
-CREATE OR ALTER TRIGGER dbo.TRG_Booking_DiscountUsageGuard
+CREATE OR ALTER TRIGGER TRG_Booking_DiscountUsageGuard
 ON dbo.Booking
 AFTER UPDATE
 AS
