@@ -37,7 +37,10 @@ public sealed class AdminLifecycleRepositoryTests : IClassFixture<DbFixture>
 
         var venueId = await repo.CreateVenueAsync(admin, new CreateVenueRequest(s.VenueName, "IT Address"));
         var zoneId = await repo.CreateZoneAsync(admin, venueId, new CreateZoneRequest(s.ZoneCode, s.ZoneCode));
-        var seatId = await repo.CreateSeatAsync(admin, zoneId, new CreateSeatRequest(s.SeatCode, "IT-Seat"));
+        // Hàng/cột là BẮT BUỘC với ghế trong khu có ghế (sp_CreateSeat, 59825): thiếu vị
+        // trí thì sơ đồ dồn mọi ghế về cùng một ô lưới và chúng chồng khít lên nhau.
+        var seatId = await repo.CreateSeatAsync(admin, zoneId,
+            new CreateSeatRequest(s.SeatCode, "IT-Seat", SeatRowLabel: "A", SeatColumnNumber: 1));
 
         await repo.UpdateSeatAsync(admin, seatId, new UpdateSeatRequest(SeatStatus: "Retired"));
         await repo.UpdateZoneAsync(admin, zoneId, new UpdateZoneRequest(ZoneStatus: "Retired"));
