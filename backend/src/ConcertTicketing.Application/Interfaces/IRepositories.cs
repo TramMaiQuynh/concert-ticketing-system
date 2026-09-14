@@ -76,6 +76,14 @@ public interface IPaymentRepository
 
 public interface IAdminRepository
 {
+    Task<IEnumerable<AdminConcertListItem>> ListConcertsAsync(AdminCatalogQuery query);
+    Task<IEnumerable<ConcertArtistListItem>> ListConcertArtistsAsync(int concertId);
+    Task<IEnumerable<AdminZoneListItem>> ListZonesAsync(AdminCatalogQuery query);
+    Task<IEnumerable<AdminSeatListItem>> ListSeatsAsync(AdminCatalogQuery query);
+    Task<IEnumerable<AdminCategoryListItem>> ListCategoriesAsync(AdminCatalogQuery query);
+    Task<IEnumerable<AdminPromotionListItem>> ListPromotionsAsync(AdminCatalogQuery query);
+    Task<IEnumerable<AdminDiscountCodeListItem>> ListDiscountCodesAsync(AdminCatalogQuery query);
+    Task<IEnumerable<AdminRefundListItem>> ListRefundsAsync(AdminCatalogQuery query);
     // ── Doc danh muc — de Organizer chon dia diem/nghe si da co ──────────────
     Task<IEnumerable<VenueListItem>> ListVenuesAsync(bool includeInactive);
     Task<IEnumerable<VenueZoneListItem>> ListVenueZonesAsync(int venueId);
@@ -92,6 +100,7 @@ public interface IAdminRepository
     Task<int> CreateVenueAsync(int actorUserId, CreateVenueRequest request);
     Task<int> CreateZoneAsync(int actorUserId, int venueId, CreateZoneRequest request);
     Task<int> CreateSeatAsync(int actorUserId, int zoneId, CreateSeatRequest request);
+    Task CreateSeatsBatchAsync(int actorUserId, int zoneId, CreateSeatsBatchRequest request);
     Task<int> ConfigureTicketCategoryAsync(int actorUserId, int concertId, ConfigureTicketCategoryRequest request);
     Task AddEventSeatsAsync(int actorUserId, int concertId, AddEventSeatsRequest request);
     Task<int> CreatePromotionAsync(int actorUserId, int concertId, CreatePromotionRequest request);
