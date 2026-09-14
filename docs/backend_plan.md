@@ -705,8 +705,8 @@ Thứ tự trong `Program.cs` (quan trọng — sai thứ tự gây lỗi tinh v
 | 50008 | TRG_QueueEntry_StateTransition | Chuyển trạng thái QueueEntry không hợp lệ (BR49) | 409 |
 | 50009 | TRG_Waitlist_StateTransition | Chuyển trạng thái Waitlist không hợp lệ (BR49) | 409 |
 | 50010 | TRG_Queue_StateTransition | Chuyển trạng thái Queue không hợp lệ (BR49) | 409 |
-| 58001-58022 | sp_CreateConcert/UpdateConcert/UpdateConcertStatus | Quản trị Concert (400/403/404/409 theo ý nghĩa) | 400/403/404/409 |
-| 58101-58123 | sp_CreateVenue/CreateZone/CreateSeat | Quản trị Venue/Zone/Seat (chỉ Admin) | 400/403 |
+| 58002-58025 | sp_CreateConcert/UpdateConcert/UpdateConcertStatus | Quản trị Concert, gồm danh sách ArtistIds hợp lệ (400/403/404/409 theo ý nghĩa) | 400/403/404/409 |
+| 58101-58124 | sp_CreateVenue/CreateZone/CreateSeat | Quản trị Venue/Zone/Seat (chỉ Admin) | 400/403/409 |
 | 58201-58217 | sp_ConfigureTicketCategory/AddEventSeats | Quản trị hạng vé / EventSeat | 400/403/404/409 |
 | 58301-58305 | sp_CreatePromotion | Quản trị Promotion | 400/403/404 |
 | 58401-58404 | sp_AssignRole | Gán/Thu hồi Role | 400/403 |
