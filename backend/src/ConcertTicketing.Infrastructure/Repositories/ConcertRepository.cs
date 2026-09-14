@@ -41,13 +41,19 @@ public class ConcertRepository : IConcertRepository
         var sql = @"
             SELECT
                 c.ConcertID, c.ConcertName,
-                a.ArtistName,
+                artists.ArtistName,
                 v.VenueName, v.Address,
                 c.StartDatetime, c.ConcertStatus, c.SalesPaused,
                 c.SaleStartDatetime
             FROM Concert c
-            JOIN Artist a ON c.ArtistID = a.ArtistID
             JOIN Venue  v ON c.VenueID  = v.VenueID
+            OUTER APPLY (
+                SELECT STRING_AGG(CAST(a.ArtistName AS NVARCHAR(MAX)), N', ')
+                       WITHIN GROUP (ORDER BY ca.ArtistOrder) AS ArtistName
+                FROM ConcertArtist ca
+                JOIN Artist a ON a.ArtistID = ca.ArtistID
+                WHERE ca.ConcertID = c.ConcertID
+            ) artists
             WHERE (@Status IS NULL OR c.ConcertStatus = @Status)
               AND " + PublicConcertFilter + @"
             ORDER BY c.StartDatetime ASC
@@ -68,15 +74,21 @@ public class ConcertRepository : IConcertRepository
         var sql = @"
             SELECT
                 c.ConcertID, c.ConcertName,
-                a.ArtistName,
+                artists.ArtistName,
                 v.VenueName, v.Address,
                 c.StartDatetime, c.ConcertStatus, c.SalesPaused,
                 c.SaleStartDatetime, c.SaleEndDatetime,
                 c.PurchaseLimit,
                 c.FairAccessEnabled, c.WaitlistEnabled
             FROM Concert c
-            JOIN Artist a ON c.ArtistID = a.ArtistID
             JOIN Venue  v ON c.VenueID  = v.VenueID
+            OUTER APPLY (
+                SELECT STRING_AGG(CAST(a.ArtistName AS NVARCHAR(MAX)), N', ')
+                       WITHIN GROUP (ORDER BY ca.ArtistOrder) AS ArtistName
+                FROM ConcertArtist ca
+                JOIN Artist a ON a.ArtistID = ca.ArtistID
+                WHERE ca.ConcertID = c.ConcertID
+            ) artists
             WHERE c.ConcertID = @ConcertID
               AND " + PublicConcertFilter + @";";
 
@@ -119,8 +131,8 @@ public class ConcertRepository : IConcertRepository
     /// mở ra khoảng thời gian giữa các lần đọc, và sơ đồ có thể mô tả một trạng
     /// thái chưa từng tồn tại — ví dụ khu đã bị đổi vị trí giữa hai lần đọc.
     ///
-    /// Khu VÉ ĐỨNG được lấy dù không có ghế nào: nó bán theo sức chứa, và bỏ nó
-    /// khỏi sơ đồ nghĩa là khách không thấy một phần khán phòng có thật.
+    /// Chỉ trả các khu có EventSeat trong kho bán. Như vậy một khu cấu hình dở
+    /// không thể xuất hiện như một vùng có thể mua nhưng không có ghế để chọn.
     /// </summary>
     public async Task<SeatMapDto?> GetSeatMapAsync(int concertId)
     {
@@ -155,7 +167,7 @@ public class ConcertRepository : IConcertRepository
             ) agg
             WHERE  c.ConcertID = @ConcertID
               AND  z.ZoneStatus = 'Active'
-              AND (z.ZoneType = 'GeneralAdmission' OR agg.SeatCount > 0)
+              AND agg.SeatCount > 0
             ORDER BY z.ZoneLevel, z.ZoneY, z.ZoneX, z.ZoneCode;";
 
         using var grid = await conn.QueryMultipleAsync(sql, new { ConcertID = concertId });
