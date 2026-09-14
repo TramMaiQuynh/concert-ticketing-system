@@ -567,6 +567,24 @@ SET @SQL = N'
 EXEC test.sp_RunTest @Suite,'CreateConcert_ForeignActor_Fail58008','ERROR',58008,@SQL;
 
 -- ============================================================
+-- 13b. ISJSON() chap nhan CA object lan array, nen chi kiem ISJSON thi mot JSON
+-- object lot qua khau kiem tra va vo tinh chen NULL vao cot ArtistOrder NOT NULL:
+-- khach nhan loi 515 tho (HTTP 500) thay vi 58025 (HTTP 400) co thong bao hieu duoc.
+-- ============================================================
+SET @SQL = N'
+    DECLARE @org INT=(SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
+    DECLARE @st DATETIME2(7)=DATEADD(day,30,SYSDATETIME());
+    DECLARE @en DATETIME2(7)=DATEADD(day,31,SYSDATETIME());
+    DECLARE @cid INT;
+    EXEC sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=N''{"x":1}'', @VenueID=@ven,
+         @ConcertName=N''REG JsonObject'', @StartDatetime=@st, @EndDatetime=@en,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4,
+         @TemporaryHoldDuration=900, @CancellationPolicy=N''c'', @RefundPolicy=N''r'',
+         @NewConcertID=@cid OUTPUT;';
+EXEC test.sp_RunTest @Suite,'CreateConcert_ArtistIDsJsonObject_Fail58025','ERROR',58025,@SQL;
+
+-- ============================================================
 -- 14. LO MAT TIEN: ap khuyen mai sau khi da khoi tao thanh toan
 --     Kich ban that: khach bam "Thanh toan" (Payment chup Amount=1000000), roi ap ma
 --     khuyen mai lam FinalAmount giam; cong thanh toan thu tien va bao thanh cong;

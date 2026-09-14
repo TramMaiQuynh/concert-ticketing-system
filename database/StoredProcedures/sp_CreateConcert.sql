@@ -6,7 +6,7 @@
 --   - @OrganizerUserID phai la User DANG GIU Role 'Organizer' Active
 --     (Organizer khong phai entity rieng; Concert.OrganizerUserID tham
 --     chieu User Account + User-Role Assignment - §13 Note Design).
---   - Artist/Venue ton tai.
+--   - Danh sach Artist/Venue ton tai va Artist dang Active.
 --   - EndDatetime > StartDatetime; PurchaseLimit > 0.
 --   - Neu co SaleStart/SaleEnd -> phai hop le (SaleEnd >= SaleStart).
 -- Ghi AuditRecord.
@@ -14,7 +14,7 @@
 CREATE OR ALTER PROCEDURE dbo.sp_CreateConcert
 (
     @OrganizerUserID INT,
-    @ArtistID        INT,
+    @ArtistIDs       NVARCHAR(MAX),
     @VenueID         INT,
     @ConcertName     NVARCHAR(255),
     @StartDatetime   DATETIME2(7),
@@ -61,9 +61,51 @@ BEGIN
            AND @SaleEndDatetime < @SaleStartDatetime
             THROW 58007, 'sp_CreateConcert: SaleEndDatetime phai >= SaleStartDatetime.', 1;
 
-        -- 3. Kiem tra references
-        IF NOT EXISTS (SELECT 1 FROM Artist WHERE ArtistID = @ArtistID)
-            THROW 58004, 'sp_CreateConcert: Artist khong ton tai.', 1;
+        -- 3. Kiem tra references. ArtistIDs la JSON array de caller gui nhieu
+        -- nghe si trong mot transaction. Thu tu mang la thu tu cong bo.
+        -- ISJSON() nhan CA object lan array la JSON hop le, nen chi kiem ISJSON thi
+        -- '{"x":1}' lot qua: OPENJSON tra [key] la ten truong ('x'), TRY_CONVERT ve
+        -- INT cho NULL, va NULL do roi vao cot ArtistOrder NOT NULL -> loi 515 tho
+        -- khong co trong bang anh xa HTTP, tuc khach nhan 500 thay vi 400 co thong
+        -- bao hieu duoc. Kiem them ky tu mo dau dung nhu sp_CreateSeatsBatch dang lam.
+        -- (Khong dung ISJSON(x, ARRAY) vi cu phap do chi co tu SQL Server 2022, trong
+        --  khi he thong cam ket chay tu 2019.)
+        IF ISJSON(@ArtistIDs) <> 1 OR LEFT(LTRIM(@ArtistIDs), 1) <> '['
+            THROW 58025, 'sp_CreateConcert: ArtistIDs phai la JSON array khong rong, khong trung lap.', 1;
+
+        DECLARE @ParsedArtists TABLE
+        (
+            ArtistID INT NULL,
+            ArtistOrder INT NOT NULL
+        );
+
+        INSERT INTO @ParsedArtists (ArtistID, ArtistOrder)
+        SELECT TRY_CONVERT(INT, [value]), TRY_CONVERT(INT, [key]) + 1
+        FROM OPENJSON(@ArtistIDs);
+
+        IF NOT EXISTS (SELECT 1 FROM @ParsedArtists)
+           OR EXISTS (SELECT 1 FROM @ParsedArtists WHERE ArtistID IS NULL OR ArtistID <= 0)
+           OR EXISTS (SELECT ArtistID FROM @ParsedArtists GROUP BY ArtistID HAVING COUNT(*) > 1)
+            THROW 58025, 'sp_CreateConcert: ArtistIDs phai la JSON array khong rong, khong trung lap.', 1;
+
+        DECLARE @Artists TABLE
+        (
+            ArtistID INT NOT NULL PRIMARY KEY,
+            ArtistOrder INT NOT NULL UNIQUE
+        );
+        INSERT INTO @Artists (ArtistID, ArtistOrder)
+        SELECT ArtistID, ArtistOrder FROM @ParsedArtists;
+
+        -- Lock Artist rows through the insert so an Artist cannot be retired
+        -- between validation and association creation.
+        IF EXISTS (
+            SELECT 1
+            FROM @Artists requested
+            LEFT JOIN Artist a WITH (UPDLOCK, HOLDLOCK) ON a.ArtistID = requested.ArtistID
+            WHERE a.ArtistID IS NULL OR a.ArtistStatus <> 'Active'
+        )
+            THROW 58004, 'sp_CreateConcert: Artist khong ton tai hoac da ngung su dung.', 1;
+
         IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID = @VenueID)
             THROW 58005, 'sp_CreateConcert: Venue khong ton tai.', 1;
 
@@ -101,23 +143,28 @@ BEGIN
 
         -- 4. Insert
         INSERT INTO Concert
-            (OrganizerUserID, ArtistID, VenueID, ConcertName, StartDatetime, EndDatetime,
+            (OrganizerUserID, VenueID, ConcertName, StartDatetime, EndDatetime,
              ConcertStatus, SaleStartDatetime, SaleEndDatetime, PurchaseLimit, TemporaryHoldDuration,
              FairAccessEnabled, WaitlistEnabled, SalesPaused, CancellationPolicy, RefundPolicy,
              CancellationDeadlineHours, RefundPercentage)
         VALUES
-            (@OrganizerUserID, @ArtistID, @VenueID, @ConcertName, @StartDatetime, @EndDatetime,
+            (@OrganizerUserID, @VenueID, @ConcertName, @StartDatetime, @EndDatetime,
              @ConcertStatus, @SaleStartDatetime, @SaleEndDatetime, @PurchaseLimit, @TemporaryHoldDuration,
              @FairAccessEnabled, @WaitlistEnabled, @SalesPaused, @CancellationPolicy, @RefundPolicy,
              @CancellationDeadlineHours, @RefundPercentage);
 
         SET @NewConcertID = SCOPE_IDENTITY();
 
+        INSERT INTO ConcertArtist (ConcertID, ArtistID, ArtistOrder)
+        SELECT @NewConcertID, ArtistID, ArtistOrder
+        FROM @Artists
+        ORDER BY ArtistOrder;
+
         -- 5. Audit
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)
         VALUES (@ActorUserID, 'CONCERT_CREATED', 'Concert',
                 CAST(@NewConcertID AS VARCHAR(64)), 'INSERT', SYSDATETIME(),
-                '{"ConcertStatus":"Draft"}');
+                '{"ConcertStatus":"Draft","ArtistCount":' + CAST((SELECT COUNT(*) FROM @Artists) AS VARCHAR(12)) + '}');
 
         COMMIT TRANSACTION;
     END TRY
