@@ -357,6 +357,8 @@ public class ErrorHandlingMiddleware
                       "Không gán được vị trí ghế cho khu vé đứng."),
             59824 => (HttpStatusCode.Conflict, "Seat Position Taken",
                       "Vị trí này trong khu đã có ghế khác."),
+            59825 => (HttpStatusCode.BadRequest, "Missing Seat Position",
+                      "Ghế trong khu có ghế phải có hàng và số thứ tự trong hàng."),
 
             // sp_UpdatePromotionStatus / sp_UpdateDiscountCodeStatus (FR52, FR53b)
             59601 => (HttpStatusCode.BadRequest, "Invalid Promotion Status", "PromotionStatus phải là Draft, Active hoặc Disabled."),
