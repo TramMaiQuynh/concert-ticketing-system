@@ -10,7 +10,7 @@
 --   6. Cap nhat Booking.FinalAmount.
 --   7. Ghi AuditRecord.
 -- ============================================================
-CREATE PROCEDURE dbo.sp_ApplyPromotion
+CREATE OR ALTER PROCEDURE dbo.sp_ApplyPromotion
 (
     @BookingID       INT,
     @PromotionID     INT,
