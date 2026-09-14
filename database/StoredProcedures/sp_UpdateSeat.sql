@@ -37,34 +37,51 @@ BEGIN
                          AND  uaAdm.AccountStatus  = 'Active')
             THROW 59421, 'sp_UpdateSeat: Chi Admin duoc cap nhat Seat.', 1;
 
-        DECLARE @OldStatus VARCHAR(32);
-        SELECT @OldStatus = SeatStatus FROM Seat WITH (UPDLOCK) WHERE SeatID = @SeatID;
+        DECLARE @OldStatus VARCHAR(32), @TargetZoneID INT,
+                @OldRowLabel NVARCHAR(16), @OldColumnNumber INT;
+        SELECT @OldStatus = SeatStatus, @TargetZoneID = ZoneID,
+               @OldRowLabel = SeatRowLabel, @OldColumnNumber = SeatColumnNumber
+        FROM Seat WITH (UPDLOCK, HOLDLOCK)
+        WHERE SeatID = @SeatID;
 
         IF @OldStatus IS NULL
             THROW 59422, 'sp_UpdateSeat: Seat khong ton tai.', 1;
 
-        DECLARE @TargetZoneID INT = (SELECT ZoneID FROM Seat WHERE SeatID = @SeatID);
-
         -- ── Kiem tra vi tri ghe ────────────────────────────────────────────
-        -- Hang va cot di cung nhau: chi mot trong hai thi khong dinh vi duoc.
-        IF (@SeatRowLabel IS NOT NULL AND @SeatColumnNumber IS NULL)
-        OR (@SeatRowLabel IS NULL AND @SeatColumnNumber IS NOT NULL)
-            THROW 59821, 'sp_UpdateSeat: Hang va so thu tu trong hang phai di cung nhau.', 1;
+        IF @SeatRowLabel IS NOT NULL
+        BEGIN
+            SET @SeatRowLabel = NULLIF(LTRIM(RTRIM(@SeatRowLabel)), '');
+            IF @SeatRowLabel IS NULL
+                THROW 59825, 'sp_UpdateSeat: Ghe trong khu co ghe phai co hang va so thu tu trong hang.', 1;
+        END
 
         IF @SeatColumnNumber IS NOT NULL AND @SeatColumnNumber <= 0
             THROW 59822, 'sp_UpdateSeat: So thu tu trong hang phai lon hon 0.', 1;
 
-        -- Khu ve dung ban theo suc chua, khong co ghe danh so — gan vi tri ghe
-        -- vao do la mau thuan voi chinh ban chat cua khu.
-        IF @SeatRowLabel IS NOT NULL
-           AND (SELECT ZoneType FROM Zone WHERE ZoneID = @TargetZoneID) = 'GeneralAdmission'
-            THROW 59823, 'sp_UpdateSeat: Khong gan duoc vi tri ghe cho khu ve dung.', 1;
+        -- PATCH cho phep doi rieng hang hoac cot: NULL nghia la giu gia tri cu.
+        -- Kiem tra tren GIA TRI SAU KHI HOP NHAT de khong bat client gui lai
+        -- truong khong thay doi, nhung van chan ghe du lieu cu chua dinh vi.
+        DECLARE @FinalRowLabel NVARCHAR(16) = COALESCE(@SeatRowLabel, @OldRowLabel),
+                @FinalColumnNumber INT = COALESCE(@SeatColumnNumber, @OldColumnNumber),
+                @FinalStatus VARCHAR(32) = COALESCE(@SeatStatus, @OldStatus);
 
-        IF @SeatRowLabel IS NOT NULL
-           AND EXISTS (SELECT 1 FROM Seat
+        -- Bat buoc co vi tri chi voi ghe CON HOAT DONG sau khi cap nhat. Ghe Retired
+        -- khong duoc ve tren so do nua, nen doi no phai co toa do la doi mot thu khong
+        -- phuc vu gi. Day cung la ranh gioi ma phan con lai cua he thong da dung san:
+        -- ca ba noi kiem trung vi tri (sp_CreateSeat, sp_UpdateSeat ngay duoi, va
+        -- sp_CreateSeatsBatch) deu chi xet cac dong co SeatStatus = 'Active'.
+        --
+        -- Kiem vo dieu kien thi mot ghe chua dinh vi (du lieu cu, hoac chen thang vao
+        -- bang) khong con duong nao ra: khong Retire duoc, khong doi ten duoc, va cach
+        -- duy nhat de dong no lai la bia ra mot toa do cho chinh ghe sap ngung dung -
+        -- toa do do lai co the dam vao ghe khac va bi 59824 chan not.
+        IF @FinalStatus = 'Active' AND (@FinalRowLabel IS NULL OR @FinalColumnNumber IS NULL)
+            THROW 59825, 'sp_UpdateSeat: Ghe trong khu co ghe phai co hang va so thu tu trong hang.', 1;
+
+        IF EXISTS (SELECT 1 FROM Seat WITH (UPDLOCK, HOLDLOCK)
                        WHERE ZoneID = @TargetZoneID
-                         AND SeatRowLabel = @SeatRowLabel
-                         AND SeatColumnNumber = @SeatColumnNumber
+                         AND SeatRowLabel = @FinalRowLabel
+                         AND SeatColumnNumber = @FinalColumnNumber
                          AND SeatStatus = 'Active'
                          AND SeatID <> @SeatID)
             THROW 59824, 'sp_UpdateSeat: Vi tri nay trong khu da co ghe khac.', 1;
@@ -83,8 +100,8 @@ BEGIN
         UPDATE Seat
         SET    SeatLabel  = COALESCE(@SeatLabel, SeatLabel),
                SeatStatus = COALESCE(@SeatStatus, SeatStatus),
-               SeatRowLabel     = COALESCE(@SeatRowLabel, SeatRowLabel),
-               SeatColumnNumber = COALESCE(@SeatColumnNumber, SeatColumnNumber)
+               SeatRowLabel     = @FinalRowLabel,
+               SeatColumnNumber = @FinalColumnNumber
         WHERE  SeatID = @SeatID;
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
