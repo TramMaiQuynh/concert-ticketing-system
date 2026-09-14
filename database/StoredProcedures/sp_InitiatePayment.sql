@@ -2,7 +2,7 @@
 -- sp_InitiatePayment 
 -- Tao giao dich Payment cho Booking (trang thai Pending).
 -- ============================================================
-CREATE PROCEDURE dbo.sp_InitiatePayment
+CREATE OR ALTER PROCEDURE dbo.sp_InitiatePayment
 (
     @BookingID        INT,
     @CustomerUserID   INT,
