@@ -27,6 +27,12 @@ public sealed partial class DbFixture
             -- 0. AuditRecord (actor của các SP nghiệp vụ ghi audit — phải xóa trước UserAccount).
             --    Lưu ý: TRG_AuditLog cấm mọi UPDATE/DELETE (BR50). Test cleanup phải tạm thời
             --    disable trigger, xóa audit của dữ liệu test, rồi enable lại (kể cả khi lỗi).
+            --    Tự chữa lành trước khi bắt đầu: nếu lần chạy TRƯỚC bị ngắt giữa chừng bởi
+            --    một hủy lệnh phía client (CancellationToken/command timeout gửi gói ATTENTION),
+            --    SQL Server bỏ qua toàn bộ CATCH đang chạy dở và để trigger ở trạng thái disabled
+            --    vĩnh viễn — không có ngoại lệ T-SQL nào xảy ra để CATCH bắt được. ENABLE vô điều
+            --    kiện dưới đây là no-op nếu trigger đã bật, và tự sửa nếu lần chạy trước để sót.
+            ENABLE TRIGGER TRG_AuditLog ON AuditRecord;
             BEGIN TRY
                 DISABLE TRIGGER TRG_AuditLog ON AuditRecord;
                 DELETE ar FROM AuditRecord ar
