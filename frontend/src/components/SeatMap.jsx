@@ -49,9 +49,6 @@ function seatColors(status, selected) {
 
 /** Mức khu: khu càng còn nhiều chỗ càng đậm — quét mắt là thấy chỗ nào còn vé. */
 function zoneColors(zone) {
-  if (zone.zoneType === 'GeneralAdmission') {
-    return { fill: 'var(--blue-bg)', stroke: 'var(--blue-border)', text: 'var(--blue-text)' };
-  }
   if (zone.availableCount === 0) {
     return { fill: 'var(--surface-sunken)', stroke: 'var(--border-subtle)', text: 'var(--text-muted)' };
   }
@@ -100,11 +97,9 @@ function VenueOverview({ map, zones, onPickZone, activeZoneId, compact }) {
         const cx = zone.zoneX + zone.zoneWidth / 2;
         const cy = zone.zoneY + zone.zoneHeight / 2;
         const rot = Number(zone.zoneRotation ?? 0);
-        const isGA = zone.zoneType === 'GeneralAdmission';
         const c = zoneColors(zone);
         const isActive = zone.zoneID === activeZoneId;
-        // Khu vé đứng bán theo sức chứa nên không có ghế để đi vào.
-        const clickable = !compact && !isGA && zone.seatCount > 0;
+        const clickable = !compact && zone.seatCount > 0;
 
         const priceLabel = zone.minPrice == null ? null
           : zone.minPrice === zone.maxPrice
@@ -137,14 +132,13 @@ function VenueOverview({ map, zones, onPickZone, activeZoneId, compact }) {
               fill={c.fill}
               stroke={isActive ? 'var(--accent)' : c.stroke}
               strokeWidth={isActive ? 3 : 1.5}
-              strokeDasharray={isGA ? '7 5' : undefined}
               style={{ transition: 'stroke 160ms var(--ease)' }}
             />
 
             {!compact && (
               <>
                 <text
-                  x={cx} y={zone.zoneY + zone.zoneHeight / 2 - (priceLabel || isGA ? 12 : 0)}
+                  x={cx} y={zone.zoneY + zone.zoneHeight / 2 - (priceLabel ? 12 : 0)}
                   textAnchor="middle" dominantBaseline="central"
                   fill={c.text}
                   style={{ fontSize: 16, fontWeight: 600 }}
@@ -158,11 +152,9 @@ function VenueOverview({ map, zones, onPickZone, activeZoneId, compact }) {
                   fill={c.text}
                   style={{ fontSize: 12, opacity: 0.78 }}
                 >
-                  {isGA
-                    ? `Vé đứng · ${zone.zoneCapacity} chỗ`
-                    : zone.availableCount === 0
-                      ? 'Hết chỗ'
-                      : `${zone.availableCount}/${zone.seatCount} chỗ · ${priceLabel ?? ''}`}
+                  {zone.availableCount === 0
+                    ? 'Hết chỗ'
+                    : `${zone.availableCount}/${zone.seatCount} chỗ · ${priceLabel ?? ''}`}
                 </text>
               </>
             )}
