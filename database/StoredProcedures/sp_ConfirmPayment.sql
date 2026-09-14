@@ -14,7 +14,7 @@
 -- ============================================================
 DROP PROCEDURE IF EXISTS dbo.sp_ConfirmPayment;
 GO
-CREATE PROCEDURE dbo.sp_ConfirmPayment
+CREATE OR ALTER PROCEDURE dbo.sp_ConfirmPayment
 (
     @BookingID         INT,
     @PaymentID         INT,
@@ -41,6 +41,20 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRANSACTION;
+
+        -- Chan dau vao NULL TRUOC khi lay AppLock. Ly do: ten tai nguyen khoa duoc noi
+        -- chuoi tu @BookingID, ma noi chuoi voi NULL cho ra NULL - sp_getapplock khi do
+        -- nem loi he thong 1224 ('An invalid application lock resource was passed'), mot
+        -- thong bao khong noi len dieu gi ve nghiep vu va roi vao nhanh 500 chung cua
+        -- ErrorHandlingMiddleware. Ba SP con lai dung AppLock (sp_CreateBooking,
+        -- sp_AllocateWaitlist, sp_ProcessQueueAdmission) deu tien kiem tra roi moi khoa;
+        -- day la cho duy nhat lam nguoc lai. Dung lai 52001 vi dung nghia: khong xac dinh
+        -- duoc Payment thuoc Booking nao.
+        IF @BookingID IS NULL OR @PaymentID IS NULL
+        BEGIN
+            ROLLBACK TRANSACTION;
+            THROW 52001, 'sp_ConfirmPayment: Payment khong ton tai hoac khong thuoc Booking nay.', 1;
+        END
 
         -- CRIT-14: Dung AppLock theo Booking de dam bao tuan tu, tranh deadlock khi update
         DECLARE @LockResource NVARCHAR(128) = 'ConfirmPayment_Booking_' + CAST(@BookingID AS NVARCHAR(20));
