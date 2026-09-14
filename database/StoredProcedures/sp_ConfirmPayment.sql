@@ -203,6 +203,17 @@ BEGIN
         BEGIN
             -- Booking da Expired, Cancelled hoac Confirmed do race condition
             -- Giu nguyen Booking, auto Refund 100% cho Payment nay (BR22a, LI02a)
+
+            -- Buoc 3 vua dat IsBookingConfirmingPayment = 1 cho CHINH Payment nay
+            -- (khong vi pham UIX vi day la Payment dau tien gianh duoc quyen). Nhung
+            -- nhanh nay xac dinh Payment KHONG duoc dung de xac nhan Booking - phai
+            -- tra co ve 0, dung bat bien da neu o dong 94-99 ("mot trong ba nhanh tu
+            -- dong hoan tien phai de co = 0"). Thieu dong nay, Payment da bi hoan tien
+            -- van bao IsBookingConfirmingPayment = 1: idempotency check o dau SP (dong
+            -- 100-105) se tra 'AlreadyConfirmed' cho lan callback lap lai ke tiep thay
+            -- vi 'AlreadyRefunded' dung nhu tai lieu @Outcome da cam ket.
+            UPDATE Payment SET IsBookingConfirmingPayment = 0 WHERE PaymentID = @PaymentID;
+
             DECLARE @RefundID2 INT;
             DECLARE @Ref2 VARCHAR(64) = LOWER(CAST(NEWID() AS VARCHAR(36)));
             INSERT INTO Refund (PaymentID, RefundAmount, RefundStatus, RefundRequestTimestamp, RefundReason, RefundConfirmationTimestamp, RefundReference)
