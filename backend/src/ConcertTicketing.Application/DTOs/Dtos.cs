@@ -273,7 +273,7 @@ public record PagedResult<T>(
 // ── Admin / Organizer management ──────────────────────────────────────────────
 
 public record CreateConcertRequest(
-    int ArtistId,
+    IReadOnlyList<int> ArtistIds,
     int VenueId,
     string ConcertName,
     DateTime StartDatetime,
@@ -288,11 +288,37 @@ public record CreateConcertRequest(
     string? CancellationPolicy = null,
     string? RefundPolicy = null,
     int? CancellationDeadlineHours = null,
-    decimal? RefundPercentage = null);
+    decimal? RefundPercentage = null)
+{
+    // Giữ caller C# cũ hoạt động trong khi HTTP contract dùng ArtistIds.
+    public CreateConcertRequest(
+        int artistId,
+        int venueId,
+        string concertName,
+        DateTime startDatetime,
+        DateTime endDatetime,
+        DateTime? saleStartDatetime = null,
+        DateTime? saleEndDatetime = null,
+        int purchaseLimit = 4,
+        int? temporaryHoldDuration = null,
+        bool fairAccessEnabled = false,
+        bool waitlistEnabled = false,
+        bool salesPaused = false,
+        string? cancellationPolicy = null,
+        string? refundPolicy = null,
+        int? cancellationDeadlineHours = null,
+        decimal? refundPercentage = null)
+        : this([artistId], venueId, concertName, startDatetime, endDatetime,
+            saleStartDatetime, saleEndDatetime, purchaseLimit, temporaryHoldDuration,
+            fairAccessEnabled, waitlistEnabled, salesPaused, cancellationPolicy,
+            refundPolicy, cancellationDeadlineHours, refundPercentage)
+    {
+    }
+}
 
 public record UpdateConcertRequest(
     string? ConcertName = null,
-    int? ArtistId = null,
+    IReadOnlyList<int>? ArtistIds = null,
     int? VenueId = null,
     DateTime? StartDatetime = null,
     DateTime? EndDatetime = null,
@@ -322,7 +348,7 @@ public record CreateVenueRequest(string VenueName, string? Address);
 public record CreateZoneRequest(
     string ZoneCode,
     string? ZoneName,
-    // 'Seated' co ghe danh so | 'GeneralAdmission' ban theo suc chua, khong co ghe.
+    // Hien tai chi ho tro 'Seated' (ban theo tung ghe).
     string? ZoneType = null,
     int? ZoneLevel = null,          // tang/khan dai, 1 = tang tret
     int? ZoneX = null,
@@ -330,14 +356,21 @@ public record CreateZoneRequest(
     int? ZoneWidth = null,
     int? ZoneHeight = null,
     decimal? ZoneRotation = null,   // do, de xoay khu huong ve san khau
-    int? ZoneCapacity = null);      // CHI cho khu ve dung
+    int? ZoneCapacity = null);      // Du phong cho mo hinh inventory khac trong tuong lai.
 
 public record CreateSeatRequest(
     string SeatCode,
     string? SeatLabel,
-    // Vi tri trong khu. SeatCode la DINH DANH, hai truong nay moi la VI TRI.
+    // SeatCode la DINH DANH trong Zone; hai truong nay la vi tri trong Zone.
     string? SeatRowLabel = null,
     int? SeatColumnNumber = null);
+
+/// <summary>
+/// Tạo một lưới ghế trong MỘT giao dịch. Không dùng vòng lặp HTTP ở client: nếu
+/// chỉ một vị trí hoặc mã ghế không hợp lệ, database rollback toàn bộ lưới để sơ
+/// đồ không bao giờ rơi vào trạng thái tạo dở.
+/// </summary>
+public record CreateSeatsBatchRequest(IReadOnlyList<CreateSeatRequest> Seats);
 
 public record ConfigureTicketCategoryRequest(
     string CategoryName,
@@ -667,14 +700,17 @@ public record UpdateZoneRequest(
     string? ZoneName = null,
     string? ZoneDescription = null,
     string? ZoneStatus = null,          // Active | Retired
-    string? ZoneType = null,            // Seated | GeneralAdmission
+    string? ZoneType = null,            // Hien tai chi Seated
     int? ZoneLevel = null,
     int? ZoneX = null,
     int? ZoneY = null,
     int? ZoneWidth = null,
     int? ZoneHeight = null,
     decimal? ZoneRotation = null,
-    int? ZoneCapacity = null);
+    int? ZoneCapacity = null,
+    // ClearGeometry chỉ dành cho trình biên tập sơ đồ. NULL ở các trường hình
+    // học của một PATCH thông thường vẫn có nghĩa "giữ nguyên".
+    bool ClearGeometry = false);
 
 public record UpdateSeatRequest(
     string? SeatLabel = null,
@@ -698,7 +734,13 @@ public record ConfigureVenueMapRequest(
     int? StageX = null,
     int? StageY = null,
     int? StageWidth = null,
-    int? StageHeight = null);
+    int? StageHeight = null,
+    // NULL vẫn giữ nguyên để hỗ trợ cập nhật từng phần; cờ này xóa trọn bộ bốn
+    // giá trị sân khấu, không bao giờ để lại một hình chữ nhật nửa vời.
+    bool ClearStage = false,
+    // Tat map va quay ve che do danh sach. SP dong thoi xoa Stage vi san khau
+    // khong the ton tai khi khong con he toa do cua Venue.
+    bool ClearMap = false);
 
 // ── Fair Access / Waitlist configuration (FR64a, BR43, BR45b, BR47, BR47b) ────
 
