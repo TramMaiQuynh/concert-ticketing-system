@@ -126,8 +126,16 @@ function Invoke-SqlFile {
         throw "sqlcmd that bai voi exit code $exitCode cho file: $fileName"
     }
 
+    # Dem file THUC SU deploy thanh cong. Cac dong tong ket ben duoi lay so tu day
+    # thay vi hang so chep tay: hai lan trong cung mot dot thay doi, hang so do da
+    # lech khoi thuc te (in "43 Stored Procedures" khi da deploy 44), va mot con so
+    # sai in ra giua buoi bao ve thi khong co cach nao chua.
+    $script:DeployedFileCount++
     Write-Host "  [OK]" -ForegroundColor Green
 }
+
+# Dem tich luy so file da deploy; tung phase lay hieu de bao cao dung phan cua minh.
+$script:DeployedFileCount = 0
 
 # ============================================================
 # Helper: Chay mot doan SQL nho truc tiep (khong qua file)
@@ -259,6 +267,7 @@ Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Datab
 # Tiep can topological sort thu cong:
 #   Layer 0 (khong co FK): UserAccount, Role, Artist, Venue, SystemConfiguration
 #   Layer 1 (phu thuoc Layer 0): Zone, UserRoleAssignment, Concert
+#   Layer 2 (phu thuoc Concert/Artist): ConcertArtist
 #   Layer 2 (phu thuoc Layer 1): Seat, TicketCategory, Waitlist, Queue, Booking, Promotion
 #   Layer 3 (phu thuoc Layer 2): EventSeat, WaitlistEntry, QueueEntry, Payment, DiscountCode
 #                                 CheckinStaffAssignment
@@ -266,7 +275,8 @@ Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Datab
 #   Layer 5 (phu thuoc Layer 4): Ticket, BookingPromotionApplication
 #   Layer 6 (phu thuoc Layer 5): CheckIn, AuditRecord
 # ============================================================
-Write-Phase "PHASE 1: TABLES (28 bang)"
+Write-Phase "PHASE 1: TABLES (29 bang)"
+$tableStart = $script:DeployedFileCount
 
 $tablesDir = Join-Path $DbRoot "Tables"
 
@@ -280,10 +290,11 @@ Invoke-SqlFile "$tablesDir\SystemConfiguration.sql"
 # Layer 1 -- Phu thuoc Layer 0
 Invoke-SqlFile "$tablesDir\Zone.sql"                   # -> Venue
 Invoke-SqlFile "$tablesDir\UserRoleAssignment.sql"     # -> UserAccount, Role
-Invoke-SqlFile "$tablesDir\Concert.sql"                # -> UserAccount, Artist, Venue
+Invoke-SqlFile "$tablesDir\Concert.sql"                # -> UserAccount, Venue
 Invoke-SqlFile "$tablesDir\RefreshToken.sql"           # -> UserAccount
 
 # Layer 2 -- Phu thuoc Layer 1
+Invoke-SqlFile "$tablesDir\ConcertArtist.sql"          # -> Concert, Artist
 Invoke-SqlFile "$tablesDir\Seat.sql"                   # -> Zone, Venue
 Invoke-SqlFile "$tablesDir\TicketCategory.sql"         # -> Concert
 Invoke-SqlFile "$tablesDir\Waitlist.sql"               # -> Concert
@@ -313,7 +324,7 @@ Invoke-SqlFile "$tablesDir\CheckIn.sql"                     # -> Ticket, Concert
 Invoke-SqlFile "$tablesDir\AuditRecord.sql"                 # -> UserAccount
 
 Write-Host ""
-Write-Host "  Tong cong: 28 bang da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: $($script:DeployedFileCount - $tableStart) bang da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 2: INDEXES
@@ -401,7 +412,8 @@ Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (43 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (44 SP)"
+$spStart = $script:DeployedFileCount
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
 # --- Core transaction SPs ---
@@ -426,6 +438,7 @@ Invoke-SqlFile "$spDir\sp_UpdateConcertStatus.sql"
 Invoke-SqlFile "$spDir\sp_CreateVenue.sql"
 Invoke-SqlFile "$spDir\sp_CreateZone.sql"
 Invoke-SqlFile "$spDir\sp_CreateSeat.sql"
+Invoke-SqlFile "$spDir\sp_CreateSeatsBatch.sql" # FR11a: luoi ghe atomic
 Invoke-SqlFile "$spDir\sp_UpdateVenue.sql"          # FR59b/BR50e: Venue -> Inactive
 Invoke-SqlFile "$spDir\sp_UpdateZone.sql"           # FR59b/BR50e: Zone  -> Retired
 Invoke-SqlFile "$spDir\sp_UpdateSeat.sql"           # FR59b/BR50e: Seat  -> Retired
@@ -458,17 +471,18 @@ Invoke-SqlFile "$spDir\sp_AdminUpdateUserStatus.sql"
 Invoke-SqlFile "$spDir\sp_AddCheckinStaffAssignment.sql"
 
 Write-Host ""
-Write-Host "  Tong cong: 43 Stored Procedures da duoc tao." -ForegroundColor Green
+Write-Host "  Tong cong: $($script:DeployedFileCount - $spStart) Stored Procedures da duoc tao." -ForegroundColor Green
 
 # ============================================================
 # PHASE 6: VIEWS
 # Views phu thuoc Tables, khong phu thuoc SP/Trigger/Function.
 # ============================================================
-Write-Phase "PHASE 6: VIEWS (3 file, 12 view)"
+Write-Phase "PHASE 6: VIEWS (4 file, 17 view)"
 
 $viewDir = Join-Path $DbRoot "Views"
 Invoke-SqlFile "$viewDir\VW_ConcertSalesSummary.sql"
 Invoke-SqlFile "$viewDir\VW_ConcertAttendeeList.sql"
+Invoke-SqlFile "$viewDir\VW_AdminCatalog.sql"
 Invoke-SqlFile "$viewDir\VW_Others.sql"   # Chua 5 view: ActiveInventoryStatus,
                                            # CustomerBookingHistory, CheckInReport,
                                            # WaitlistQueue, AuditTrail
@@ -514,6 +528,7 @@ Invoke-SqlFile "$secDir\CreateDBUsers.sql" -Variables @{
     CheckinStaffPwd = $AppCheckinPassword
 }
 Invoke-SqlFile "$secDir\GrantPermissions.sql"
+Invoke-SqlFile "$secDir\GrantAdminCatalog.sql"
 
 # ============================================================
 # PHASE 8: SEED DATA (Bootstrap)
