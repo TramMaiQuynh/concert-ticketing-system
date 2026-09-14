@@ -525,7 +525,7 @@ Cửa sổ tranh chấp được nới rộng bằng `WAITFOR` nên kết quả 
 ## 5. Lệnh chạy kiểm thử
 
 ```powershell
-# Database — 159 test (chạy TỪ thư mục Tests)
+# Database — 212 test (chạy TỪ thư mục Tests)
 cd database\Tests
 .\Run-All-Tests.ps1
 
@@ -579,7 +579,7 @@ Nêu trước sẽ tốt hơn để hội đồng hỏi:
 ## 7. Bản đồ thư mục
 
 ```
-database/     28 bảng, 33 trigger, 3 function, 43 SP, 12 view, RBAC, 159 test
+database/     28 bảng, 33 trigger, 3 function, 43 SP, 12 view, RBAC, 212 test
 backend/      .NET 9 · Clean Architecture · Dapper · JWT · 263 test
 frontend/     React 19 · Vite · React Router · khu quản trị 8 mục (Admin) / 6 (Organizer)
 scripts/      setup-demo.ps1  · bootstrap-admin.ps1  · demo-concurrency.ps1
