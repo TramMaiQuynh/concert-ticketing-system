@@ -49,6 +49,25 @@ BEGIN
         )
             THROW 59613, 'sp_UpdateDiscountCodeStatus: Actor khong co quyen.', 1;
 
+        -- Bat lai ma da tat khong duoc lam ma do tro nen nhap nhang: trong pham vi mot
+        -- Concert, mot chuoi ma phai chi ra DUY NHAT mot Promotion Active (xem
+        -- sp_CreateDiscountCode, 58604). Khong co kiem tra nay thi luat kia vong qua
+        -- duoc chi bang hai buoc - tao ma luc Promotion con Inactive, roi bat lai.
+        IF @NewStatus = 'Active' AND EXISTS (
+            SELECT 1
+            FROM   DiscountCode dcOther
+            JOIN   Promotion    pOther ON pOther.PromotionID = dcOther.PromotionID
+            WHERE  dcOther.DiscountCodeID <> @DiscountCodeID
+              AND  dcOther.CodeStatus      = 'Active'
+              AND  pOther.PromotionStatus  = 'Active'
+              AND  dcOther.CodeValue = (SELECT CodeValue FROM DiscountCode WHERE DiscountCodeID = @DiscountCodeID)
+              AND  pOther.ConcertID  = (SELECT p2.ConcertID
+                                        FROM   DiscountCode dc2
+                                        JOIN   Promotion    p2 ON p2.PromotionID = dc2.PromotionID
+                                        WHERE  dc2.DiscountCodeID = @DiscountCodeID)
+        )
+            THROW 59614, 'sp_UpdateDiscountCodeStatus: Ma nay dang duoc mot Promotion Active khac cua cung Concert su dung.', 1;
+
         UPDATE DiscountCode SET CodeStatus = @NewStatus WHERE DiscountCodeID = @DiscountCodeID;
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
