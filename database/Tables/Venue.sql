@@ -31,6 +31,13 @@ CREATE TABLE Venue (
             (MapWidth  IS NULL OR MapWidth  > 0)
         AND (MapHeight IS NULL OR MapHeight > 0)
     ),
+    -- Mat phang la mot cap kich thuoc. Chi co chieu rong hoac chieu cao khong
+    -- tao nen mot he toa do, va se khien frontend luon roi ve fallback trong khi
+    -- database lai tuong nhu Venue da co map.
+    CONSTRAINT CHK_Venue_MapBoxComplete CHECK (
+        (MapWidth IS NULL AND MapHeight IS NULL)
+     OR (MapWidth IS NOT NULL AND MapHeight IS NOT NULL)
+    ),
     CONSTRAINT CHK_Venue_StageSize CHECK (
             (StageWidth  IS NULL OR StageWidth  > 0)
         AND (StageHeight IS NULL OR StageHeight > 0)
