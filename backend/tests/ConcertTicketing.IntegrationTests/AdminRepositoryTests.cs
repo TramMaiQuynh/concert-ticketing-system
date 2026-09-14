@@ -119,7 +119,9 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         var zoneId = await repo.CreateZoneAsync(admin, venueId, new CreateZoneRequest(s.ZoneCode, s.ZoneCode));
         zoneId.Should().BeGreaterThan(0);
 
-        var seatId = await repo.CreateSeatAsync(admin, zoneId, new CreateSeatRequest(s.SeatCode, "IT-Seat"));
+        // Hàng/cột là BẮT BUỘC với ghế trong khu có ghế (sp_CreateSeat, 59825).
+        var seatId = await repo.CreateSeatAsync(admin, zoneId,
+            new CreateSeatRequest(s.SeatCode, "IT-Seat", SeatRowLabel: "A", SeatColumnNumber: 1));
         seatId.Should().BeGreaterThan(0);
     }
 
