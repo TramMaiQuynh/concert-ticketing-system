@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ConcertTicketing.Application.DTOs;
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -272,6 +274,17 @@ public record PagedResult<T>(
 
 // ── Admin / Organizer management ──────────────────────────────────────────────
 
+// KHÔNG PHẢI trang trí: kiểu này có HAI constructor công khai (constructor
+// chính dùng ArtistIds số nhiều ngay dưới đây, và constructor bù trừ bên
+// trong thân record dùng artistId số ít cho caller C# cũ). Thiếu [method:
+// JsonConstructor], System.Text.Json không tự chọn được constructor nào để
+// deserialize — mọi request HTTP thật tới POST /admin/concerts đều vỡ với
+// 500 "Deserialization of types without a... singular parameterized
+// constructor is not supported", dù toàn bộ test hiện có (unit lẫn
+// integration) đều xanh, vì tất cả đều gọi thẳng constructor C# (bỏ qua hẳn
+// tầng JSON) thay vì đi qua HTTP thật. Phát hiện bằng thực nghiệm khi kiểm
+// tra tầng HTTP thật cho StagePass.
+[method: JsonConstructor]
 public record CreateConcertRequest(
     IReadOnlyList<int> ArtistIds,
     int VenueId,
@@ -779,3 +792,144 @@ public record QueueEntryStatusDto(
     DateTime JoinedTimestamp,
     int? AdmissionPosition,
     DateTime? AdmissionExpiryTimestamp);
+
+// ══════════════════════════════════════════════════════════════════════════
+// StagePass (StagePass D.2/D.4/D.5) — VenueTemplate/VenueTemplateVersion,
+// Floor/Object/Section/Seat, ConcertMap/ConcertMapRevision. Lop du lieu
+// BO SUNG, khong thay the VenueListItem/VenueZoneListItem/SeatMapDto o tren
+// (nhung van dung chung — vd @VenueID cua request tao Template).
+// ══════════════════════════════════════════════════════════════════════════
+
+public record CreateVenueTemplateRequest(string TemplateName);
+
+public record UpdateVenueTemplateRequest(string? TemplateName, string? TemplateStatus);
+
+public record VenueTemplateListItem(
+    int VenueTemplateID,
+    int VenueID,
+    string TemplateName,
+    string TemplateStatus,
+    DateTime CreatedTimestamp,
+    DateTime UpdatedTimestamp);
+
+public record CreateVenueTemplateVersionRequest(int? CopyFromVersionID);
+
+public record VenueTemplateVersionListItem(
+    int VenueTemplateVersionID,
+    int VenueTemplateID,
+    int VersionNumber,
+    string VersionStatus,
+    int AuthorUserID,
+    DateTime CreatedTimestamp,
+    DateTime? PublishedTimestamp);
+
+// ── Cay hinh hoc day du cua mot VenueTemplateVersion — doc mot lan qua
+//    QueryMultipleAsync (cung nguyen tac "ca nhieu tang trong mot round-trip"
+//    da dung cho GetSeatMapAsync), roi ghep lai o tang C# thay vi N+1 query. ──
+
+public record TemplateObjectItem(
+    int TemplateObjectID,
+    int TemplateFloorID,
+    string ObjectType,
+    string? Label,
+    string GeometryJson,
+    int ZIndex);
+
+public record TemplateSeatItem(
+    int TemplateSeatID,
+    int TemplateSectionID,
+    int SeatID,
+    string SeatKey,
+    string? RowLabel,
+    int? SeatNumber,
+    string? GeometryJson,
+    bool IsAccessible,
+    bool IsCompanion);
+
+public record TemplateSectionItem(
+    int TemplateSectionID,
+    int TemplateFloorID,
+    string SectionKey,
+    string? SectionName,
+    string GeometryJson);
+
+public record TemplateFloorItem(
+    int TemplateFloorID,
+    int VenueTemplateVersionID,
+    string FloorKey,
+    string? FloorName,
+    int FloorOrder,
+    int CanvasWidth,
+    int CanvasHeight);
+
+public record TemplateSectionDetail(
+    int TemplateSectionID,
+    string SectionKey,
+    string? SectionName,
+    string GeometryJson,
+    IReadOnlyList<TemplateSeatItem> Seats);
+
+public record TemplateFloorDetail(
+    int TemplateFloorID,
+    string FloorKey,
+    string? FloorName,
+    int FloorOrder,
+    int CanvasWidth,
+    int CanvasHeight,
+    IReadOnlyList<TemplateObjectItem> Objects,
+    IReadOnlyList<TemplateSectionDetail> Sections);
+
+public record VenueTemplateVersionDetail(
+    int VenueTemplateVersionID,
+    int VenueTemplateID,
+    int VersionNumber,
+    string VersionStatus,
+    DateTime CreatedTimestamp,
+    DateTime? PublishedTimestamp,
+    IReadOnlyList<TemplateFloorDetail> Floors);
+
+public record ConfigureTemplateFloorRequest(
+    int? TemplateFloorID,
+    string FloorKey,
+    string? FloorName,
+    int FloorOrder,
+    int CanvasWidth,
+    int CanvasHeight);
+
+public record ConfigureTemplateObjectRequest(
+    int? TemplateObjectID,
+    string ObjectType,
+    string? Label,
+    string GeometryJson,
+    int ZIndex = 0);
+
+public record ConfigureTemplateSectionRequest(
+    int? TemplateSectionID,
+    string SectionKey,
+    string? SectionName,
+    string GeometryJson);
+
+public record ConfigureTemplateSeatRequest(
+    int? TemplateSeatID,
+    int SeatID,
+    string SeatKey,
+    string? RowLabel,
+    int? SeatNumber,
+    string? GeometryJson,
+    bool IsAccessible = false,
+    bool IsCompanion = false);
+
+// ── ConcertMap / ConcertMapRevision (D.5) ───────────────────────────────────
+
+public record ConcertMapDto(int ConcertMapID, int ConcertID);
+
+public record CreateConcertMapRevisionRequest(int SourceVenueTemplateVersionID);
+
+public record ConcertMapRevisionListItem(
+    int ConcertMapRevisionID,
+    int ConcertMapID,
+    int SourceVenueTemplateVersionID,
+    int RevisionNumber,
+    string RevisionStatus,
+    DateTime SnapshotTimestamp,
+    DateTime? LockedTimestamp);

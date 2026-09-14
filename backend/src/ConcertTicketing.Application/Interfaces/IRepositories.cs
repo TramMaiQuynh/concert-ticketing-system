@@ -132,6 +132,30 @@ public interface IAdminRepository
     // Vong doi khuyen mai / ma giam gia (FR52, FR53b)
     Task UpdatePromotionStatusAsync(int actorUserId, int promotionId, string status);
     Task UpdateDiscountCodeStatusAsync(int actorUserId, int discountCodeId, string status);
+
+    // ── StagePass (D.2/D.4/D.5): VenueTemplate studio + ConcertMap ──────────
+    Task<IEnumerable<VenueTemplateListItem>> ListVenueTemplatesAsync(int venueId, bool includeArchived);
+    Task<int> CreateVenueTemplateAsync(int actorUserId, int venueId, CreateVenueTemplateRequest request);
+    Task UpdateVenueTemplateAsync(int actorUserId, int venueTemplateId, UpdateVenueTemplateRequest request);
+    Task<IEnumerable<VenueTemplateVersionListItem>> ListVenueTemplateVersionsAsync(int venueTemplateId);
+    Task<int> CreateVenueTemplateVersionAsync(int actorUserId, int venueTemplateId, CreateVenueTemplateVersionRequest request);
+    Task<VenueTemplateVersionDetail?> GetVenueTemplateVersionDetailAsync(int venueTemplateVersionId);
+    Task PublishVenueTemplateVersionAsync(int actorUserId, int venueTemplateVersionId);
+    Task DeleteVenueTemplateVersionDraftAsync(int actorUserId, int venueTemplateVersionId);
+    Task<int> ConfigureTemplateFloorAsync(int actorUserId, int venueTemplateVersionId, ConfigureTemplateFloorRequest request);
+    Task DeleteTemplateFloorAsync(int actorUserId, int templateFloorId);
+    Task<int> ConfigureTemplateObjectAsync(int actorUserId, int templateFloorId, ConfigureTemplateObjectRequest request);
+    Task DeleteTemplateObjectAsync(int actorUserId, int templateObjectId);
+    Task<int> ConfigureTemplateSectionAsync(int actorUserId, int templateFloorId, ConfigureTemplateSectionRequest request);
+    Task DeleteTemplateSectionAsync(int actorUserId, int templateSectionId);
+    Task<int> ConfigureTemplateSeatAsync(int actorUserId, int templateSectionId, ConfigureTemplateSeatRequest request);
+    Task DeleteTemplateSeatAsync(int actorUserId, int templateSeatId);
+
+    Task<ConcertMapDto?> GetConcertMapAsync(int concertId);
+    Task<int> CreateConcertMapAsync(int actorUserId, int concertId);
+    Task<IEnumerable<ConcertMapRevisionListItem>> ListConcertMapRevisionsAsync(int concertMapId);
+    Task<int> CreateConcertMapRevisionAsync(int actorUserId, int concertMapId, CreateConcertMapRevisionRequest request);
+    Task LockConcertMapRevisionAsync(int actorUserId, int concertMapRevisionId);
 }
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

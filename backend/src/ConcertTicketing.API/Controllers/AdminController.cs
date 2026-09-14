@@ -14,7 +14,7 @@ namespace ConcertTicketing.API.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "Admin,Organizer")]
-public class AdminController : ControllerBase
+public partial class AdminController : ControllerBase
 {
     private readonly IAdminRepository _admin;
 

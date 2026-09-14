@@ -97,6 +97,44 @@ public sealed partial class DbFixture
             INSERT INTO @TestConcerts (ConcertID)
             SELECT ConcertID FROM Concert WHERE ConcertName LIKE 'IT-Concert-%';
 
+            -- 2b. StagePass — ConcertMap/ConcertMapRevision (docs/stagepass-architecture.md
+            --     D.5). Phải xoá TRƯỚC EventSeat (bên dưới): ConcertMapRevisionSeat.EventSeatID
+            --     tham chiếu EventSeat, dù trong test hiện tại luôn NULL (D.5 sp_AddEventSeats
+            --     integration chưa xây) — xoá đúng thứ tự phòng khi test sau này gán EventSeatID.
+            --     Thiếu đoạn này là chính lỗi FK_TemplateSeat_Seat/FK_VenueTemplate_Venue đã vỡ
+            --     ngay lần đầu StagePassRepositoryTests chạy thật — cleanup không hề biết bảng
+            --     StagePass tồn tại.
+            DELETE cmrs FROM ConcertMapRevisionSeat cmrs
+            JOIN ConcertMapRevisionSection cmrsec ON cmrsec.ConcertMapRevisionSectionID = cmrs.ConcertMapRevisionSectionID
+            JOIN ConcertMapRevisionFloor cmrf ON cmrf.ConcertMapRevisionFloorID = cmrsec.ConcertMapRevisionFloorID
+            JOIN ConcertMapRevision cmr ON cmr.ConcertMapRevisionID = cmrf.ConcertMapRevisionID
+            JOIN ConcertMap cm ON cm.ConcertMapID = cmr.ConcertMapID
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
+            DELETE cmrsec FROM ConcertMapRevisionSection cmrsec
+            JOIN ConcertMapRevisionFloor cmrf ON cmrf.ConcertMapRevisionFloorID = cmrsec.ConcertMapRevisionFloorID
+            JOIN ConcertMapRevision cmr ON cmr.ConcertMapRevisionID = cmrf.ConcertMapRevisionID
+            JOIN ConcertMap cm ON cm.ConcertMapID = cmr.ConcertMapID
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
+            DELETE cmro FROM ConcertMapRevisionObject cmro
+            JOIN ConcertMapRevisionFloor cmrf ON cmrf.ConcertMapRevisionFloorID = cmro.ConcertMapRevisionFloorID
+            JOIN ConcertMapRevision cmr ON cmr.ConcertMapRevisionID = cmrf.ConcertMapRevisionID
+            JOIN ConcertMap cm ON cm.ConcertMapID = cmr.ConcertMapID
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
+            DELETE cmrf FROM ConcertMapRevisionFloor cmrf
+            JOIN ConcertMapRevision cmr ON cmr.ConcertMapRevisionID = cmrf.ConcertMapRevisionID
+            JOIN ConcertMap cm ON cm.ConcertMapID = cmr.ConcertMapID
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
+            DELETE cmr FROM ConcertMapRevision cmr
+            JOIN ConcertMap cm ON cm.ConcertMapID = cmr.ConcertMapID
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
+            DELETE cm FROM ConcertMap cm
+            WHERE cm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+
             DELETE es FROM EventSeat es
             WHERE es.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
             DELETE tc FROM TicketCategory tc
@@ -118,6 +156,40 @@ public sealed partial class DbFixture
             DECLARE @TestVenues TABLE (VenueID INT NOT NULL PRIMARY KEY);
             INSERT INTO @TestVenues (VenueID)
             SELECT VenueID FROM Venue WHERE VenueName LIKE 'IT-Venue-%';
+
+            -- 3b. StagePass — VenueTemplate/VenueTemplateVersion (D.2/D.4). Phải xoá
+            --     TRƯỚC Seat (TemplateSeat.SeatID tham chiếu Seat) và trước Venue
+            --     (VenueTemplate.VenueID tham chiếu Venue) — cùng lỗi đã nêu ở khối 2b.
+            DELETE ts FROM TemplateSeat ts
+            JOIN TemplateSection tsec ON tsec.TemplateSectionID = ts.TemplateSectionID
+            JOIN TemplateFloor tf ON tf.TemplateFloorID = tsec.TemplateFloorID
+            JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+            JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
+
+            DELETE tsec FROM TemplateSection tsec
+            JOIN TemplateFloor tf ON tf.TemplateFloorID = tsec.TemplateFloorID
+            JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+            JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
+
+            DELETE tobj FROM TemplateObject tobj
+            JOIN TemplateFloor tf ON tf.TemplateFloorID = tobj.TemplateFloorID
+            JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+            JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
+
+            DELETE tf FROM TemplateFloor tf
+            JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+            JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
+
+            DELETE vtv FROM VenueTemplateVersion vtv
+            JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
+
+            DELETE vt FROM VenueTemplate vt
+            WHERE vt.VenueID IN (SELECT VenueID FROM @TestVenues);
 
             DELETE s FROM Seat s
             WHERE s.VenueID IN (SELECT VenueID FROM @TestVenues);

@@ -479,6 +479,113 @@ public class ErrorHandlingMiddleware
             59701 => (HttpStatusCode.InternalServerError, "System Configuration Missing",
                       "Thiếu bản ghi cấu hình hệ thống bắt buộc. Liên hệ quản trị viên."),
 
+            // ── StagePass: VenueTemplate / VenueTemplateVersion (D.2/D.4) ─────
+            // sp_CreateVenueTemplate
+            60001 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được tạo VenueTemplate."),
+            60002 => (HttpStatusCode.BadRequest, "Venue Not Found", "Venue không tồn tại."),
+            60003 => (HttpStatusCode.BadRequest, "Invalid Template Name", "Tên template không được để trống."),
+            60004 => (HttpStatusCode.Conflict, "Duplicate Template Name", "Tên template đã tồn tại trong Venue này."),
+            // sp_UpdateVenueTemplate
+            60005 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được sửa VenueTemplate."),
+            60006 => (HttpStatusCode.NotFound, "Venue Template Not Found", "VenueTemplate không tồn tại."),
+            60007 => (HttpStatusCode.BadRequest, "Invalid Template Status", "TemplateStatus phải là Active hoặc Archived."),
+            60008 => (HttpStatusCode.BadRequest, "Invalid Template Name", "Tên template không được để trống."),
+            60009 => (HttpStatusCode.Conflict, "Duplicate Template Name", "Tên template đã tồn tại trong Venue này."),
+            // sp_CreateVenueTemplateVersion
+            60011 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được tạo VenueTemplateVersion."),
+            60012 => (HttpStatusCode.NotFound, "Venue Template Not Found", "VenueTemplate không tồn tại."),
+            60013 => (HttpStatusCode.Conflict, "Template Archived", "Không thể tạo version mới cho VenueTemplate đã Archived."),
+            60014 => (HttpStatusCode.Conflict, "Draft Already Open", "Template đang có một Draft mở. Publish hoặc huỷ Draft hiện tại trước khi tạo Draft mới."),
+            60015 => (HttpStatusCode.BadRequest, "Invalid Copy Source", "Version nguồn để sao chép không thuộc cùng VenueTemplate."),
+            // sp_PublishVenueTemplateVersion
+            60021 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được publish VenueTemplateVersion."),
+            60022 => (HttpStatusCode.NotFound, "Venue Template Version Not Found", "VenueTemplateVersion không tồn tại."),
+            60023 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ publish được version đang Draft."),
+            60024 => (HttpStatusCode.UnprocessableEntity, "Version Empty", "Version chưa có ghế nào (cần ít nhất một Floor/Section/Seat)."),
+            // sp_DeleteVenueTemplateVersionDraft
+            60031 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được huỷ Draft."),
+            60032 => (HttpStatusCode.NotFound, "Venue Template Version Not Found", "VenueTemplateVersion không tồn tại."),
+            60033 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ huỷ được version đang Draft (Published là bất biến)."),
+            // sp_ConfigureTemplateFloor
+            60041 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được cấu hình TemplateFloor."),
+            60042 => (HttpStatusCode.NotFound, "Venue Template Version Not Found", "VenueTemplateVersion không tồn tại."),
+            60043 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ sửa được Floor của version đang Draft."),
+            60044 => (HttpStatusCode.BadRequest, "Invalid Floor Key", "FloorKey không được để trống."),
+            60045 => (HttpStatusCode.BadRequest, "Invalid Canvas Size", "CanvasWidth/CanvasHeight phải lớn hơn 0."),
+            60046 => (HttpStatusCode.BadRequest, "Invalid Floor Order", "FloorOrder phải lớn hơn 0."),
+            60047 => (HttpStatusCode.Conflict, "Duplicate Floor Key", "FloorKey đã tồn tại trong version này."),
+            60048 => (HttpStatusCode.Conflict, "Duplicate Floor Order", "FloorOrder đã được dùng bởi Floor khác trong version này."),
+            60049 => (HttpStatusCode.NotFound, "Template Floor Not Found", "TemplateFloorID không thuộc VenueTemplateVersion này."),
+            60050 or 60051 => (HttpStatusCode.Conflict, "Canvas Too Small", "Không thể thu nhỏ canvas — còn Object/Section nằm ngoài biên mới."),
+            // sp_DeleteTemplateFloor
+            60052 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được xoá TemplateFloor."),
+            60053 => (HttpStatusCode.NotFound, "Template Floor Not Found", "TemplateFloor không tồn tại."),
+            60054 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ xoá được Floor của version đang Draft."),
+            // sp_ConfigureTemplateObject
+            60061 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được cấu hình TemplateObject."),
+            60062 => (HttpStatusCode.NotFound, "Template Floor Not Found", "TemplateFloor không tồn tại."),
+            60063 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ sửa được Object của version đang Draft."),
+            60064 => (HttpStatusCode.BadRequest, "Invalid Object Type", "ObjectType không hợp lệ."),
+            60065 => (HttpStatusCode.BadRequest, "Invalid Geometry", "GeometryJson không đúng cấu trúc."),
+            60066 => (HttpStatusCode.UnprocessableEntity, "Geometry Not Convex", "Hình không lồi — StagePass chỉ hỗ trợ va chạm chính xác cho hình lồi."),
+            60067 => (HttpStatusCode.UnprocessableEntity, "Object Outside Canvas", "Object nằm ngoài canvas của Floor."),
+            60068 => (HttpStatusCode.NotFound, "Template Object Not Found", "TemplateObjectID không thuộc TemplateFloor này."),
+            // sp_DeleteTemplateObject
+            60069 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được xoá TemplateObject."),
+            60070 => (HttpStatusCode.NotFound, "Template Object Not Found", "TemplateObject không tồn tại."),
+            60071 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ xoá được Object của version đang Draft."),
+            // sp_ConfigureTemplateSection
+            60081 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được cấu hình TemplateSection."),
+            60082 => (HttpStatusCode.NotFound, "Template Floor Not Found", "TemplateFloor không tồn tại."),
+            60083 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ sửa được Section của version đang Draft."),
+            60084 => (HttpStatusCode.BadRequest, "Invalid Section Key", "SectionKey không được để trống."),
+            60085 => (HttpStatusCode.BadRequest, "Invalid Geometry", "GeometryJson không đúng cấu trúc."),
+            60086 => (HttpStatusCode.UnprocessableEntity, "Geometry Not Convex", "Hình không lồi — StagePass chỉ hỗ trợ va chạm chính xác cho hình lồi."),
+            60087 => (HttpStatusCode.UnprocessableEntity, "Section Outside Canvas", "Section nằm ngoài canvas của Floor."),
+            60088 => (HttpStatusCode.UnprocessableEntity, "Section Overlaps Stage", "Section không được chồng lên Sân khấu."),
+            60089 => (HttpStatusCode.UnprocessableEntity, "Sections Overlap", "Section chồng lên một Section khác cùng Floor."),
+            60090 => (HttpStatusCode.Conflict, "Duplicate Section Key", "SectionKey đã tồn tại trong Floor này."),
+            60091 => (HttpStatusCode.NotFound, "Template Section Not Found", "TemplateSectionID không thuộc TemplateFloor này."),
+            // sp_DeleteTemplateSection
+            60092 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được xoá TemplateSection."),
+            60093 => (HttpStatusCode.NotFound, "Template Section Not Found", "TemplateSection không tồn tại."),
+            60094 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ xoá được Section của version đang Draft."),
+            // sp_ConfigureTemplateSeat
+            60101 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được cấu hình TemplateSeat."),
+            60102 => (HttpStatusCode.NotFound, "Template Section Not Found", "TemplateSection không tồn tại."),
+            60103 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ sửa được Seat của version đang Draft."),
+            60104 => (HttpStatusCode.BadRequest, "Seat Not Found", "SeatID không tồn tại."),
+            60105 => (HttpStatusCode.BadRequest, "Invalid Seat Key", "SeatKey không được để trống."),
+            60106 => (HttpStatusCode.BadRequest, "Incomplete Seat Position", "RowLabel và SeatNumber phải cùng có hoặc cùng không có."),
+            60107 => (HttpStatusCode.Conflict, "Duplicate Seat In Version", "SeatID này đã xuất hiện ở một Section khác trong cùng VenueTemplateVersion."),
+            60108 => (HttpStatusCode.Conflict, "Duplicate Seat Key", "SeatKey đã tồn tại trong Section này."),
+            60109 => (HttpStatusCode.Conflict, "Duplicate Grid Slot", "Ô lưới (RowLabel, SeatNumber) này đã có ghế khác trong Section."),
+            60110 => (HttpStatusCode.NotFound, "Template Seat Not Found", "TemplateSeatID không thuộc TemplateSection này."),
+            60111 => (HttpStatusCode.BadRequest, "Seat Venue Mismatch", "SeatID không thuộc đúng Venue của VenueTemplate."),
+            // sp_DeleteTemplateSeat
+            60121 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được xoá TemplateSeat."),
+            60122 => (HttpStatusCode.NotFound, "Template Seat Not Found", "TemplateSeat không tồn tại."),
+            60123 => (HttpStatusCode.Conflict, "Version Not Draft", "Chỉ xoá được Seat của version đang Draft."),
+
+            // ── StagePass: ConcertMap / ConcertMapRevision (D.5) ──────────────
+            // sp_CreateConcertMap
+            60201 => (HttpStatusCode.NotFound, "Concert Not Found", "Concert không tồn tại."),
+            60202 => (HttpStatusCode.Forbidden, "Concert Map Not Authorized", "Bạn không có quyền (phải là Organizer của Concert hoặc Admin)."),
+            60203 => (HttpStatusCode.Conflict, "Concert Map Exists", "Concert này đã có ConcertMap."),
+            // sp_CreateConcertMapRevision
+            60211 => (HttpStatusCode.NotFound, "Concert Map Not Found", "ConcertMap không tồn tại."),
+            60212 => (HttpStatusCode.Forbidden, "Concert Map Not Authorized", "Bạn không có quyền (phải là Organizer của Concert hoặc Admin)."),
+            60213 => (HttpStatusCode.UnprocessableEntity, "Concert Missing Venue", "Concert chưa được gán Venue."),
+            60214 => (HttpStatusCode.NotFound, "Venue Template Version Not Found", "VenueTemplateVersion nguồn không tồn tại."),
+            60215 => (HttpStatusCode.Conflict, "Source Not Published", "Chỉ được snapshot từ VenueTemplateVersion đang Published."),
+            60216 => (HttpStatusCode.BadRequest, "Venue Mismatch", "VenueTemplate nguồn không thuộc đúng Venue của Concert."),
+            60217 => (HttpStatusCode.Conflict, "Draft Already Open", "Map đang có một Draft mở. Khoá (Lock) hoặc huỷ Draft hiện tại trước khi tạo Draft mới."),
+            // sp_LockConcertMapRevision
+            60231 => (HttpStatusCode.NotFound, "Concert Map Revision Not Found", "ConcertMapRevision không tồn tại."),
+            60232 => (HttpStatusCode.Forbidden, "Concert Map Not Authorized", "Bạn không có quyền (phải là Organizer của Concert hoặc Admin)."),
+            60233 => (HttpStatusCode.Conflict, "Revision Not Draft", "Chỉ Lock được revision đang Draft."),
+            60234 => (HttpStatusCode.UnprocessableEntity, "Revision Empty", "Revision chưa có ghế nào (cần ít nhất một Floor/Section/Seat)."),
+
             // Duplicate Key (2627 = constraint, 2601 = unique index)
             2627 or 2601 => (HttpStatusCode.Conflict, "Duplicate Entry", "Bản ghi đã tồn tại."),
 
