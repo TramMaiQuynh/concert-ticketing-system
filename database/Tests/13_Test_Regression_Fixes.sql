@@ -380,7 +380,7 @@ SET @SQL = N'
     DECLARE @ven INT, @zid INT, @sid INT;
     EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''REG Venue'', @Address=N''x'', @NewVenueID=@ven OUTPUT;
     EXEC sp_CreateZone  @ActorUserID=@adm, @VenueID=@ven, @ZoneCode=''REGZ'', @ZoneName=N''z'', @NewZoneID=@zid OUTPUT;
-    EXEC sp_CreateSeat  @ActorUserID=@adm, @ZoneID=@zid, @SeatCode=''REGS'', @SeatLabel=N''s'', @NewSeatID=@sid OUTPUT;
+    EXEC sp_CreateSeat  @ActorUserID=@adm, @ZoneID=@zid, @SeatCode=''REGS'', @SeatLabel=N''s'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@sid OUTPUT;
 
     EXEC sp_UpdateSeat  @ActorUserID=@adm, @SeatID=@sid,  @SeatStatus=''Retired'';
     EXEC sp_UpdateZone  @ActorUserID=@adm, @ZoneID=@zid,  @ZoneStatus=''Retired'';
@@ -400,7 +400,7 @@ SET @SQL = N'
     DECLARE @ven INT=(SELECT VenueID FROM Concert WHERE ConcertID=@cid);
     DECLARE @zid INT, @sid INT;
     EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@ven, @ZoneCode=''REGZ2'', @ZoneName=N''z'', @NewZoneID=@zid OUTPUT;
-    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@zid, @SeatCode=''REGS2'', @SeatLabel=N''s'', @NewSeatID=@sid OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@zid, @SeatCode=''REGS2'', @SeatLabel=N''s'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@sid OUTPUT;
     EXEC sp_UpdateSeat @ActorUserID=@adm, @SeatID=@sid, @SeatStatus=''Retired'';
     UPDATE Concert SET ConcertStatus=''SaleClosed'' WHERE ConcertID=@cid;
     UPDATE Concert SET ConcertStatus=''OnSale''     WHERE ConcertID=@cid;
