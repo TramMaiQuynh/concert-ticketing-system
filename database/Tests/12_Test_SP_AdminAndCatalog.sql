@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 12_Test_SP_AdminAndCatalog.sql
 -- Test cac SP truoc day KHONG co test nao:
 --   sp_AdminUpdateUserStatus (UAI01, UAI02)
@@ -112,10 +112,10 @@ EXEC test.sp_RunTest @Suite,'ConfigureCategory_ConcertOnSale_Fail58206','ERROR',
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @src INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    INSERT INTO Concert (OrganizerUserID, ArtistID, VenueID, ConcertName, ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID, VenueID, ConcertName, ConcertStatus,
                          StartDatetime, EndDatetime, PurchaseLimit, FairAccessEnabled,
                          WaitlistEnabled, SalesPaused)
-    SELECT OrganizerUserID, ArtistID, VenueID, N''Concert Draft Test'', ''Draft'',
+    SELECT OrganizerUserID, VenueID, N''Concert Draft Test'', ''Draft'',
            DATEADD(DAY,60,SYSDATETIME()), DATEADD(DAY,60,DATEADD(HOUR,3,SYSDATETIME())),
            4, 0, 0, 0
     FROM Concert WHERE ConcertID = @src;
@@ -132,10 +132,10 @@ EXEC test.sp_RunTest @Suite,'ConfigureCategory_ConcertDraft_OK','SUCCESS',NULL,@
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @src INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    INSERT INTO Concert (OrganizerUserID, ArtistID, VenueID, ConcertName, ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID, VenueID, ConcertName, ConcertStatus,
                          StartDatetime, EndDatetime, PurchaseLimit, FairAccessEnabled,
                          WaitlistEnabled, SalesPaused)
-    SELECT OrganizerUserID, ArtistID, VenueID, N''Concert Retired Seat Test'', ''Draft'',
+    SELECT OrganizerUserID, VenueID, N''Concert Retired Seat Test'', ''Draft'',
            DATEADD(DAY,60,SYSDATETIME()), DATEADD(DAY,60,DATEADD(HOUR,3,SYSDATETIME())),
            4, 0, 0, 0
     FROM Concert WHERE ConcertID = @src;
@@ -198,7 +198,7 @@ EXEC test.sp_RunTest @Suite,'CreateArtist_HappyPath','SUCCESS',NULL,@SQL;
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
-    DECLARE @aid INT = (SELECT ArtistID FROM Concert WHERE ConcertID=@cid);
+    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM ConcertArtist WHERE ConcertID=@cid);
     EXEC sp_UpdateArtist @ActorUserID=@adm, @ArtistID=@aid, @ArtistStatus=''Retired'';';
 EXEC test.sp_RunTest @Suite,'UpdateArtist_RetireInUse_Fail59115','ERROR',59115,@SQL;
 
@@ -294,9 +294,12 @@ SET @SQL = N'
     DECLARE @et DATETIME2(7) = DATEADD(hour, 3, @st);
     DECLARE @ss DATETIME2(7) = DATEADD(day, 1, SYSDATETIME());
     DECLARE @se DATETIME2(7) = DATEADD(day, 39, SYSDATETIME());
+    -- Cung ly do voi cac moc thoi gian o tren: T-SQL KHONG cho truyen bieu thuc lam
+    -- doi so EXEC (chi hang hoac bien), nen chuoi JSON cung phai tinh san ra bien.
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@aid AS NVARCHAR(12)) + N'']'';
     EXEC sp_UpdateRoleStatus @ActorUserID=@adm, @RoleName=N''Organizer'', @RoleStatus=''Inactive'';
     EXEC sp_CreateConcert
-         @OrganizerUserID=@org, @ArtistID=@aid, @VenueID=@vid,
+         @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@vid,
          @ConcertName=N''Concert sau khi dong dau vao Role'',
          @StartDatetime=@st, @EndDatetime=@et,
          @SaleStartDatetime=@ss, @SaleEndDatetime=@se,
@@ -416,14 +419,14 @@ EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_PartialUpdateKeepsStage_OK','SUCC
 -- chinh no o UpdateSeat ma CreateSeat khong co).
 -- ============================================================
 
--- 59811: ZoneType phai la Seated hoac GeneralAdmission
+-- 59831: Reserved seating hien chi ho tro ZoneType=Seated.
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @v INT, @z INT;
     EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG InvalidType'', @Address=N''x'', @NewVenueID=@v OUTPUT;
     EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
          @ZoneType=''Bogus'', @NewZoneID=@z OUTPUT;';
-EXEC test.sp_RunTest @Suite,'ZoneCreate_InvalidType_Fail59811','ERROR',59811,@SQL;
+EXEC test.sp_RunTest @Suite,'ZoneCreate_UnsupportedType_Fail59831','ERROR',59831,@SQL;
 
 -- 59812: hop bao vi tri phai du X,Y,Width,Height hoac khong co gi
 SET @SQL = N'
@@ -471,14 +474,14 @@ SET @SQL = N'
          @ZoneRotation=400, @NewZoneID=@z OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ZoneCreate_RotationOutOfRange_Fail59816','ERROR',59816,@SQL;
 
--- 59817: khu ve dung phai khai bao suc chua lon hon 0
+-- GeneralAdmission khong duoc mo phong bang Zone khong co Seat.
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @v INT, @z INT;
     EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG GACapMissing'', @Address=N''x'', @NewVenueID=@v OUTPUT;
     EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
          @ZoneType=''GeneralAdmission'', @NewZoneID=@z OUTPUT;';
-EXEC test.sp_RunTest @Suite,'ZoneCreate_GACapacityMissing_Fail59817','ERROR',59817,@SQL;
+EXEC test.sp_RunTest @Suite,'ZoneCreate_GeneralAdmissionUnsupported_Fail59831','ERROR',59831,@SQL;
 
 -- 59818: chi khu ve dung moi duoc khai bao suc chua
 SET @SQL = N'
@@ -522,7 +525,7 @@ SET @SQL = N'
         THROW 59999, ''Vi tri moi hop le phai duoc ghi dung'', 1;';
 EXEC test.sp_RunTest @Suite,'ZoneUpdate_ValidReposition_OK','SUCCESS',NULL,@SQL;
 
--- 59819: khong the chuyen khu dang co ghe hoat dong sang khu ve dung
+-- Chuyen sang GeneralAdmission bi chan truoc khi lam thay doi mo hinh kho ve.
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @v INT, @z INT, @s INT;
@@ -531,7 +534,7 @@ SET @SQL = N'
          @ZoneType=''Seated'', @NewZoneID=@z OUTPUT;
     EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''S1'', @SeatLabel=N''x'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@s OUTPUT;
     EXEC sp_UpdateZone @ActorUserID=@adm, @ZoneID=@z, @ZoneType=''GeneralAdmission'', @ZoneCapacity=100;';
-EXEC test.sp_RunTest @Suite,'ZoneUpdate_ConvertToGAWithActiveSeats_Fail59819','ERROR',59819,@SQL;
+EXEC test.sp_RunTest @Suite,'ZoneUpdate_GeneralAdmissionUnsupported_Fail59831','ERROR',59831,@SQL;
 
 -- 59821: hang va so thu tu trong hang phai di cung nhau
 SET @SQL = N'
@@ -553,7 +556,7 @@ SET @SQL = N'
          @SeatRowLabel=''A'', @SeatColumnNumber=0, @NewSeatID=@s OUTPUT;';
 EXEC test.sp_RunTest @Suite,'SeatCreate_ColumnNotPositive_Fail59822','ERROR',59822,@SQL;
 
--- 59823: khong gan duoc vi tri ghe cho khu ve dung
+-- GeneralAdmission khong duoc tao trong phien ban chi ban theo Seat.
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @v INT, @z INT, @s INT;
@@ -562,7 +565,34 @@ SET @SQL = N'
          @ZoneType=''GeneralAdmission'', @ZoneCapacity=100, @NewZoneID=@z OUTPUT;
     EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''S1'', @SeatLabel=N''x'',
          @SeatRowLabel=''A'', @SeatColumnNumber=1, @NewSeatID=@s OUTPUT;';
-EXEC test.sp_RunTest @Suite,'SeatCreate_PositionInGAZone_Fail59823','ERROR',59823,@SQL;
+EXEC test.sp_RunTest @Suite,'SeatCreate_GeneralAdmissionUnsupported_Fail59831','ERROR',59831,@SQL;
+
+-- SeatCode la duy nhat trong Zone, khong phai trong ca Venue.
+-- Cung A1 o hai Zone cua mot Venue phai tao duoc.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z1 INT, @z2 INT, @s1 INT, @s2 INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''SG CodePerZone'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @NewZoneID=@z1 OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z2'', @ZoneName=N''x'', @NewZoneID=@z2 OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z1, @SeatCode=''A1'', @SeatLabel=N''x'',
+         @SeatRowLabel=''A'', @SeatColumnNumber=1, @NewSeatID=@s1 OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z2, @SeatCode=''A1'', @SeatLabel=N''x'',
+         @SeatRowLabel=''A'', @SeatColumnNumber=1, @NewSeatID=@s2 OUTPUT;
+    IF @s1 IS NULL OR @s2 IS NULL THROW 59999, ''A1 phai tao duoc o hai Zone khac nhau.'', 1;';
+EXEC test.sp_RunTest @Suite,'SeatCreate_SameCodeInDifferentZones_OK','SUCCESS',NULL,@SQL;
+
+-- Nhưng trong cùng Zone thì phải trả lỗi nghiệp vụ rõ ràng, kể cả khi vị trí lưới khác.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT, @s1 INT, @s2 INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''SG DuplicateCode'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @NewZoneID=@z OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''A1'', @SeatLabel=N''x'',
+         @SeatRowLabel=''A'', @SeatColumnNumber=1, @NewSeatID=@s1 OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''A1'', @SeatLabel=N''x'',
+         @SeatRowLabel=''B'', @SeatColumnNumber=1, @NewSeatID=@s2 OUTPUT;';
+EXEC test.sp_RunTest @Suite,'SeatCreate_DuplicateCodeInSameZone_Fail58124','ERROR',58124,@SQL;
 
 -- 59824 (qua sp_CreateSeat): trung o luoi voi mot ghe dang hoat dong khac
 SET @SQL = N'
@@ -613,4 +643,132 @@ SET @SQL = N'
          @SeatRowLabel=''A'', @SeatColumnNumber=2, @NewSeatID=@s2 OUTPUT;
     EXEC sp_UpdateSeat @ActorUserID=@adm, @SeatID=@s2, @SeatRowLabel=''A'', @SeatColumnNumber=1;';
 EXEC test.sp_RunTest @Suite,'SeatUpdate_MoveToOccupiedSlot_Fail59824','ERROR',59824,@SQL;
+
+-- Map la mot cap width/height; khong cho phep tao cau hinh nua vo.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM HalfMap'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_PartialMap_Fail59803','ERROR',59803,@SQL;
+
+-- Xoa san khau va xoa map la hai thao tac ro rang, khong dung NULL sentinel.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM Clear'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100,
+         @StageX=40, @StageY=10, @StageWidth=20, @StageHeight=10;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @ClearStage=1;
+    IF EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v AND StageX IS NOT NULL)
+        THROW 59999, ''ClearStage phai xoa tron ven san khau'', 1;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @ClearMap=1;
+    IF EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v
+                 AND (MapWidth IS NOT NULL OR MapHeight IS NOT NULL
+                      OR StageX IS NOT NULL OR StageY IS NOT NULL OR StageWidth IS NOT NULL OR StageHeight IS NOT NULL))
+        THROW 59999, ''ClearMap phai xoa ca map va san khau'', 1;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_ClearStageAndMap_OK','SUCCESS',NULL,@SQL;
+
+-- Khu xoay 45 do co the vuot bien du hop bao truoc xoay van nam trong map.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG RotatedOutside'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
+         @ZoneX=80, @ZoneY=30, @ZoneWidth=20, @ZoneHeight=20, @ZoneRotation=45, @NewZoneID=@z OUTPUT;';
+EXEC test.sp_RunTest @Suite,'ZoneCreate_RotatedOutsideMap_Fail59815','ERROR',59815,@SQL;
+
+-- Stage khong duoc dat de len Zone, va Zone cung khong duoc tao de len Stage.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''VM StageOverlap'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=100, @MapHeight=100;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
+         @ZoneX=10, @ZoneY=10, @ZoneWidth=20, @ZoneHeight=20, @NewZoneID=@z OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v,
+         @StageX=20, @StageY=20, @StageWidth=20, @StageHeight=20;';
+EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_StageOverlapsZone_Fail59820','ERROR',59820,@SQL;
+
+-- Cac khu cung tang la cac vung ban ve rieng, khong duoc chong len nhau.
+-- Tang khac van co the dung cung hinh chieu, vi nguoi mua xem tung tang mot.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z1 INT, @z2 INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG SameLevelOverlap'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=200, @MapHeight=200;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @ZoneLevel=1,
+         @ZoneX=20, @ZoneY=20, @ZoneWidth=60, @ZoneHeight=50, @NewZoneID=@z1 OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z2'', @ZoneName=N''x'', @ZoneLevel=1,
+         @ZoneX=60, @ZoneY=40, @ZoneWidth=60, @ZoneHeight=50, @NewZoneID=@z2 OUTPUT;';
+EXEC test.sp_RunTest @Suite,'ZoneCreate_SameLevelOverlap_Fail59832','ERROR',59832,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z1 INT, @z2 INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG DifferentLevels'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=200, @MapHeight=200;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''L1'', @ZoneName=N''x'', @ZoneLevel=1,
+         @ZoneX=20, @ZoneY=20, @ZoneWidth=60, @ZoneHeight=50, @NewZoneID=@z1 OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''L2'', @ZoneName=N''x'', @ZoneLevel=2,
+         @ZoneX=20, @ZoneY=20, @ZoneWidth=60, @ZoneHeight=50, @NewZoneID=@z2 OUTPUT;
+    IF (SELECT COUNT(*) FROM Zone WHERE ZoneID IN (@z1, @z2)) <> 2
+        THROW 59999, ''Hai khu o hai tang phai duoc phep dung cung hinh chieu'', 1;';
+EXEC test.sp_RunTest @Suite,'ZoneCreate_DifferentLevelsMayOverlap_OK','SUCCESS',NULL,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z1 INT, @z2 INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG UpdateOverlap'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_ConfigureVenueMap @ActorUserID=@adm, @VenueID=@v, @MapWidth=200, @MapHeight=200;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
+         @ZoneX=20, @ZoneY=20, @ZoneWidth=60, @ZoneHeight=50, @NewZoneID=@z1 OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z2'', @ZoneName=N''x'',
+         @ZoneX=120, @ZoneY=20, @ZoneWidth=40, @ZoneHeight=50, @NewZoneID=@z2 OUTPUT;
+    EXEC sp_UpdateZone @ActorUserID=@adm, @ZoneID=@z2, @ZoneX=50, @ZoneY=20, @ZoneWidth=40, @ZoneHeight=50;';
+EXEC test.sp_RunTest @Suite,'ZoneUpdate_SameLevelOverlap_Fail59832','ERROR',59832,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZG InvalidLevel'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @ZoneLevel=0, @NewZoneID=@z OUTPUT;';
+EXEC test.sp_RunTest @Suite,'ZoneCreate_InvalidLevel_Fail59833','ERROR',59833,@SQL;
+
+-- Tao luoi ghe la mot giao dich: thanh cong ghi du ca luoi va loi khong de lai nua luoi.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''SG Batch'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @NewZoneID=@z OUTPUT;
+    EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
+         @SeatsJson=N''[{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"A","seatColumnNumber":1},{"seatCode":"A2","seatLabel":"A2","seatRowLabel":"A","seatColumnNumber":2}]'';
+    IF (SELECT COUNT(*) FROM Seat WHERE ZoneID=@z) <> 2
+        THROW 59999, ''Batch phai tao du hai ghe'', 1;
+    BEGIN TRY
+        EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
+             @SeatsJson=N''[{"seatCode":"B1","seatLabel":"B1","seatRowLabel":"B","seatColumnNumber":1},{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"B","seatColumnNumber":2}]'';
+        THROW 59999, ''Batch trung ma phai bi tu choi'', 1;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() NOT IN (58124, 59999) THROW;
+        IF ERROR_NUMBER() = 59999 THROW;
+    END CATCH;
+    IF EXISTS (SELECT 1 FROM Seat WHERE ZoneID=@z AND SeatCode=''B1'')
+        THROW 59999, ''Batch loi khong duoc de lai ghe da ghi mot phan'', 1;';
+EXEC test.sp_RunTest @Suite,'CreateSeatsBatch_Atomic_OK','SUCCESS',NULL,@SQL;
+
+-- PATCH Seat co the doi rieng cot va van giu hang hien tai.
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT, @s INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''SGU PartialGrid'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @NewZoneID=@z OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''A1'', @SeatLabel=N''x'',
+         @SeatRowLabel=''A'', @SeatColumnNumber=1, @NewSeatID=@s OUTPUT;
+    EXEC sp_UpdateSeat @ActorUserID=@adm, @SeatID=@s, @SeatColumnNumber=2;
+    IF NOT EXISTS (SELECT 1 FROM Seat WHERE SeatID=@s AND SeatRowLabel=''A'' AND SeatColumnNumber=2)
+        THROW 59999, ''PATCH cot phai giu hang hien tai'', 1;';
+EXEC test.sp_RunTest @Suite,'UpdateSeat_PartialGridPosition_OK','SUCCESS',NULL,@SQL;
 GO
