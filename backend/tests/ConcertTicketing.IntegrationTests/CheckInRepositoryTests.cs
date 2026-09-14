@@ -101,4 +101,48 @@ public sealed class CheckInRepositoryTests : IClassFixture<DbFixture>
 
         result.ValidationResult.Should().Be("UNAUTHORIZED");
     }
+
+    [Fact(DisplayName = "Preview: staff được phân công thấy tên khách, vé chưa đổi trạng thái")]
+    public async Task Preview_StaffAssigned_ReturnsAttendeeName_WithoutMutatingTicket()
+    {
+        var (baseline, ticketCode, staff) = await SetupCheckedInTicketAsync(assignStaff: true);
+
+        // VW_CheckInStaffUserAccount lọc theo SESSION_CONTEXT — repo phải mở connection
+        // đóng vai đúng staff đó, y hệt IDbConnectionFactory thật làm theo JWT.
+        var previewRepo = new CheckInRepository(_fx.ApiFactory.AsUser(staff));
+        var preview = await previewRepo.PreviewAsync(new CheckInRequest(ticketCode, baseline.ConcertId));
+
+        preview.Should().NotBeNull();
+        preview!.TicketStatus.Should().Be("Issued", "preview chỉ đọc, không được đổi trạng thái vé");
+        preview.SeatCode.Should().NotBeNullOrEmpty();
+        preview.CategoryName.Should().NotBeNullOrEmpty();
+        preview.DisplayName.Should().NotBeNullOrEmpty();
+
+        // Xác nhận thật sự không mutate: check-in thật ngay sau đó vẫn phải SUCCESS
+        // (nếu Preview lỡ dùng nhầm sp_CheckInTicket, vé đã Used và bước này sẽ ALREADY_USED).
+        var real = await CheckInRepo().CheckInAsync(staff, new CheckInRequest(ticketCode, baseline.ConcertId));
+        real.ValidationResult.Should().Be("SUCCESS");
+    }
+
+    [Fact(DisplayName = "Preview: staff chưa được phân công concert → null (không lộ vé có tồn tại hay không)")]
+    public async Task Preview_StaffNotAssigned_ReturnsNull()
+    {
+        var (baseline, ticketCode, staff) = await SetupCheckedInTicketAsync(assignStaff: false);
+
+        var previewRepo = new CheckInRepository(_fx.ApiFactory.AsUser(staff));
+        var preview = await previewRepo.PreviewAsync(new CheckInRequest(ticketCode, baseline.ConcertId));
+
+        preview.Should().BeNull("nhân viên chưa được phân công không được thấy vé của concert này tồn tại hay không");
+    }
+
+    [Fact(DisplayName = "Preview: mã vé không tồn tại → null")]
+    public async Task Preview_UnknownTicketCode_ReturnsNull()
+    {
+        var (baseline, _, staff) = await SetupCheckedInTicketAsync(assignStaff: true);
+
+        var previewRepo = new CheckInRepository(_fx.ApiFactory.AsUser(staff));
+        var preview = await previewRepo.PreviewAsync(new CheckInRequest("NOPE-DOES-NOT-EXIST", baseline.ConcertId));
+
+        preview.Should().BeNull();
+    }
 }
