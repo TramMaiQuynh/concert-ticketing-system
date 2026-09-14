@@ -4,7 +4,7 @@ import { CHECKIN_RESULT_LABEL } from '../domain/enums';
 import { checkinTone } from '../domain/tone';
 import { formatDateTime } from '../lib/format';
 import { Badge, Button, Card, Alert, Field, Input, PageHeader } from '../components/ui';
-import { IconScan, IconCheck, IconX } from '../components/ui/icons';
+import { IconScan, IconCheck, IconX, IconSearch } from '../components/ui/icons';
 
 /**
  * Màn hình soát vé tại cổng.
@@ -32,6 +32,11 @@ export default function StaffCheckIn() {
   const [history, setHistory] = useState([]);
   const codeRef = useRef(null);
 
+  const [previewCode, setPreviewCode] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [previewError, setPreviewError] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
+
   useEffect(() => { codeRef.current?.focus(); }, []);
 
   const submit = async (e) => {
@@ -58,6 +63,34 @@ export default function StaffCheckIn() {
   };
 
   const ok = result?.validationResult === 'SUCCESS';
+
+  // Tra cứu vé thuộc về ai TRƯỚC khi check-in — không đổi trạng thái vé, tách hẳn
+  // khỏi luồng quét chính bên trên (luồng đó được thiết kế để tự nộp và lấy lại
+  // focus ngay, không thể chen thêm bước xác nhận vào giữa mà không làm chậm nó).
+  // Dùng khi cần xác minh danh tính trước, ví dụ khách khiếu nại vé không phải của
+  // mình hoặc nhân viên muốn kiểm tra trước khi cho qua cổng.
+  const lookup = async (e) => {
+    e.preventDefault();
+    const code = previewCode.trim();
+    const cid = Number(concertId);
+    if (!code || !cid) return;
+
+    setPreviewBusy(true);
+    setPreviewError('');
+    setPreview(null);
+    try {
+      const res = await api.get('/checkin/preview', { params: { ticketCode: code, concertId: cid } });
+      setPreview(res.data);
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        setPreviewError('Không tìm thấy vé này cho sự kiện đang chọn, hoặc bạn chưa được phân công soát vé cho sự kiện đó.');
+      } else {
+        setPreviewError(apiError(err, 'Không tra cứu được vé.'));
+      }
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
 
   return (
     <div className="container" style={{ maxWidth: 640 }}>
@@ -158,6 +191,53 @@ export default function StaffCheckIn() {
           </Button>
         </form>
       </Card>
+
+      {/* ── Tra cứu vé (xem trước, không check-in) ──────────────────────── */}
+      <div style={{ marginTop: 'var(--space-6)' }}>
+        <div className="overline" style={{ marginBottom: 'var(--space-3)' }}>
+          Tra cứu vé (không check-in)
+        </div>
+        <Card>
+          <form className="card__body stack gap-3" onSubmit={lookup}>
+            <Field label="Mã vé cần tra cứu" hint="Xem vé thuộc về ai trước khi cho qua cổng — không làm đổi trạng thái vé.">
+              {(a) => (
+                <Input
+                  {...a}
+                  value={previewCode}
+                  onChange={(e) => setPreviewCode(e.target.value)}
+                  placeholder="Dán hoặc nhập mã vé"
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{ fontFamily: 'ui-monospace, monospace' }}
+                />
+              )}
+            </Field>
+            <Button
+              type="submit" size="md" loading={previewBusy}
+              disabled={!previewCode.trim() || !concertId}
+              icon={<IconSearch size={15} />}
+            >
+              Tra cứu
+            </Button>
+
+            {previewError && <Alert tone="danger">{previewError}</Alert>}
+
+            {preview && (
+              <div className="row wrap gap-4" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 'var(--weight-semibold)' }}>{preview.displayName}</div>
+                  <div className="text-sm text-secondary">
+                    {preview.seatCode}{preview.zoneName ? ` · ${preview.zoneName}` : ''} · {preview.categoryName}
+                  </div>
+                </div>
+                <Badge tone={preview.ticketStatus === 'Issued' ? 'green' : 'neutral'}>
+                  {preview.ticketStatus === 'Issued' ? 'Chưa vào cổng' : preview.ticketStatus}
+                </Badge>
+              </div>
+            )}
+          </form>
+        </Card>
+      </div>
 
       {/* ── Lịch sử phiên làm việc ───────────────────────────────────────── */}
       {history.length > 0 && (
