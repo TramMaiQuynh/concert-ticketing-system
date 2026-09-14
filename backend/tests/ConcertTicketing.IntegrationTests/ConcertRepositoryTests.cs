@@ -1,3 +1,4 @@
+using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Infrastructure.Repositories;
 using ConcertTicketing.IntegrationTests.Infrastructure;
 using FluentAssertions;
@@ -145,5 +146,45 @@ public sealed class ConcertRepositoryTests : IClassFixture<DbFixture>
         seats.Should().Contain(x => x.SeatID == baseline.EventSeatId2 && x.Price == 100000);
         seats.Should().OnlyContain(x => x.InventoryStatus == "Available");
         seats.Should().OnlyContain(x => !string.IsNullOrEmpty(x.CategoryName));
+    }
+
+    [Fact(DisplayName = "ListActivePromotionsAsync: trả promotion đang hiệu lực (VW_ActivePromotions)")]
+    public async Task ListActivePromotions_ReturnsActiveOnes()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+        var adminRepo = new AdminRepository(_fx.ApiFactory);
+
+        var promoId = await adminRepo.CreatePromotionAsync(baseline.AdminUserId, baseline.ConcertId,
+            new CreatePromotionRequest(
+                s.PromotionName, "Giảm 10% cho mọi vé", "PERCENTAGE", 10,
+                DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1),
+                UsageLimit: 100, CodeRequiredFlag: false));
+
+        var promotions = (await Repo().ListActivePromotionsAsync(baseline.ConcertId)).ToList();
+
+        promotions.Should().Contain(x => x.PromotionID == promoId
+            && x.ConcertID == baseline.ConcertId
+            && x.PromotionName == s.PromotionName);
+    }
+
+    [Fact(DisplayName = "ListActivePromotionsAsync: concert Draft không lộ khuyến mãi (endpoint AllowAnonymous)")]
+    public async Task ListActivePromotions_DraftConcert_ReturnsEmpty()
+    {
+        var s = NewSeeder();
+        var baseline = await ConcertBaselineFactory.CreateOnSaleAsync(s);
+        var draftName = $"IT-Concert-{Guid.NewGuid():N}-draftpromo-{_fx.Suffix}";
+        var draftId = await s.CreateConcertDraftAsync(
+            baseline.OrganizerUserId, baseline.ArtistId, baseline.VenueId, concertName: draftName);
+
+        var adminRepo = new AdminRepository(_fx.ApiFactory);
+        await adminRepo.CreatePromotionAsync(baseline.AdminUserId, draftId,
+            new CreatePromotionRequest(
+                s.PromotionName + "-draft", "chưa công bố", "PERCENTAGE", 10,
+                DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1),
+                UsageLimit: 100, CodeRequiredFlag: false));
+
+        (await Repo().ListActivePromotionsAsync(draftId))
+            .Should().BeEmpty("concert Draft chưa công bố không được lộ khuyến mãi ra endpoint công khai");
     }
 }
