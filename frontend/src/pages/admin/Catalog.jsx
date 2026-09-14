@@ -310,8 +310,13 @@ function SeatSection({ isAdmin }) {
   const [zoneId, setZoneId] = useState('');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
+  // Ghế trong khu có ghế BẮT BUỘC có vị trí trên lưới (sp_CreateSeat, 59825): thiếu
+  // vị trí thì sơ đồ dồn mọi ghế về cùng một ô và chúng chồng khít lên nhau.
+  const [row, setRow] = useState('A');
+  const [col, setCol] = useState('1');
 
   const [bulkPrefix, setBulkPrefix] = useState('');
+  const [bulkRow, setBulkRow] = useState('A');
   const [bulkFrom, setBulkFrom] = useState('1');
   const [bulkTo, setBulkTo] = useState('12');
 
@@ -336,6 +341,10 @@ function SeatSection({ isAdmin }) {
         const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
           seatCode,
           seatLabel: seatCode,
+          // Cả loạt nằm trên CÙNG một hàng; số chạy của loạt chính là số thứ tự
+          // trong hàng, nên sơ đồ vẽ ra đúng một dãy ghế liền nhau.
+          seatRowLabel: bulkRow.trim(),
+          seatColumnNumber: i,
         });
         remember({ id: res.data.id, name: seatCode });
         created.push(res.data.id);
@@ -345,6 +354,9 @@ function SeatSection({ isAdmin }) {
   };
 
   const rangeValid = Number(bulkTo) >= Number(bulkFrom) && Number(bulkTo) - Number(bulkFrom) < 200;
+  // Gương lại luật 59821 của sp_CreateSeat: hàng và cột đi thành cặp. Chặn ở đây để
+  // người dùng thấy ngay khi đang gõ, chứ không phải sau một vòng gọi API hỏng.
+  const positionHalfFilled = !row.trim() !== !col.trim();
 
   return (
     <>
@@ -356,9 +368,14 @@ function SeatSection({ isAdmin }) {
               const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
                 seatCode: code.trim(),
                 seatLabel: label.trim() || null,
+                // Bỏ trống cả hai = ghế không có vị trí, chỉ hợp lệ với khu vé đứng.
+                seatRowLabel: row.trim() || null,
+                seatColumnNumber: col.trim() ? Number(col) : null,
               });
               remember({ id: res.data.id, name: code.trim() });
               setCode(''); setLabel('');
+              // Giữ nguyên hàng, tăng cột: tạo liên tiếp A1, A2, A3… không phải gõ lại.
+              if (col.trim()) setCol(String(Number(col) + 1));
               return res.data.id;
             }, (id) => `Đã tạo ghế. ID = ${id}.`);
           }}
@@ -369,10 +386,21 @@ function SeatSection({ isAdmin }) {
               <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={64} required />
             </Field>
             <Field label="Nhãn hiển thị"><input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
+            <Field label="Hàng" hint="Vị trí trên sơ đồ. Khu vé đứng: để trống cả hai ô.">
+              <input value={row} onChange={(e) => setRow(e.target.value)} maxLength={8} />
+            </Field>
+            <Field label="Số thứ tự trong hàng">
+              <input type="number" min="1" value={col} onChange={(e) => setCol(e.target.value)} />
+            </Field>
           </div>
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !zoneId || !code.trim()}>
+          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !zoneId || !code.trim() || positionHalfFilled}>
             {create.busy ? 'Đang tạo…' : 'Tạo một ghế'}
           </button>
+          {positionHalfFilled && (
+            <div className="field-hint" style={{ color: 'var(--warning)' }}>
+              Hàng và số thứ tự đi thành cặp: điền cả hai, hoặc bỏ trống cả hai.
+            </div>
+          )}
           <Banner state={create.state} />
         </form>
 
@@ -388,13 +416,16 @@ function SeatSection({ isAdmin }) {
             <Field label="Tiền tố mã ghế" hint="Ví dụ 'A' sẽ ra A1, A2, A3…" required>
               <input value={bulkPrefix} onChange={(e) => setBulkPrefix(e.target.value)} maxLength={32} required />
             </Field>
+            <Field label="Hàng" hint="Cả loạt nằm trên cùng một hàng của sơ đồ." required>
+              <input value={bulkRow} onChange={(e) => setBulkRow(e.target.value)} maxLength={8} required />
+            </Field>
             <Field label="Từ số"><input type="number" min="1" value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} /></Field>
             <Field label="Đến số"><input type="number" min="1" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} /></Field>
           </div>
           <button
             className="btn-outline"
             style={{ marginTop: '16px' }}
-            disabled={bulk.busy || !zoneId || !bulkPrefix.trim() || !rangeValid}
+            disabled={bulk.busy || !zoneId || !bulkPrefix.trim() || !bulkRow.trim() || !rangeValid}
           >
             {bulk.busy ? 'Đang tạo hàng loạt…' : `Tạo ${Math.max(0, Number(bulkTo) - Number(bulkFrom) + 1)} ghế`}
           </button>
