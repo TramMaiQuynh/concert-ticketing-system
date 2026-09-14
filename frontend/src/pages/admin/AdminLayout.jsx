@@ -5,6 +5,7 @@ import { invalidateCatalog } from '../../lib/adminCatalog';
 import { Button, Card, EmptyState } from '../../components/ui';
 import Catalog from './Catalog';
 import VenueMap from './VenueMap';
+import VenueTemplates from './VenueTemplates';
 import Concerts from './Concerts';
 import Promotions from './Promotions';
 import Users from './Users';
@@ -53,6 +54,9 @@ export default function AdminLayout() {
     // vai trò khác ở tầng database, nên hiện mục này cho Organizer chỉ dẫn họ vào
     // một trang chắc chắn trả 403.
     ...(isAdmin ? [{ to: '/admin/venue-map', label: 'Sơ đồ địa điểm', desc: 'Mặt phẳng, sân khấu, khu, ghế' }] : []),
+    // Chỉ Admin, cùng lý do "Sơ đồ địa điểm" ở trên: mọi sp_ConfigureTemplate*/
+    // sp_CreateVenueTemplate* đều tự chặn vai trò khác ở tầng database (StagePass D.4).
+    ...(isAdmin ? [{ to: '/admin/venue-templates', label: 'Mẫu sơ đồ (Studio)', desc: 'Nhiều tầng, khu đa giác, phiên bản có publish' }] : []),
     { to: '/admin/promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá' },
     { to: '/admin/refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn' },
     { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé, danh sách chờ' },
@@ -114,6 +118,10 @@ export default function AdminLayout() {
           <Route
             path="venue-map"
             element={isAdmin ? <VenueMap /> : <Navigate to="/admin/concerts" replace />}
+          />
+          <Route
+            path="venue-templates"
+            element={isAdmin ? <VenueTemplates /> : <Navigate to="/admin/concerts" replace />}
           />
           <Route path="promotions" element={<Promotions />} />
           <Route path="refunds" element={<Refunds />} />

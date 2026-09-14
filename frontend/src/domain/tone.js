@@ -88,6 +88,11 @@ export function checkinTone(result) {
   return result === 'SUCCESS' ? 'green' : 'red';
 }
 
+// ── StagePass (VenueTemplate/ConcertMapRevision) ────────────────────────────
+export const TEMPLATE_STATUS_TONE = { Active: 'green', Archived: 'neutral' };
+export const VERSION_STATUS_TONE = { Draft: 'amber', Published: 'green', Retired: 'neutral' };
+export const REVISION_STATUS_TONE = { Draft: 'amber', Locked: 'green', Replaced: 'neutral' };
+
 /**
  * Màu bìa sự kiện, sinh từ ID.
  *

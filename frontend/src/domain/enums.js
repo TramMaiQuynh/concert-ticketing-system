@@ -262,6 +262,11 @@ export const DISCOUNT_TYPE_LABEL = {
 /** Grant/Revoke của sp_AssignRole — không phải trạng thái, là hành động. */
 export const RoleAction = { Grant: 'Grant', Revoke: 'Revoke' };
 
+// ── StagePass (VenueTemplate/ConcertMapRevision) — docs/stagepass-architecture.md D.2/D.4/D.5 ──
+export const TemplateStatus = { Active: 'Active', Archived: 'Archived' };
+export const VersionStatus = { Draft: 'Draft', Published: 'Published', Retired: 'Retired' };
+export const RevisionStatus = { Draft: 'Draft', Locked: 'Locked', Replaced: 'Replaced' };
+
 /** Nhãn tiếng Việt dùng chung cho các trạng thái quản trị. */
 export const ADMIN_STATUS_LABEL = {
   Active: 'Đang hoạt động',
@@ -281,6 +286,10 @@ export const ADMIN_STATUS_LABEL = {
   RANDOM: 'RANDOM — bốc ngẫu nhiên',
   Grant: 'Cấp quyền',
   Revoke: 'Thu hồi quyền',
+  // StagePass — Locked/Draft đã có ở trên, dùng chung.
+  Archived: 'Đã lưu trữ',
+  Published: 'Đã công bố (bất biến)',
+  Replaced: 'Đã bị thay thế',
 };
 
 /**

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useConcertOptions, invalidateConcerts } from '../../lib/concertOptions';
@@ -19,6 +19,7 @@ export default function Concerts() {
       <ConcertStatusSection />
       <CategorySection />
       <EventSeatSection />
+      <ConcertMapSection />
       <QueueSection />
       <WaitlistSection />
       <SeatAvailabilitySection />
@@ -568,6 +569,162 @@ function EventSeatSection() {
         </button>
         <Banner state={act.state} />
       </form>
+    </Panel>
+  );
+}
+
+/* ── Sơ đồ ghế StagePass (ConcertMap) ────────────────────────────────────── */
+
+/**
+ * Lớp hình học StagePass (VenueTemplate → snapshot bất biến theo Concert) —
+ * TÁCH BIỆT với "Đưa ghế vào kho vé" ở trên (EventSeat vẫn là nguồn sự thật
+ * duy nhất về giá/tồn kho). Panel này chỉ quản lý vòng đời ConcertMap: tạo →
+ * chụp snapshot từ một VenueTemplateVersion đã Công bố → khoá để dùng bán vé.
+ * Gán ghế thật vào từng ô của sơ đồ (sp_AddEventSeats tích hợp với
+ * ConcertMapRevisionSeat) là việc của D.5 tiếp theo, chưa nằm trong panel này.
+ */
+function ConcertMapSection() {
+  const { options } = useConcertOptions();
+  const act = useAction();
+  const [concertId, setConcertId] = useState('');
+  const [map, setMap] = useState(null);
+  const [loadingMap, setLoadingMap] = useState(false);
+  const [revisions, setRevisions] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [templateId, setTemplateId] = useState('');
+  const [versions, setVersions] = useState([]);
+  const [sourceVersionId, setSourceVersionId] = useState('');
+
+  const venueId = options.find((o) => String(o.id) === String(concertId))?.raw.venueID;
+
+  const loadMap = async (cid) => {
+    if (!cid) { setMap(null); setRevisions([]); return; }
+    setLoadingMap(true);
+    try {
+      let mapData = null;
+      try {
+        const res = await api.get(`/admin/concerts/${cid}/map`);
+        mapData = res.data;
+      } catch (err) {
+        if (err.response?.status !== 404) throw err;
+      }
+      setMap(mapData);
+      if (mapData) {
+        const rev = await api.get(`/admin/concert-maps/${mapData.concertMapID}/revisions`);
+        setRevisions(Array.isArray(rev.data) ? rev.data : []);
+      } else {
+        setRevisions([]);
+      }
+    } finally {
+      setLoadingMap(false);
+    }
+  };
+
+  useEffect(() => { loadMap(concertId); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [concertId]);
+
+  useEffect(() => {
+    setTemplateId(''); setVersions([]); setSourceVersionId('');
+    if (!venueId) { setTemplates([]); return; }
+    api.get(`/admin/venues/${venueId}/templates`).then((res) => setTemplates(Array.isArray(res.data) ? res.data : []));
+  }, [venueId]);
+
+  useEffect(() => {
+    setSourceVersionId('');
+    if (!templateId) { setVersions([]); return; }
+    api.get(`/admin/templates/${templateId}/versions`)
+      .then((res) => setVersions((Array.isArray(res.data) ? res.data : []).filter((v) => v.versionStatus === 'Published')));
+  }, [templateId]);
+
+  const hasOpenDraft = revisions.some((r) => r.revisionStatus === 'Draft');
+
+  return (
+    <Panel
+      title="Sơ đồ ghế StagePass (ConcertMap)"
+      tone="inventory"
+      subtitle="Chụp snapshot BẤT BIẾN từ một Mẫu sơ đồ (VenueTemplate) đã Công bố — quản trị mẫu sơ đồ ở trang 'Mẫu sơ đồ (Studio)'."
+    >
+      <IdPicker label="Concert" items={options} value={concertId} onChange={setConcertId} />
+
+      {concertId && (loadingMap ? <p className="field-hint">Đang tải…</p> : (
+        <div style={{ marginTop: '16px' }}>
+          {!map ? (
+            <button
+              className="btn-primary"
+              disabled={act.busy}
+              onClick={() => act.run(async () => {
+                await api.post(`/admin/concerts/${Number(concertId)}/map`);
+                await loadMap(concertId);
+              }, 'Đã tạo ConcertMap.')}
+            >
+              {act.busy ? 'Đang tạo…' : 'Tạo ConcertMap cho Concert này'}
+            </button>
+          ) : (
+            <>
+              <p className="field-hint">ConcertMap #{map.concertMapID}.</p>
+
+              {revisions.length > 0 && (
+                <table className="data" style={{ marginTop: '8px', marginBottom: '12px' }}>
+                  <thead><tr><th>Revision</th><th>Trạng thái</th><th /></tr></thead>
+                  <tbody>
+                    {revisions.map((r) => (
+                      <tr key={r.concertMapRevisionID}>
+                        <td>#{r.revisionNumber}</td>
+                        <td>{ADMIN_STATUS_LABEL[r.revisionStatus] ?? r.revisionStatus}</td>
+                        <td>
+                          {r.revisionStatus === 'Draft' && (
+                            <button
+                              type="button" className="btn-outline"
+                              disabled={act.busy}
+                              onClick={() => act.run(async () => {
+                                await api.post(`/admin/concert-map-revisions/${r.concertMapRevisionID}/lock`);
+                                await loadMap(concertId);
+                              }, 'Đã khoá — sẵn sàng dùng sơ đồ này.')}
+                            >
+                              Khoá (Lock)
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {!hasOpenDraft && (
+                <div className="field-grid">
+                  <Field label="Mẫu sơ đồ">
+                    <Select
+                      value={templateId} onChange={setTemplateId}
+                      options={templates.map((t) => String(t.venueTemplateID))}
+                      labels={Object.fromEntries(templates.map((t) => [String(t.venueTemplateID), t.templateName]))}
+                      allowEmpty emptyLabel="— chọn mẫu —"
+                    />
+                  </Field>
+                  <Field label="Version đã công bố" hint={templateId && versions.length === 0 ? 'Mẫu này chưa có version nào được công bố.' : undefined}>
+                    <Select
+                      value={sourceVersionId} onChange={setSourceVersionId}
+                      options={versions.map((v) => String(v.venueTemplateVersionID))}
+                      labels={Object.fromEntries(versions.map((v) => [String(v.venueTemplateVersionID), `v${v.versionNumber}`]))}
+                      allowEmpty emptyLabel="— chọn version —"
+                    />
+                  </Field>
+                  <button
+                    className="btn-primary" style={{ marginTop: '20px' }}
+                    disabled={act.busy || !sourceVersionId}
+                    onClick={() => act.run(async () => {
+                      await api.post(`/admin/concert-maps/${map.concertMapID}/revisions`, { sourceVenueTemplateVersionID: Number(sourceVersionId) });
+                      await loadMap(concertId);
+                    }, 'Đã chụp snapshot — kiểm tra rồi bấm Khoá để dùng cho việc bán vé.')}
+                  >
+                    {act.busy ? 'Đang chụp…' : 'Chụp snapshot (tạo Revision)'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+      <Banner state={act.state} />
     </Panel>
   );
 }
