@@ -187,6 +187,13 @@ GRANT SELECT ON dbo.Refund                     TO api_service;
 GRANT SELECT ON dbo.CheckIn                    TO api_service;
 GRANT SELECT ON dbo.WaitlistEntryEventSeatAllocation TO api_service;
 
+-- VW_ActivePromotions: KHONG loc theo SESSION_CONTEXT (khong phai RLS) - chi loc theo
+-- PromotionStatus/StartDatetime/EndDatetime cua Promotion, du lieu cong khai giong het
+-- Concert/EventSeat o tren. Endpoint GET /concerts/{id}/promotions la [AllowAnonymous],
+-- ConcertRepository.ListActivePromotionsAsync tu loc them Concert chua o trang thai
+-- Draft (PublicConcertFilter) truoc khi tra ve.
+GRANT SELECT ON dbo.VW_ActivePromotions TO api_service;
+
 -- Quyen doc cac View bao cao. Moi view duoi day tu loc pham vi bang
 -- SESSION_CONTEXT(N'UserID') nen cap cho api_service khong lam mat gioi han du lieu:
 -- phien khong du dieu kien chi nhan 0 dong (fail-closed).
@@ -195,6 +202,7 @@ GRANT SELECT ON dbo.VW_CheckInReport           TO api_service;
 GRANT SELECT ON dbo.VW_CustomerBookingHistory  TO api_service;
 GRANT SELECT ON dbo.VW_WaitlistQueue           TO api_service;
 GRANT SELECT ON dbo.VW_ConcertAttendeeList     TO api_service;
+GRANT SELECT ON dbo.VW_CheckInStaffUserAccount TO api_service;
 
 -- VW_AuditTrail (FR59/FR59a): truoc day bi REVOKE voi ly do "grant view se vuot DENY
 -- tren bang AuditRecord qua ownership chaining". Ly do do DUNG - da do thuc nghiem -
