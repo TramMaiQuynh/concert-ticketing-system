@@ -92,4 +92,14 @@ public class ConcertController : ControllerBase
         var zone = await _concertRepository.GetSeatMapZoneAsync(id, zoneId);
         return zone is null ? NotFound() : Ok(zone);
     }
+
+    /// <summary>Khuyến mãi đang trong hiệu lực của concert — khách xem trước khi đặt vé.</summary>
+    [HttpGet("{id:int}/promotions")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IEnumerable<ActivePromotion>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActivePromotions(int id)
+    {
+        var promotions = await _concertRepository.ListActivePromotionsAsync(id);
+        return Ok(promotions);
+    }
 }
