@@ -4,7 +4,7 @@
 -- hoac app_checkinstaff, thi ActorUserID truyen vao cac SP
 -- va ghi vao AuditRecord phai khop voi SESSION_CONTEXT(N'UserID').
 -- ============================================================
-CREATE OR ALTER TRIGGER dbo.TRG_AuditRecord_SecurityGuard
+CREATE OR ALTER TRIGGER TRG_AuditRecord_SecurityGuard
 ON dbo.AuditRecord
 AFTER INSERT
 AS
