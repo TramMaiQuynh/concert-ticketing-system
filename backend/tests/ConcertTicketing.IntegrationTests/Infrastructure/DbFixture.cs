@@ -112,6 +112,28 @@ public sealed partial class DbFixture : IAsyncLifetime
         return await conn.QuerySingleOrDefaultAsync<T>(sql, param);
     }
 
+    /// <summary>
+    /// Chèn một dòng và trả về khoá do CHÍNH lệnh chèn đó sinh ra.
+    ///
+    /// Vì sao cần: seeder trước đây chèn xong rồi truy vấn lại theo khoá tự nhiên
+    /// (tên nghệ sĩ, tên địa điểm, tên concert…). Cách đó chỉ đúng khi tên chắc chắn
+    /// duy nhất ở MỌI lần gọi — một điều kiện không có gì bảo đảm, vì các bảng này
+    /// không có UNIQUE trên tên. Gọi cùng một phương thức seeder hai lần trong một
+    /// test là đủ để sinh hai dòng trùng tên, và truy vấn "lấy một dòng" khi đó ném
+    /// "Sequence contains more than one element" ngay ở bước dựng dữ liệu — test chết
+    /// trước khi kiểm tra được thứ nó định kiểm tra.
+    ///
+    /// SCOPE_IDENTITY() trả về đúng khoá vừa sinh trong phạm vi lệnh này, không phụ
+    /// thuộc dữ liệu sẵn có, nên loại bỏ hẳn lớp lỗi đó thay vì né nó bằng cách đặt
+    /// tên khác nhau ở từng chỗ gọi.
+    /// </summary>
+    public async Task<int> InsertAdminAsync(string sql, object? param = null)
+    {
+        await using var conn = new SqlConnection(AdminConnectionString);
+        return await conn.QuerySingleAsync<int>(
+            sql + "\nSELECT CAST(SCOPE_IDENTITY() AS INT);", param);
+    }
+
     public async Task<List<T>> QueryAdminListAsync<T>(string sql, object? param = null)
     {
         await using var conn = new SqlConnection(AdminConnectionString);
