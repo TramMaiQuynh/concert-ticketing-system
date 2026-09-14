@@ -91,11 +91,21 @@ public sealed class ReportingViewRepositoryTests : IClassFixture<DbFixture>
 
         var repo = RepoAs(baseline.AdminUserId);
 
-        (await repo.QueryAuditTrailAsync(new AuditQueryRequest(From: before)))
+        // Lọc theo ĐÚNG tác nhân của bài test này. Trước đây hai khẳng định dưới đây
+        // không có ActorUserId nên chúng xét TOÀN BỘ bảng nhật ký — chỉ đúng khi
+        // database vừa deploy sạch. Nhật ký là bất biến (BR50) và dọn dẹp sau test cố
+        // ý không xoá dòng do tác nhân 'system' ghi, nên chỉ cần một tiến trình nền
+        // từng chạy (ví dụ bài test waitlist gọi sp_ReleaseExpiredHolds) là lần chạy
+        // thứ hai của bộ test sẽ đỏ. Khách hàng ở đây do seeder tạo mới hoàn toàn nên
+        // chắc chắn không có sự kiện nào trước mốc @before — biên nửa mở vẫn được
+        // kiểm chứng nguyên vẹn, nhưng không còn phụ thuộc trạng thái toàn cục.
+        (await repo.QueryAuditTrailAsync(
+                new AuditQueryRequest(ActorUserId: baseline.CustomerUserId, From: before)))
             .Should().NotBeEmpty("sự kiện vừa sinh ra phải nằm trong khoảng đang mở");
 
-        (await repo.QueryAuditTrailAsync(new AuditQueryRequest(To: before)))
-            .Should().BeEmpty("không sự kiện nào xảy ra trước mốc đó trong bài test này");
+        (await repo.QueryAuditTrailAsync(
+                new AuditQueryRequest(ActorUserId: baseline.CustomerUserId, To: before)))
+            .Should().BeEmpty("khách hàng này vừa được tạo, không thể có sự kiện trước mốc đó");
     }
 
     // ── VW_WaitlistQueue ─────────────────────────────────────────────────────
