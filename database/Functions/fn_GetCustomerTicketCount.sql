@@ -8,7 +8,7 @@ GO
 -- trong sp_CreateBooking.
 -- Tra ve: INT - so luong EventSeat dang duoc giu/mua.
 -- ============================================================
-CREATE FUNCTION dbo.fn_GetCustomerTicketCount
+CREATE OR ALTER FUNCTION dbo.fn_GetCustomerTicketCount
 (
     @CustomerUserID INT,
     @ConcertID      INT
