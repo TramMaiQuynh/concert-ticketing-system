@@ -297,6 +297,26 @@ BEGIN
             SET    EntryStatus = 'Fulfilled',
                    ResultingBookingID = @NewBookingID
             WHERE  WaitlistEntryID = @WaitlistEntryID;
+
+            -- Giai phong Waitlist Allocation: tu thoi diem nay quyen giu ghe da
+            -- chuyen han sang BookingEventSeatAllocation vua tao o buoc 7 - ban
+            -- ghi Waitlist Allocation het vai tro nhung khong co co che nao khac
+            -- se dat lai no ve Released, vi WaitlistEntry da la Fulfilled (trang
+            -- thai ket thuc, khong con lan chuyen doi nao nua sau day). Neu bo
+            -- qua buoc nay: khi Booking nay sau do Expired hoac bi huy, EventSeat
+            -- quay lai 'OnHoldForWaitlist' (vi van con WaitlistEntry Active khac
+            -- cung TicketCategory), nhung sp_AllocateWaitlist vinh vien bo qua
+            -- dung ghe nay vi dieu kien
+            -- `NOT EXISTS (...WaitlistEntryEventSeatAllocation...AllocationStatus='Active')`
+            -- luon sai (dong cu cua entry da Fulfilled van con Active) - ghe bi
+            -- ket vinh vien, khong ai dat lai duoc ca qua luong thuong lan waitlist.
+            -- Dung @HoldStart (thoi diem tao Booking nay) cho ReleaseTimestamp vi
+            -- day chinh xac la moc quyen giu ghe duoc chuyen giao.
+            UPDATE WaitlistEntryEventSeatAllocation
+            SET    AllocationStatus = 'Released',
+                   ReleaseTimestamp = @HoldStart
+            WHERE  WaitlistEntryID = @WaitlistEntryID
+              AND  AllocationStatus = 'Active';
         END
 
         DROP TABLE #SeatRequests;
