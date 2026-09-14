@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api, { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import {
-  QueueEntryStatus, WaitlistEntryStatus,
+  QueueEntryStatus, WaitlistEntryStatus, DiscountType,
   CONCERT_STATUS_LABEL, QUEUE_STATUS_LABEL, WAITLIST_STATUS_LABEL,
   SEAT_LEGEND, SELECTED_PSEUDO_STATUS, canPurchase, isSeatSelectable, Role,
 } from '../domain/enums';
@@ -40,6 +40,7 @@ export default function Concert() {
 
   const [queueEntry, setQueueEntry] = useState(null);
   const [waitlistEntry, setWaitlistEntry] = useState(null);
+  const [promotions, setPromotions] = useState([]);
 
   /**
    * So do hinh hoc cua dia diem.
@@ -105,6 +106,11 @@ export default function Concert() {
         if (!alive) return;
         setConcert(detail.data);
         await loadSeats();
+        // Khuyến mãi công khai (VW_ActivePromotions), không chặn phần còn lại của
+        // trang nếu lỗi — đây chỉ là thông tin tham khảo, không phải luồng chính.
+        api.get(`/concerts/${concertId}/promotions`)
+          .then((res) => { if (alive) setPromotions(Array.isArray(res.data) ? res.data : []); })
+          .catch(() => {});
       } catch (err) {
         if (alive) setError(apiError(err, 'Không tải được thông tin sự kiện.'));
       } finally {
@@ -292,6 +298,31 @@ export default function Concert() {
       </Card>
 
       {error && <div style={{ marginBottom: 'var(--space-5)' }}><Alert tone="danger">{error}</Alert></div>}
+
+      {/* ── Khuyến mãi đang áp dụng ──────────────────────────────────────── */}
+      {promotions.length > 0 && (
+        <Panel
+          title="Khuyến mãi đang áp dụng"
+          subtitle="Ưu đãi còn hiệu lực cho sự kiện này."
+        >
+          <div className="stack gap-4">
+            {promotions.map((p) => (
+              <div key={p.promotionID} className="row wrap gap-3" style={{ justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 'var(--weight-semibold)' }}>{p.promotionName}</div>
+                  {p.promotionDescription && (
+                    <div className="text-sm text-secondary">{p.promotionDescription}</div>
+                  )}
+                </div>
+                <div className="row gap-2 wrap" style={{ alignItems: 'center' }}>
+                  <Badge tone="green" size="lg">{formatDiscount(p)}</Badge>
+                  {p.codeRequiredFlag && <Badge tone="neutral">Cần nhập mã</Badge>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       {/* ── Hàng đợi truy cập công bằng ──────────────────────────────────── */}
       {purchasable && needsAdmission && (
@@ -583,6 +614,12 @@ export default function Concert() {
       )}
     </div>
   );
+}
+
+function formatDiscount(promotion) {
+  return promotion.discountType === DiscountType.Percentage
+    ? `Giảm ${promotion.discountValue}%`
+    : `Giảm ${formatMoney(promotion.discountValue)}`;
 }
 
 function ConcertSkeleton() {
