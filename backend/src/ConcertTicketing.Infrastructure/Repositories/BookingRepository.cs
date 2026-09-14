@@ -5,6 +5,7 @@ using ConcertTicketing.Application.DTOs;
 using ConcertTicketing.Domain.Models;
 
 using ConcertTicketing.Application.Interfaces;
+using ConcertTicketing.Application.Services;
 
 namespace ConcertTicketing.Infrastructure.Repositories;
 
@@ -158,11 +159,25 @@ public class BookingRepository : IBookingRepository
               AND p.PromotionStatus = 'Active'
               AND p.ConcertID = (SELECT ConcertID FROM Booking WHERE BookingID = @BookingID AND CustomerUserID = @CustomerUserID)";
               
-        var codeInfo = await conn.QuerySingleOrDefaultAsync<dynamic>(sqlLookup, 
-            new { DiscountCode = discountCode, BookingID = bookingId, CustomerUserID = customerUserId });
+        // QuerySingleOrDefault NÉM khi có nhiều hơn một dòng, và nhiều dòng là trạng
+        // thái database CHO PHÉP: UNIQUE(PromotionID, CodeValue) chỉ duy nhất trong một
+        // Promotion, nên hai Promotion Active của cùng Concert từng cùng đặt được một
+        // mã. Khi đó lời gọi này ném ra ngoài và người dùng nhận HTTP 500 trắng thay vì
+        // một thông báo hiểu được. sp_CreateDiscountCode (58604) nay đã chặn từ gốc,
+        // nhưng dữ liệu tạo ra TRƯỚC luật đó vẫn còn, nên đọc cả tập rồi tự quyết định.
+        var matches = (await conn.QueryAsync<dynamic>(sqlLookup,
+            new { DiscountCode = discountCode, BookingID = bookingId, CustomerUserID = customerUserId }))
+            .ToList();
 
-        if (codeInfo == null)
+        if (matches.Count == 0)
             throw new ArgumentException("Mã giảm giá không hợp lệ hoặc không áp dụng cho booking này.");
+
+        if (matches.Count > 1)
+            throw new AmbiguousDiscountCodeException(
+                "Mã giảm giá này đang trùng ở nhiều chương trình khuyến mãi của sự kiện. "
+                + "Hệ thống không tự chọn thay bạn được — vui lòng liên hệ ban tổ chức.");
+
+        var codeInfo = matches[0];
 
         var p = new DynamicParameters();
         p.Add("@BookingID",    bookingId,    DbType.Int32);
