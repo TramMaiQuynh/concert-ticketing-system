@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import api from '../../api/client';
 import { useCatalog } from '../../lib/localCatalog';
-import { invalidateCatalog } from '../../lib/adminCatalog';
+import { useArtists, useVenues } from '../../lib/adminCatalog';
 import { Field, Select, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
 import {
   ArtistStatus, VenueStatus, ZoneStatus, SeatStatus, ADMIN_STATUS_LABEL,
@@ -32,7 +32,12 @@ export default function Catalog({ isAdmin }) {
 /* ── Nghệ sĩ ─────────────────────────────────────────────────────────────── */
 
 function ArtistSection({ isAdmin }) {
-  const { items, remember } = useCatalog('artist');
+  // Đọc thật từ CSDL (GET /admin/artists), không phải sổ tay localStorage: trước đây
+  // trang này tự tạo nghệ sĩ xong lại KHÔNG hiện nó ra sau khi tải lại trang hay xoá
+  // sổ tay — trong khi Concerts.jsx đã dùng đúng nguồn này để chọn nghệ sĩ khi tạo
+  // concert. Cùng một dữ liệu, hai nguồn khác nhau là lỗi, không phải lựa chọn.
+  const artists = useArtists();
+  const items = artists.items;
   const create = useAction();
   const update = useAction();
 
@@ -51,10 +56,9 @@ function ArtistSection({ isAdmin }) {
         artistName: name.trim(),
         artistDescription: desc.trim() || null,
       });
-      remember({ id: res.data.id, name: name.trim() });
-      // Danh mục đọc từ máy chủ có bộ nhớ đệm; không bỏ đệm thì nghệ sĩ vừa tạo
-      // sẽ không xuất hiện ở ô chọn của form tạo concert cho tới khi tải lại trang.
-      invalidateCatalog('artists');
+      // Nạp lại ngay từ máy chủ thay vì tự chèn vào state cục bộ: nguồn sự thật duy
+      // nhất bây giờ là CSDL, và POST đã commit xong trước khi trả response.
+      artists.reload();
       setName(''); setDesc('');
       return res.data.id;
     }, (id) => `Đã tạo nghệ sĩ. ID = ${id} — đã có trong danh mục để chọn khi tạo concert.`);
@@ -69,7 +73,7 @@ function ArtistSection({ isAdmin }) {
         artistDescription: editDesc.trim() || null,
         artistStatus: editStatus || null,
       });
-      if (editName.trim()) remember({ id: Number(editId), name: editName.trim() });
+      artists.reload();
       return Number(editId);
     }, (id) => `Đã cập nhật nghệ sĩ #${id}.`);
   };
@@ -94,7 +98,10 @@ function ArtistSection({ isAdmin }) {
           </button>
           <Banner state={create.state} />
         </form>
-        {items.length > 0 && <Recent items={items} label="nghệ sĩ" />}
+        {items.length > 0 && (
+          <Recent items={items} label="nghệ sĩ"
+                  caption={`${items.length} nghệ sĩ trong hệ thống (đọc từ CSDL)`} />
+        )}
       </Panel>
 
       {isAdmin && (
@@ -128,7 +135,9 @@ function ArtistSection({ isAdmin }) {
 /* ── Địa điểm ────────────────────────────────────────────────────────────── */
 
 function VenueSection({ isAdmin }) {
-  const { items, remember } = useCatalog('venue');
+  // Đọc thật từ CSDL — cùng lý do như ArtistSection ở trên.
+  const venuesDb = useVenues();
+  const items = venuesDb.items;
   const create = useAction();
   const update = useAction();
 
@@ -151,8 +160,7 @@ function VenueSection({ isAdmin }) {
                 venueName: name.trim(),
                 address: address.trim() || null,
               });
-              remember({ id: res.data.id, name: name.trim() });
-              invalidateCatalog('venues');
+              venuesDb.reload();
               setName(''); setAddress('');
               return res.data.id;
             }, (id) => `Đã tạo địa điểm. ID = ${id}. Bước tiếp theo: tạo khu, tạo ghế, `
@@ -172,7 +180,10 @@ function VenueSection({ isAdmin }) {
           </button>
           <Banner state={create.state} />
         </form>
-        {items.length > 0 && <Recent items={items} label="địa điểm" />}
+        {items.length > 0 && (
+          <Recent items={items} label="địa điểm"
+                  caption={`${items.length} địa điểm trong hệ thống (đọc từ CSDL)`} />
+        )}
       </Panel>
 
       {isAdmin && (
@@ -189,7 +200,7 @@ function VenueSection({ isAdmin }) {
                   address: editAddress.trim() || null,
                   venueStatus: editStatus || null,
                 });
-                if (editName.trim()) remember({ id: Number(editId), name: editName.trim() });
+                venuesDb.reload();
                 return Number(editId);
               }, (id) => `Đã cập nhật địa điểm #${id}.`);
             }}
@@ -217,7 +228,11 @@ function VenueSection({ isAdmin }) {
 /* ── Khu vực ─────────────────────────────────────────────────────────────── */
 
 function ZoneSection({ isAdmin }) {
-  const venues = useCatalog('venue');
+  // Ô "Thuộc địa điểm" đọc CSDL — cùng lý do như ArtistSection/VenueSection.
+  // Bản thân Zone thì CHƯA có đường đọc phẳng (chỉ có GET theo từng địa điểm), nên
+  // danh mục Khu vực để sửa/chọn tiếp ở đây vẫn phải dùng sổ tay — xem ghi chú ở
+  // đầu file localCatalog.js.
+  const venues = useVenues();
   const { items, remember } = useCatalog('zone');
   const create = useAction();
   const update = useAction();
@@ -496,11 +511,11 @@ function SeatSection({ isAdmin }) {
 
 /* ── Danh sách vừa tạo ───────────────────────────────────────────────────── */
 
-function Recent({ items, label }) {
+function Recent({ items, label, caption }) {
   return (
     <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-        {items.length} {label} đã tạo từ trình duyệt này
+        {caption ?? `${items.length} ${label} đã tạo từ trình duyệt này`}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
         {items.slice(0, 24).map((it) => (
