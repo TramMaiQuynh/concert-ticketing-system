@@ -57,6 +57,23 @@ BEGIN
         IF @NewStatus = 'Draft' AND @OldStatus <> 'Draft'
             THROW 59604, 'sp_UpdatePromotionStatus: Khong the dua Promotion da cong bo tro lai Draft - dung Disabled de ngung phat hanh.', 1;
 
+        -- Bat mot Promotion khong duoc lam bat kem theo mot ma dang trung voi Promotion
+        -- Active khac cua cung Concert: khi ay khach go ma do se roi vao hai chuong trinh
+        -- cung luc va he thong khong chon duoc (xem sp_CreateDiscountCode, 58604).
+        IF @NewStatus = 'Active' AND EXISTS (
+            SELECT 1
+            FROM   DiscountCode dcMine
+            JOIN   DiscountCode dcOther ON dcOther.CodeValue      = dcMine.CodeValue
+                                       AND dcOther.DiscountCodeID <> dcMine.DiscountCodeID
+                                       AND dcOther.CodeStatus      = 'Active'
+            JOIN   Promotion    pOther  ON pOther.PromotionID      = dcOther.PromotionID
+                                       AND pOther.PromotionStatus  = 'Active'
+            WHERE  dcMine.PromotionID = @PromotionID
+              AND  dcMine.CodeStatus  = 'Active'
+              AND  pOther.ConcertID   = (SELECT ConcertID FROM Promotion WHERE PromotionID = @PromotionID)
+        )
+            THROW 59605, 'sp_UpdatePromotionStatus: Promotion nay co ma trung voi mot Promotion Active khac cua cung Concert.', 1;
+
         UPDATE Promotion SET PromotionStatus = @NewStatus WHERE PromotionID = @PromotionID;
 
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
