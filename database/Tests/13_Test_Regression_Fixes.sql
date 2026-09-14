@@ -831,6 +831,64 @@ SET @SQL = N'
         THROW 50000,''Phai dat han su dung co hoi'',1;';
 EXEC test.sp_RunTest @Suite,'AllocateWaitlist_GrantsFullQuantity','SUCCESS',NULL,@SQL;
 
+-- sp_CreateBooking (luong Waitlist) phai giai phong WaitlistEntryEventSeatAllocation
+-- ngay khi WaitlistEntry chuyen Fulfilled. Neu khong, khi Booking tao ra tu co hoi
+-- do sau nay Expired, EventSeat quay lai OnHoldForWaitlist nhung dong Allocation cu
+-- (da het vai tro) van con Active se khien sp_AllocateWaitlist vinh vien coi ghe la
+-- "da co nguoi giu" - khong ai dat lai duoc ghe do nua, ca qua luong thuong lan
+-- qua luong waitlist.
+SET @SQL = N'
+    DECLARE @adm  INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @u1   INT=(SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @u2   INT=(SELECT UserID FROM UserAccount WHERE Username=''test_cust2'');
+    DECLARE @cid  INT=(SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @cat  INT=(SELECT TOP 1 TicketCategoryID FROM TicketCategory WHERE ConcertID=@cid);
+    DECLARE @wid INT, @e1 INT, @e2 INT, @esid INT, @bid INT;
+
+    UPDATE Concert SET WaitlistEnabled=1 WHERE ConcertID=@cid;
+    EXEC sp_ConfigureWaitlist @ActorUserID=@adm, @ConcertID=@cid, @AllocationPolicy=''FIFO'';
+    SET @wid=(SELECT WaitlistID FROM Waitlist WHERE ConcertID=@cid);
+    DELETE FROM WaitlistEntry WHERE WaitlistID=@wid;
+
+    -- Chi con dung 1 ghe Available trong Category de kich ban de kiem soat
+    UPDATE EventSeat SET InventoryStatus=''Unavailable''
+    WHERE ConcertID=@cid AND TicketCategoryID=@cat AND InventoryStatus=''Available''
+      AND EventSeatID NOT IN (SELECT TOP 1 EventSeatID FROM EventSeat
+                              WHERE ConcertID=@cid AND TicketCategoryID=@cat AND InventoryStatus=''Available''
+                              ORDER BY EventSeatID);
+    SET @esid=(SELECT EventSeatID FROM EventSeat WHERE ConcertID=@cid AND TicketCategoryID=@cat AND InventoryStatus=''Available'');
+
+    INSERT INTO WaitlistEntry (WaitlistID,CustomerUserID,TicketCategoryID,RequestedQuantity,JoinedTimestamp,QueuePosition,EntryStatus)
+    VALUES (@wid,@u1,@cat,1,DATEADD(minute,-10,SYSDATETIME()),1,''Active'');
+    SET @e1=SCOPE_IDENTITY();
+    EXEC sp_AllocateWaitlist @ConcertID=@cid;
+    IF (SELECT EntryStatus FROM WaitlistEntry WHERE WaitlistEntryID=@e1) <> ''Granted''
+        THROW 50000,''Setup: entry 1 phai duoc Granted co hoi'',1;
+
+    -- Khach 1 dung co hoi de dat ve
+    EXEC sp_CreateBooking @CustomerUserID=@u1, @ConcertID=@cid, @SeatList=NULL, @WaitlistEntryID=@e1, @NewBookingID=@bid OUTPUT;
+
+    IF (SELECT EntryStatus FROM WaitlistEntry WHERE WaitlistEntryID=@e1) <> ''Fulfilled''
+        THROW 50000,''Setup: entry 1 phai chuyen Fulfilled sau khi dat ve'',1;
+    IF (SELECT COUNT(*) FROM WaitlistEntryEventSeatAllocation
+        WHERE WaitlistEntryID=@e1 AND AllocationStatus=''Active'') <> 0
+        THROW 50000,''sp_CreateBooking phai giai phong Waitlist Allocation ngay khi Fulfilled'',1;
+
+    -- Khach 1 khong thanh toan -> hold het han; dong thoi khach 2 xep hang cho ghe nay
+    UPDATE Booking SET HoldStartDatetime=DATEADD(MINUTE,-30,SYSDATETIME()), HoldExpiryDatetime=DATEADD(MINUTE,-1,SYSDATETIME()) WHERE BookingID=@bid;
+    INSERT INTO WaitlistEntry (WaitlistID,CustomerUserID,TicketCategoryID,RequestedQuantity,JoinedTimestamp,QueuePosition,EntryStatus)
+    VALUES (@wid,@u2,@cat,1,SYSDATETIME(),2,''Active'');
+    SET @e2=SCOPE_IDENTITY();
+
+    EXEC sp_ReleaseExpiredHolds @ConcertID=@cid;
+    IF (SELECT InventoryStatus FROM EventSeat WHERE EventSeatID=@esid) <> ''OnHoldForWaitlist''
+        THROW 50000,''Setup: ghe phai quay lai OnHoldForWaitlist cho waitlist ke tiep'',1;
+
+    EXEC sp_AllocateWaitlist @ConcertID=@cid;
+    IF (SELECT EntryStatus FROM WaitlistEntry WHERE WaitlistEntryID=@e2) <> ''Granted''
+        THROW 50000,''Ghe bi ket vinh vien: khach ke tiep trong waitlist phai duoc Granted lai dung ghe da nha ra'',1;';
+EXEC test.sp_RunTest @Suite,'CreateBooking_FromWaitlist_ReleasesAllocation_SeatReusableAfterExpiry','SUCCESS',NULL,@SQL;
+
 -- @MaxEntriesPerRun gioi han dung khoi luong moi lan chay
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
@@ -957,6 +1015,107 @@ SET @SQL = N'
 
     DROP TABLE #g;';
 EXEC test.sp_RunTest @Suite,'Promotion_StackingOrder_FollowsCreationOrder','SUCCESS',NULL,@SQL;
+
+-- sp_CheckInTicket: khoi CATCH truoc day co dangling-else (IF @TranCounter = 0
+-- IF @@TRANCOUNT > 0 ROLLBACK...; ELSE IF XACT_STATE()... khong BEGIN/END) khien
+-- ELSE gan nham vao IF long ben trong. Khi SP duoc goi long trong mot transaction
+-- co san (dung nhu trang thai test.sp_RunTest tao ra bang BEGIN TRAN cua chinh no
+-- truoc khi chay moi test) va mot trigger tren Ticket/CheckIn/AuditRecord nem loi
+-- giua luc SP dang ghi, dieu kien outer sai lam ca nhanh long ben trong bi bo qua -
+-- khong he thu ROLLBACK TO SAVEPOINT du dieu kien (XACT_STATE=1, chua doomed) cho
+-- phep lam vay. Dung trigger CHI THROW (khong tu ROLLBACK) de mo phong: neu trigger
+-- tu ROLLBACK TRANSACTION truoc (dung mau moi trigger That trong du an nay dang
+-- dung), @@TRANCOUNT se ve 0 va keo theo ca transaction cua chinh test.sp_RunTest -
+-- lam sai lech phep so sanh cua khung test o muc khong lien quan gi den sp_CheckInTicket;
+-- nhanh do da duoc kiem chung rieng, thu cong, ngoai khung test nay.
+SET @Suite = 'Regression_Fixes';
+IF OBJECT_ID('dbo.TRG_TMP_Test_CheckInFail', 'TR') IS NOT NULL
+    DROP TRIGGER dbo.TRG_TMP_Test_CheckInFail;
+SET @SQL = N'
+    DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @staff INT = (SELECT UserID FROM UserAccount WHERE Username=''test_staff'');
+    DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' AND ConcertID=@cid ORDER BY EventSeatID);
+    DECLARE @bid INT, @pid INT;
+    DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR);
+    EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
+    DECLARE @fa DECIMAL(18,0) = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
+    INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-TEST'');
+    SET @pid = SCOPE_IDENTITY();
+    EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;
+    DECLARE @tcode VARCHAR(64) = (SELECT TOP 1 TicketCode FROM Ticket WHERE BookingID=@bid);
+
+    -- Trigger tam: chi THROW, khong tu ROLLBACK - an toan voi transaction long cua
+    -- chinh test.sp_RunTest. Tu bi xoa khi transaction cua test nay ROLLBACK (CREATE
+    -- TRIGGER la DDL co giao dich trong SQL Server), du test PASS hay FAIL.
+    EXEC(''CREATE TRIGGER TRG_TMP_Test_CheckInFail ON CheckIn AFTER INSERT AS BEGIN THROW 60999, ''''loi mo phong tu trigger tam (kiem tra CATCH cua sp_CheckInTicket)'''', 1; END'');
+
+    DECLARE @vresult VARCHAR(32), @vinfo NVARCHAR(500);
+    DECLARE @gotError BIT = 0, @errNum INT = 0;
+    BEGIN TRY
+        EXEC sp_CheckInTicket @TicketCode=@tcode, @ConcertID=@cid,
+             @CheckInStaffUserID=@staff, @ValidationResult=@vresult OUT, @ValidationInfo=@vinfo OUT;
+    END TRY
+    BEGIN CATCH
+        SET @gotError = 1;
+        SET @errNum = ERROR_NUMBER();
+    END CATCH
+
+    IF @gotError = 0
+        THROW 50000,''Setup: trigger tam phai khien sp_CheckInTicket nem loi'',1;
+    IF @errNum <> 60999
+    BEGIN
+        DECLARE @m8 NVARCHAR(200) = ''sp_CheckInTicket phai giu nguyen loi goc (60999) tu trigger, khong duoc thay bang loi khac (vd 3903/3931 do CATCH tu roi vao nham nhanh): ''+CAST(@errNum AS VARCHAR);
+        THROW 50000,@m8,1;
+    END;';
+EXEC test.sp_RunTest @Suite,'CheckInTicket_CatchBlock_PreservesOriginalTriggerError','SUCCESS',NULL,@SQL;
+
+-- VW_ConcertSalesSummary (BR51a/§12.20): TotalRevenue = Sum(Payment hieu luc) - Sum(Refund
+-- "thuoc cac Payment do") - phan tru CHI duoc gioi han trong dung tap Payment da cong vao
+-- GrossRevenue (IsBookingConfirmingPayment=1). Truoc day ve TotalRefunds thieu dieu kien
+-- nay nen Refund cua mot Payment KHONG hieu luc (vd. Payment trung o nhanh tu dong hoan
+-- BR24b/LI02b, chua bao gio duoc cong vao GrossRevenue) van bi tru nham vao doanh thu cua
+-- Payment hieu luc khac - bao doanh thu THAP HON so tien thuc te con lai trong tai khoan thu.
+-- View co RLS theo SESSION_CONTEXT('UserID') nen phai tu dat va don dep session context
+-- (KHONG transactional - ROLLBACK cua test.sp_RunTest khong tu xoa) de khong lam le sang
+-- cac test khac chay sau trong cung phien sqlcmd.
+SET @SQL = N'
+    DECLARE @FailMsg NVARCHAR(4000) = NULL;
+    BEGIN TRY
+        DECLARE @cid INT = (SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
+        DECLARE @org INT = (SELECT OrganizerUserID FROM Concert WHERE ConcertID=@cid);
+        DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+        DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat WHERE InventoryStatus=''Available'' AND ConcertID=@cid ORDER BY EventSeatID);
+        DECLARE @bid INT, @p1 INT, @p2 INT, @fa DECIMAL(18,0);
+        DECLARE @seatstr NVARCHAR(MAX) = CAST(@esid AS NVARCHAR);
+        EXEC sp_CreateBooking @CustomerUserID=@uid, @ConcertID=@cid, @SeatList=@seatstr, @NewBookingID=@bid OUTPUT;
+        SET @fa = (SELECT FinalAmount FROM Booking WHERE BookingID=@bid);
+
+        INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-REV-1'');
+        SET @p1 = SCOPE_IDENTITY();
+        EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@p1;
+
+        -- Payment thu hai trung cho cung Booking (BR24b/LI02b) - tu dong hoan 100%,
+        -- KHONG bao gio duoc cong vao GrossRevenue (IsBookingConfirmingPayment=0).
+        INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',@fa,''REF-REV-2'');
+        SET @p2 = SCOPE_IDENTITY();
+        EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@p2;
+
+        DECLARE @rid INT = (SELECT RefundID FROM Refund WHERE PaymentID=@p2);
+        EXEC sp_ConfirmRefund @RefundID=@rid, @ActorUserID=@org;
+
+        EXEC sp_set_session_context @key=N''UserID'', @value=@org;
+        DECLARE @rev DECIMAL(18,0) = (SELECT TotalRevenue FROM VW_ConcertSalesSummary WHERE ConcertID=@cid);
+        IF @rev <> @fa
+            SET @FailMsg = N''BR51a: TotalRevenue phai = ''+CAST(@fa AS VARCHAR)+N'' (Payment hieu luc khong bi hoan), got: ''+CAST(ISNULL(@rev,-1) AS VARCHAR)+N'' - Refund cua Payment trung dang bi tru nham vao Payment hieu luc.'';
+    END TRY
+    BEGIN CATCH
+        SET @FailMsg = ERROR_MESSAGE();
+    END CATCH
+    EXEC sp_set_session_context @key=N''UserID'', @value=NULL;
+    IF @FailMsg IS NOT NULL
+        THROW 50000, @FailMsg, 1;';
+EXEC test.sp_RunTest @Suite,'VW_ConcertSalesSummary_ExcludesRefundsOfNonEffectivePayments','SUCCESS',NULL,@SQL;
 
 PRINT '== Regression Fix Tests Done ==';
 GO
