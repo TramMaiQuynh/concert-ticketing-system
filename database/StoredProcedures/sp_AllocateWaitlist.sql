@@ -132,10 +132,34 @@ BEGIN
             IsBlocked        BIT NOT NULL
         );
 
+        -- Pham vi "ghe cap phat duoc" gom HAI nhom, khong chi 'Available':
+        --
+        --   (1) 'Available'          - ghe chua ai dung toi.
+        --   (2) 'OnHoldForWaitlist' MA KHONG co Active WaitlistEntryEventSeatAllocation
+        --                            - ghe vua duoc tra lai va DANG DANH RIENG cho hang
+        --                              cho (BR33a), nhung chua thuoc ve entry cu the nao.
+        --
+        -- Vi sao phai co nhom (2): sp_ReleaseExpiredHolds / sp_CancelBooking /
+        -- sp_ProcessRefund khi tra ghe ve deu dat 'OnHoldForWaitlist' (dung BR33a: uu tien
+        -- hang cho truoc khach vang lai) nhung KHONG tao dong phan bo - vi tai thoi diem do
+        -- chua biet ghe se thuoc ve entry nao (con phu thuoc chinh sach FIFO/RANDOM va quy
+        -- tac all-or-nothing cua chinh SP nay). Neu o day chi nhin 'Available' thi dung
+        -- nhung ghe do tro thanh VO HINH voi bo cap phat: khach trong hang cho khong bao gio
+        -- duoc cap co hoi, con ghe thi khong ai mua duoc nua - ro ri ton kho vinh vien.
+        -- Loai tru ghe da co Active allocation chinh la de khong giat ghe cua nguoi khac
+        -- dang giu co hoi; nhung ghe do do sp_ReleaseExpiredHolds thu hoi khi het han.
         INSERT INTO #CategoryState (TicketCategoryID, AvailableCount, IsBlocked)
         SELECT TicketCategoryID, COUNT(*), 0
-        FROM   EventSeat WITH (READPAST)
-        WHERE  ConcertID = @ConcertID AND InventoryStatus = 'Available'
+        FROM   EventSeat es WITH (READPAST)
+        WHERE  ConcertID = @ConcertID
+          AND  (
+                    es.InventoryStatus = 'Available'
+                 OR (    es.InventoryStatus = 'OnHoldForWaitlist'
+                     AND NOT EXISTS (SELECT 1
+                                     FROM   WaitlistEntryEventSeatAllocation wea
+                                     WHERE  wea.EventSeatID      = es.EventSeatID
+                                       AND  wea.AllocationStatus = 'Active'))
+               )
         GROUP BY TicketCategoryID;
 
         DECLARE @EntryID INT, @CustomerID INT, @CategoryID INT, @ReqQty INT;
@@ -208,12 +232,22 @@ BEGIN
             --    ghe dang bi giao dich khac giu -> khong cho, khong deadlock.
             DELETE FROM @AllocatedSeats;
 
+            -- Vi tu PHAI trung khop voi luc dung #CategoryState o tren: neu hai noi dung
+            -- hai pham vi khac nhau thi so dem va so ghe giat duoc se lech, va kiem tra
+            -- all-or-nothing ngay duoi se truot mot cach im lang.
             INSERT INTO @AllocatedSeats (EventSeatID)
             SELECT TOP (@ReqQty) EventSeatID
-            FROM   EventSeat WITH (UPDLOCK, READPAST)
+            FROM   EventSeat es WITH (UPDLOCK, READPAST)
             WHERE  ConcertID        = @ConcertID
               AND  TicketCategoryID = @CategoryID
-              AND  InventoryStatus  = 'Available';
+              AND  (
+                        es.InventoryStatus = 'Available'
+                     OR (    es.InventoryStatus = 'OnHoldForWaitlist'
+                         AND NOT EXISTS (SELECT 1
+                                         FROM   WaitlistEntryEventSeatAllocation wea
+                                         WHERE  wea.EventSeatID      = es.EventSeatID
+                                           AND  wea.AllocationStatus = 'Active'))
+                   );
 
             IF (SELECT COUNT(*) FROM @AllocatedSeats) = @ReqQty
             BEGIN
