@@ -49,11 +49,17 @@ public interface IConcertRepository
     /// Tra null khi concert khong con ban ve hoac khu khong thuoc dia diem cua concert.
     /// </summary>
     Task<SeatMapZoneDetailDto?> GetSeatMapZoneAsync(int concertId, int zoneId);
+
+    /// <summary>Khuyến mãi đang trong hiệu lực của concert (VW_ActivePromotions), công khai như GetByIdAsync.</summary>
+    Task<IEnumerable<ActivePromotion>> ListActivePromotionsAsync(int concertId);
 }
 
 public interface ICheckInRepository
 {
     Task<CheckInResponse> CheckInAsync(int staffUserId, CheckInRequest request);
+
+    /// <summary>Xem trước vé thuộc về ai trước khi xác nhận check-in — không đổi trạng thái vé.</summary>
+    Task<CheckInPreview?> PreviewAsync(CheckInRequest request);
 }
 
 public interface IPaymentRepository
