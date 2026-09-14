@@ -145,14 +145,14 @@ export function Select({
 
 export function Checkbox({ label, checked, onChange, hint, disabled }) {
   return (
-    <div className="field">
-      <label className="row gap-2" style={{ cursor: disabled ? 'not-allowed' : 'pointer' }}>
+    <div className="field checkbox-field">
+      <label className="checkbox-field__label">
         <input
           type="checkbox" className="checkbox"
           checked={!!checked} disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <span style={{ fontSize: 'var(--text-base)' }}>{label}</span>
+        <span>{label}</span>
       </label>
       {hint && <span className="field__hint">{hint}</span>}
     </div>
@@ -166,18 +166,24 @@ export function Card({ children, className = '', ...rest }) {
 }
 
 /** Khối chức năng có tiêu đề và phần giải thích nghiệp vụ. */
-export function Panel({ title, subtitle, aside, children, footer }) {
+const PANEL_CONTEXT = {
+  create: 'Tạo mới',
+  edit: 'Cập nhật',
+  workflow: 'Vận hành',
+  inventory: 'Kho vé',
+  attention: 'Cần xác nhận',
+};
+
+export function Panel({ title, subtitle, aside, children, footer, tone = 'default' }) {
+  const context = PANEL_CONTEXT[tone];
   return (
-    <section className="card" style={{ marginBottom: 'var(--space-6)' }}>
+    <section className={`card card--panel card--panel--${tone}`}>
       {(title || aside) && (
-        <header className="card__header row wrap gap-3" style={{ justifyContent: 'space-between' }}>
+        <header className="card__header panel__header">
           <div className="grow">
+            {context && <div className="panel__context">{context}</div>}
             {title && <h3>{title}</h3>}
-            {subtitle && (
-              <p className="text-sm text-secondary" style={{ marginTop: 'var(--space-1)', maxWidth: '78ch' }}>
-                {subtitle}
-              </p>
-            )}
+            {subtitle && <p className="panel__subtitle">{subtitle}</p>}
           </div>
           {aside}
         </header>
