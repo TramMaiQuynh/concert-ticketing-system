@@ -30,7 +30,25 @@ SET @bid = SCOPE_IDENTITY();
 UPDATE Booking SET BookingStatus=''Cancelled'', CancelledTimestamp=SYSDATETIME(), HoldStartDatetime=NULL, HoldExpiryDatetime=NULL WHERE BookingID = SCOPE_IDENTITY();
     INSERT INTO Payment (BookingID,PaymentStatus,Amount,PaymentReference) VALUES (@bid,''Pending'',1000000,''REF-TEST'');
     SET @pid = SCOPE_IDENTITY();
-    EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;';
+    EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid;
+
+    -- Payment nay KHONG duoc dung de xac nhan Booking (da tu dong hoan tien), nen
+    -- phai giu IsBookingConfirmingPayment = 0 - dung bat bien da kiem cho nhanh
+    -- AmountMismatch o test PaymentAmountMismatch_AutoRefunds ben duoi. Neu co bi
+    -- ket o 1, mot lan callback lap lai se sai bao ''AlreadyConfirmed'' thay vi
+    -- ''AlreadyRefunded''.
+    IF (SELECT IsBookingConfirmingPayment FROM Payment WHERE PaymentID=@pid) <> 0
+        THROW 50000,''Payment da tu dong hoan tien khong duoc gianh quyen hieu luc cua Booking'',1;
+
+    -- Goi lai (callback lap lai tu cong thanh toan) phai bao dung la da hoan tien,
+    -- khong duoc bao nham la da xac nhan.
+    DECLARE @Outcome2 VARCHAR(48);
+    EXEC sp_ConfirmPayment @BookingID=@bid, @PaymentID=@pid, @Outcome=@Outcome2 OUTPUT;
+    IF @Outcome2 <> ''AlreadyRefunded''
+    BEGIN
+        DECLARE @Msg2 NVARCHAR(200) = N''Callback lap lai tren Payment da hoan tien phai bao AlreadyRefunded, khong phai: ''+ISNULL(@Outcome2,''NULL'');
+        THROW 50000,@Msg2,1;
+    END';
 EXEC test.sp_RunTest @Suite,'BookingNotPending_AutoRefunds_OK','SUCCESS',NULL,@SQL;
 
 -- ===== 52003: PaymentID khong ton tai hoac sai Booking =====
