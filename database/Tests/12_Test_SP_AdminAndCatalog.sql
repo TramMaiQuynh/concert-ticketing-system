@@ -529,7 +529,7 @@ SET @SQL = N'
     EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''ZGU ToGA'', @Address=N''x'', @NewVenueID=@v OUTPUT;
     EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'',
          @ZoneType=''Seated'', @NewZoneID=@z OUTPUT;
-    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''S1'', @SeatLabel=N''x'', @NewSeatID=@s OUTPUT;
+    EXEC sp_CreateSeat @ActorUserID=@adm, @ZoneID=@z, @SeatCode=''S1'', @SeatLabel=N''x'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@s OUTPUT;
     EXEC sp_UpdateZone @ActorUserID=@adm, @ZoneID=@z, @ZoneType=''GeneralAdmission'', @ZoneCapacity=100;';
 EXEC test.sp_RunTest @Suite,'ZoneUpdate_ConvertToGAWithActiveSeats_Fail59819','ERROR',59819,@SQL;
 
