@@ -48,6 +48,19 @@ public record ConcertDetail(
     bool FairAccessEnabled,
     bool WaitlistEnabled);
 
+public record ActivePromotion(
+    int PromotionID,
+    int ConcertID,
+    string PromotionName,
+    string? PromotionDescription,
+    string DiscountType,
+    decimal DiscountValue,
+    DateTime StartDatetime,
+    DateTime EndDatetime,
+    bool CodeRequiredFlag,
+    int? MaxApplicableQuantity,
+    decimal? MaxDiscountAmount);
+
 public record SeatDto(
     int SeatID,
     string SeatNumber,
@@ -231,6 +244,20 @@ public record CheckInResponse(
     string ValidationResult,   // SUCCESS / ALREADY_USED / INVALID / WRONG_CONCERT / ...
     string ValidationInfo,
     DateTime? CheckInTime);
+
+// sp_CheckInTicket không có chế độ "xem trước" (mọi lần gọi đều ghi nhận một lượt
+// check-in, thành công hay thất bại). Preview là một truy vấn CHỈ ĐỌC riêng, qua
+// VW_CheckInStaffUserAccount (đã ẩn PasswordHash, tự giới hạn theo Concert được
+// phân công qua SESSION_CONTEXT) để nhân viên soát vé thấy vé thuộc về ai TRƯỚC
+// khi bấm xác nhận, không đổi trạng thái vé.
+public record CheckInPreview(
+    int TicketID,
+    string TicketStatus,
+    string SeatCode,
+    string? ZoneName,
+    string CategoryName,
+    string DisplayName,
+    string Username);
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 
