@@ -10,7 +10,7 @@
 --   6. Dong QueueEntry Admitted -> Exited (BR47b) va ghi AuditRecord.
 -- @SeatList: chuoi EventSeatID phan cach bang dau phay.
 -- ============================================================
-CREATE PROCEDURE dbo.sp_CreateBooking
+CREATE OR ALTER PROCEDURE dbo.sp_CreateBooking
 (
     @CustomerUserID  INT,
     @ConcertID       INT,
