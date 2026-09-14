@@ -11,7 +11,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_UpdateConcert
     @ConcertID         INT,
     @ActorUserID       INT,
     @ConcertName       NVARCHAR(255) = NULL,
-    @ArtistID          INT = NULL,
+    @ArtistIDs         NVARCHAR(MAX) = NULL,
     @VenueID           INT = NULL,
     @StartDatetime     DATETIME2(7) = NULL,
     @EndDatetime       DATETIME2(7) = NULL,
@@ -58,12 +58,57 @@ BEGIN
         IF @EndDatetime IS NOT NULL AND @StartDatetime IS NOT NULL AND @EndDatetime <= @StartDatetime
             THROW 58013, 'sp_UpdateConcert: EndDatetime phai sau StartDatetime.', 1;
 
-        -- Luu gia tri cu de ghi audit
+        -- Neu caller gui ArtistIDs, thay toan bo danh sach trong cung transaction.
+        -- NULL co nghia giu nguyen; [] va phan tu trung/lap sai deu bi tu choi.
+        IF @ArtistIDs IS NOT NULL
+        BEGIN
+            IF ISJSON(@ArtistIDs) <> 1
+                THROW 58025, 'sp_UpdateConcert: ArtistIDs phai la JSON array khong rong, khong trung lap.', 1;
+
+            DECLARE @ParsedArtists TABLE
+            (
+                ArtistID INT NULL,
+                ArtistOrder INT NOT NULL
+            );
+            INSERT INTO @ParsedArtists (ArtistID, ArtistOrder)
+            SELECT TRY_CONVERT(INT, [value]), TRY_CONVERT(INT, [key]) + 1
+            FROM OPENJSON(@ArtistIDs);
+
+            IF NOT EXISTS (SELECT 1 FROM @ParsedArtists)
+               OR EXISTS (SELECT 1 FROM @ParsedArtists WHERE ArtistID IS NULL OR ArtistID <= 0)
+               OR EXISTS (SELECT ArtistID FROM @ParsedArtists GROUP BY ArtistID HAVING COUNT(*) > 1)
+                THROW 58025, 'sp_UpdateConcert: ArtistIDs phai la JSON array khong rong, khong trung lap.', 1;
+
+            DECLARE @Artists TABLE
+            (
+                ArtistID INT NOT NULL PRIMARY KEY,
+                ArtistOrder INT NOT NULL UNIQUE
+            );
+            INSERT INTO @Artists (ArtistID, ArtistOrder)
+            SELECT ArtistID, ArtistOrder FROM @ParsedArtists;
+
+            IF EXISTS (
+                SELECT 1
+                FROM @Artists requested
+                LEFT JOIN Artist a WITH (UPDLOCK, HOLDLOCK) ON a.ArtistID = requested.ArtistID
+                WHERE a.ArtistID IS NULL OR a.ArtistStatus <> 'Active'
+            )
+                THROW 58004, 'sp_UpdateConcert: Artist khong ton tai hoac da ngung su dung.', 1;
+        END
+
+        -- Luu gia tri cu de ghi audit. Artist la quan he 1-n, nen audit phai
+        -- giu ca ID va thu tu thay vi chi ghi ten Concert nhu schema cu.
         DECLARE @OldName NVARCHAR(255) = (SELECT ConcertName FROM Concert WHERE ConcertID = @ConcertID);
+        DECLARE @OldArtists NVARCHAR(MAX) = (
+            SELECT ArtistID AS [id], ArtistOrder AS [order]
+            FROM ConcertArtist
+            WHERE ConcertID = @ConcertID
+            ORDER BY ArtistOrder
+            FOR JSON PATH
+        );
 
         UPDATE Concert
         SET ConcertName         = COALESCE(@ConcertName, ConcertName),
-            ArtistID            = COALESCE(@ArtistID, ArtistID),
             VenueID             = COALESCE(@VenueID, VenueID),
             StartDatetime       = COALESCE(@StartDatetime, StartDatetime),
             EndDatetime         = COALESCE(@EndDatetime, EndDatetime),
@@ -80,11 +125,28 @@ BEGIN
             RefundPercentage    = COALESCE(@RefundPercentage, RefundPercentage)
         WHERE ConcertID = @ConcertID;
 
+        IF @ArtistIDs IS NOT NULL
+        BEGIN
+            DELETE FROM ConcertArtist WHERE ConcertID = @ConcertID;
+            INSERT INTO ConcertArtist (ConcertID, ArtistID, ArtistOrder)
+            SELECT @ConcertID, ArtistID, ArtistOrder
+            FROM @Artists
+            ORDER BY ArtistOrder;
+        END
+
+        DECLARE @NewArtists NVARCHAR(MAX) = (
+            SELECT ArtistID AS [id], ArtistOrder AS [order]
+            FROM ConcertArtist
+            WHERE ConcertID = @ConcertID
+            ORDER BY ArtistOrder
+            FOR JSON PATH
+        );
+
         INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, PreviousValue, NewValue)
         VALUES (@ActorUserID, 'CONCERT_UPDATED', 'Concert',
                 CAST(@ConcertID AS VARCHAR(64)), 'UPDATE', SYSDATETIME(),
-                '{"ConcertName":"' + STRING_ESCAPE(@OldName, 'json') + '"}',
-                '{"ConcertName":"' + STRING_ESCAPE(ISNULL(@ConcertName, @OldName), 'json') + '"}');
+                '{"ConcertName":"' + STRING_ESCAPE(@OldName, 'json') + '","ArtistIds":' + COALESCE(@OldArtists, '[]') + '}',
+                '{"ConcertName":"' + STRING_ESCAPE(ISNULL(@ConcertName, @OldName), 'json') + '","ArtistIds":' + COALESCE(@NewArtists, '[]') + '}');
 
         COMMIT TRANSACTION;
     END TRY
