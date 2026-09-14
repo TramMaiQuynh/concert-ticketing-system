@@ -220,9 +220,18 @@ SET @SQL = N'
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @cid INT;
     DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    -- DATEADD(day,...) khong duoc dung TRUC TIEP lam gia tri tham so dat ten
+    -- trong EXEC (loi 102 "Incorrect syntax near ''day''" — tu khoa khoang
+    -- thoi gian khong dau nhay gay nhap nhang cho parser cua EXEC voi cu
+    -- phap @param=<bieu thuc>, khac han DECLARE/SET binh thuong). Phai tinh
+    -- truoc vao bien roi moi truyen bien — dung bai hoc da rut ra truoc do
+    -- trong chinh phien lam viec nay ("Hai loi T-SQL bieu thuc lam tham so
+    -- EXEC — sua bang bien tinh truoc").
+    DECLARE @StartDT DATETIME2(7) = DATEADD(day, 30, SYSDATETIME());
+    DECLARE @EndDT   DATETIME2(7) = DATEADD(day, 31, SYSDATETIME());
     EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
          @ConcertName=N''REG DupEventSeat Concert'',
-         @StartDatetime=DATEADD(day,30,SYSDATETIME()), @EndDatetime=DATEADD(day,31,SYSDATETIME()),
+         @StartDatetime=@StartDT, @EndDatetime=@EndDT,
          @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4,
          @TemporaryHoldDuration=900, @CancellationPolicy=NULL, @RefundPolicy=NULL,
          @ActorUserID=@org, @NewConcertID=@cid OUTPUT;
