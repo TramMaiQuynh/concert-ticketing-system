@@ -4,7 +4,6 @@ public class Concert
 {
     public int ConcertID { get; set; }
     public int OrganizerUserID { get; set; }
-    public int ArtistID { get; set; }
     public int VenueID { get; set; }
     public string ConcertName { get; set; } = string.Empty;
     public DateTime StartDatetime { get; set; }
