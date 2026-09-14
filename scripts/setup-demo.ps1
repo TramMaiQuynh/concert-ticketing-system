@@ -85,11 +85,32 @@ $creds = Get-Content (Join-Path $DeployDir "db-credentials.json") -Raw | Convert
 
 # ── 3. Bí mật của backend ───────────────────────────────────────────────────
 Write-Phase "3/5  SINH BI MAT CHO BACKEND"
+
+# Origin được phép gọi API. Luôn giữ cả hai biến thể localhost (để người chạy trên
+# chính máy server vẫn mở được bằng localhost) rồi thêm $FrontendUrl. Dùng danh sách
+# duy nhất: trước đây công thức là @($FrontendUrl, ($FrontendUrl -replace 'localhost',
+# '127.0.0.1')) — khi $FrontendUrl là một địa chỉ IP thì phép thay thế không khớp gì
+# cả, nên mảng nhận về HAI PHẦN TỬ GIỐNG HỆT NHAU và mất luôn origin localhost.
+$origins = [System.Collections.Generic.List[string]]::new()
+foreach ($o in @("http://localhost:5173", "http://127.0.0.1:5173", $FrontendUrl,
+                 ($FrontendUrl -replace 'localhost', '127.0.0.1'))) {
+    if ($o -and -not $origins.Contains($o)) { $origins.Add($o) }
+}
+
+# Host header được phép. appsettings.json giới hạn "localhost;127.0.0.1" để chống
+# Host header injection — đúng, nhưng hệ quả là MỌI request đến qua IP LAN đều bị
+# HostFilteringMiddleware trả 400 "Invalid Hostname" trước khi chạm tới controller.
+# Giữ nguyên lớp bảo vệ, chỉ mở thêm đúng host mà API thực sự được gọi tới.
+$apiHost = ([Uri]$ApiUrl).Host
+$hosts   = @("localhost", "127.0.0.1")
+if ($hosts -notcontains $apiHost) { $hosts += $apiHost }
+
 $localSettings = [ordered]@{
     ConnectionStrings = [ordered]@{ Default = $creds.apiServiceConnection }
     Jwt               = [ordered]@{ Secret  = New-Secret }
     PaymentSignature  = [ordered]@{ Secret  = New-Secret }
-    Cors              = [ordered]@{ AllowedOrigins = @($FrontendUrl, ($FrontendUrl -replace 'localhost', '127.0.0.1')) }
+    AllowedHosts      = ($hosts -join ';')
+    Cors              = [ordered]@{ AllowedOrigins = $origins.ToArray() }
     PaymentGateway    = [ordered]@{
         Mode               = "Simulator"
         SimulatorReturnUrl = "$FrontendUrl/payment-simulator"
@@ -131,14 +152,31 @@ Write-Host "============================================================" -Foreg
 Write-Host "  CAI DAT HOAN TAT" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
+# Chay LAN = API duoc goi toi bang mot dia chi khong phai localhost. Khi do lenh chay
+# cung phai khac: profile mac dinh chi bind 127.0.0.1 nen may khac khong ket noi duoc.
+$isLan = $apiHost -notin @("localhost", "127.0.0.1")
+
 Write-Host "  Buoc tiep theo — mo HAI cua so terminal:"
 Write-Host ""
-Write-Host "    [1] Backend :  cd backend\src\ConcertTicketing.API" -ForegroundColor White
-Write-Host "                   dotnet run" -ForegroundColor White
-Write-Host ""
-Write-Host "    [2] Frontend:  cd frontend" -ForegroundColor White
-Write-Host "                   npm run dev" -ForegroundColor White
-Write-Host ""
+if ($isLan) {
+    Write-Host "    [1] Backend :  cd backend\src\ConcertTicketing.API" -ForegroundColor White
+    Write-Host "                   dotnet run --launch-profile lan" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    [2] Frontend:  cd frontend" -ForegroundColor White
+    Write-Host "                   npm run dev:lan" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  CHE DO LAN: dung dung hai lenh tren (khong phai 'dotnet run' / 'npm run dev')," -ForegroundColor Yellow
+    Write-Host "  vi profile mac dinh chi lang nghe 127.0.0.1 - may khac se khong ket noi duoc." -ForegroundColor Yellow
+    Write-Host "  Nho mo firewall cho cong 5295 va 5173 (PowerShell quyen Administrator)." -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Write-Host "    [1] Backend :  cd backend\src\ConcertTicketing.API" -ForegroundColor White
+    Write-Host "                   dotnet run" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    [2] Frontend:  cd frontend" -ForegroundColor White
+    Write-Host "                   npm run dev" -ForegroundColor White
+    Write-Host ""
+}
 Write-Host "  Sau khi backend chay, bootstrap tai khoan admin:"
 Write-Host "                   .\scripts\bootstrap-admin.ps1" -ForegroundColor White
 Write-Host ""
