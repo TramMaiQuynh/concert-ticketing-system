@@ -74,7 +74,15 @@ public sealed partial class DbFixture
             DELETE b FROM Booking b
             WHERE b.BookingID IN (SELECT BookingID FROM @TestBookings);
 
-            -- 2. Waitlist / Queue (entry trước, master sau)
+            -- 2. Waitlist / Queue (allocation trước, entry sau, master cuối)
+            --    WaitlistEntryEventSeatAllocation tham chiếu WaitlistEntry qua khoá ngoại,
+            --    nên phải xoá trước. Trước đây bước này bị thiếu: chưa test nào tạo ra dòng
+            --    phân bổ waitlist nên khiếm khuyết nằm im, và chỉ lộ ra khi có test chạy
+            --    sp_AllocateWaitlist — lúc đó dọn dẹp chết vì vi phạm FK và bỏ lại rác.
+            DELETE wea FROM WaitlistEntryEventSeatAllocation wea
+            JOIN   WaitlistEntry we2 ON we2.WaitlistEntryID = wea.WaitlistEntryID
+            WHERE  we2.CustomerUserID IN (SELECT UserID FROM @TestUsers);
+
             DELETE we FROM WaitlistEntry we
             WHERE we.CustomerUserID IN (SELECT UserID FROM @TestUsers);
             DELETE qe FROM QueueEntry qe
