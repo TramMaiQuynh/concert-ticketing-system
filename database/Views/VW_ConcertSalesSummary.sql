@@ -72,12 +72,20 @@ CROSS APPLY (
 ) rev
 
 CROSS APPLY (
+    -- BR51a/§12.20: phan tru phai gioi han DUNG trong tap Payment da duoc cong
+    -- vao GrossRevenue o tren ("thuoc cac Payment do") - tuc cung dieu kien
+    -- IsBookingConfirmingPayment = 1. Thieu dieu kien nay, Refund cua mot
+    -- Payment KHONG hieu luc (vd. Payment trung o nhanh BR24b/LI02b, tu dong
+    -- hoan 100% ma khong he duoc cong vao GrossRevenue) van bi tru vao doanh
+    -- thu cua Payment hieu luc khac - bao doanh thu THAP HON so tien thuc te
+    -- con lai trong tai khoan thu.
     SELECT ISNULL(SUM(r.RefundAmount), 0) AS TotalRefunds
     FROM   dbo.Refund r
     JOIN   dbo.Payment p ON p.PaymentID = r.PaymentID
     JOIN   dbo.Booking b ON b.BookingID = p.BookingID
     WHERE  b.ConcertID = c.ConcertID
       AND  r.RefundStatus = 'Confirmed'
+      AND  p.IsBookingConfirmingPayment = 1
 ) ref
 
 CROSS APPLY (
