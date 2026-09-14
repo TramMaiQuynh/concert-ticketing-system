@@ -52,3 +52,13 @@ GO
 CREATE UNIQUE INDEX UIX_CMR_OneLockedPerMap
     ON ConcertMapRevision (ConcertMapID)
     WHERE RevisionStatus = 'Locked';
+
+-- Y HET ly do cua UIX_VTV_OneDraftPerTemplate: moi Map chi duoc mot Draft dang
+-- mo cung luc, tranh Admin/Organizer vo tinh tao hai revision nhap song song
+-- roi khong ro revision nao la "ban dang cau hinh". Phat hien thieu sot nay
+-- luc thiet ke tang SP (sp_CreateConcertMapRevision) — bo sung ngay o goc
+-- schema thay vi chi kiem tra rieng le trong SP, dung tinh than xuyen suot
+-- phien lam viec nay ("sua dung goc re").
+CREATE UNIQUE INDEX UIX_CMR_OneDraftPerMap
+    ON ConcertMapRevision (ConcertMapID)
+    WHERE RevisionStatus = 'Draft';

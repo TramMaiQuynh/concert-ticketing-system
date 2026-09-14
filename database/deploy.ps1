@@ -441,7 +441,7 @@ Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (52 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (55 SP)"
 $spStart = $script:DeployedFileCount
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
@@ -489,6 +489,9 @@ Invoke-SqlFile "$spDir\sp_ConfigureTemplateFloor.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateObject.sql"    # Goi fn_TemplateGeometry*
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateSection.sql"   # Goi fn_TemplateGeometry*
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateSeat.sql"
+Invoke-SqlFile "$spDir\sp_CreateConcertMap.sql"
+Invoke-SqlFile "$spDir\sp_CreateConcertMapRevision.sql"
+Invoke-SqlFile "$spDir\sp_LockConcertMapRevision.sql"
 
 # --- Customer self-service SPs ---
 Invoke-SqlFile "$spDir\sp_JoinWaitlist.sql"
