@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/client';
-import { useCatalog } from '../../lib/localCatalog';
+import { useAdminCatalog } from '../../lib/adminCatalog';
 import { Field, Select, Panel, Banner, IdPicker, useAction } from '../../components/form';
 import { RefundStatus } from '../../domain/enums';
 
@@ -38,7 +38,6 @@ export default function Refunds() {
 }
 
 function ProcessRefundSection() {
-  const { remember } = useCatalog('refund');
   const act = useAction();
   const [bookingId, setBookingId] = useState('');
   const [reason, setReason] = useState('');
@@ -47,6 +46,7 @@ function ProcessRefundSection() {
   return (
     <Panel
       title="Bước 1 — Hủy đơn và tạo yêu cầu hoàn tiền"
+      tone="attention"
       subtitle="Dùng khi ban tổ chức hủy đơn thay cho khách. Ghế được trả lại kho ngay, vé bị hủy ngay, còn khoản hoàn được tạo ở trạng thái chờ."
     >
       <form
@@ -57,9 +57,6 @@ function ProcessRefundSection() {
               reason: reason.trim() || null,
             });
             setLast(res.data);
-            if (res.data?.refundId) {
-              remember({ id: res.data.refundId, name: `từ booking #${bookingId}` });
-            }
             return res.data;
           }, (d) => (d?.refundId
             ? `Đã hủy đơn và tạo yêu cầu hoàn tiền #${d.refundId}. Sang bước 2 sau khi tiền đã thực sự về tài khoản khách.`
@@ -97,13 +94,14 @@ function ProcessRefundSection() {
 }
 
 function ConfirmRefundSection() {
-  const { items } = useCatalog('refund');
+  const { items } = useAdminCatalog('refund');
   const act = useAction();
   const [refundId, setRefundId] = useState('');
 
   return (
     <Panel
       title="Bước 2 — Xác nhận đã hoàn tiền xong"
+      tone="workflow"
       subtitle="Chỉ bấm sau khi cổng thanh toán đã chuyển tiền về cho khách. Thao tác này chuyển Refund sang Confirmed và Payment sang Refunded."
     >
       <form
@@ -145,7 +143,7 @@ function ConfirmRefundSection() {
  * hàng. Không có lý do thì sau này không ai truy được vì sao khoản đó bị bỏ.
  */
 function CloseRefundSection() {
-  const { items } = useCatalog('refund');
+  const { items } = useAdminCatalog('refund');
   const act = useAction();
   const [refundId, setRefundId] = useState('');
   const [status, setStatus] = useState(RefundStatus.Failed);
@@ -154,6 +152,7 @@ function CloseRefundSection() {
   return (
     <Panel
       title="Bước 3 — Kết thúc yêu cầu mà không hoàn tiền"
+      tone="attention"
       subtitle="Dùng khi cổng thanh toán từ chối chuyển tiền, hoặc khi yêu cầu hoàn bị từ chối. Payment GIỮ NGUYÊN — không đồng nào rời tài khoản thu. Chỉ áp dụng cho khoản đang chờ xử lý."
     >
       <form
