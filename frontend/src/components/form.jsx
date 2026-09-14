@@ -77,7 +77,14 @@ export function IdPicker({ label, hint, items, value, onChange, placeholder = 'N
           />
           {items.length > 0 && (
             <UiSelect
-              value=""
+              // Trước đây value bị gán cứng "": chọn xong, React vẫn ép <select> hiển
+              // thị lại đúng option rỗng ngay lượt render kế tiếp — giá trị THỰC SỰ có
+              // được ghi vào ô số bên cạnh (onChange chạy đúng), chỉ riêng dropdown
+              // không phản ánh lại lựa chọn, nên trông như bấm không ăn. Nay hiển thị
+              // đúng mục vừa chọn khi ID hiện tại khớp một mục trong sổ tay; nếu người
+              // dùng gõ tay một ID khác không có trong sổ tay thì mới trở lại rỗng —
+              // đúng bản chất "ID nào đang không đến từ sổ tay".
+              value={items.some((it) => String(it.id) === String(value)) ? String(value) : ''}
               onChange={(v) => v && onChange(v)}
               options={items.map((it) => String(it.id))}
               labels={Object.fromEntries(items.map((it) => [String(it.id), `#${it.id} · ${it.name}`]))}
