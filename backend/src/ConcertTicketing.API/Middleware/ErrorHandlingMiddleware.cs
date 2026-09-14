@@ -41,6 +41,9 @@ public class ErrorHandlingMiddleware
         {
             SqlException sqlEx => MapSqlException(sqlEx),
             ArgumentException argEx => (HttpStatusCode.BadRequest, "Invalid Argument", argEx.Message),
+            // Mã khách gõ là có thật và đang hiệu lực — sai sót nằm ở cấu hình khuyến mãi
+            // của sự kiện, nên 409 chứ không phải 400, và chắc chắn không phải 500.
+            AmbiguousDiscountCodeException ambEx => (HttpStatusCode.Conflict, "Ambiguous Discount Code", ambEx.Message),
             // Phải đứng TRƯỚC nhánh UnauthorizedAccessException chung bên dưới: switch khớp
             // theo thứ tự khai báo, và InvalidCredentialsException LÀ MỘT UnauthorizedAccessException
             // (kế thừa) nên nhánh chung phía sau sẽ khớp trước nếu đổi chỗ, nuốt mất Message
@@ -215,6 +218,8 @@ public class ErrorHandlingMiddleware
             58601 => (HttpStatusCode.Forbidden, "Promotion Not Authorized", "Bạn không có quyền với Promotion này."),
             58602 => (HttpStatusCode.BadRequest, "Invalid Discount Code", "CodeValue không được để trống."),
             58603 => (HttpStatusCode.BadRequest, "Invalid Discount Code Dates", "ValidToDatetime phải sau ValidFromDatetime."),
+            58604 => (HttpStatusCode.Conflict, "Duplicate Discount Code",
+                      "Mã này đã được một chương trình khuyến mãi đang hoạt động khác của cùng sự kiện sử dụng."),
 
             // sp_JoinQueue (BP11 / FR64)
             58701 => (HttpStatusCode.NotFound, "Concert Not Found", "Concert không tồn tại."),
@@ -366,9 +371,13 @@ public class ErrorHandlingMiddleware
             59603 => (HttpStatusCode.Forbidden, "Promotion Not Authorized", "Bạn không có quyền với Promotion này."),
             59604 => (HttpStatusCode.Conflict, "Promotion Already Published",
                       "Không thể đưa Promotion đã công bố trở lại Draft — dùng Disabled để ngừng phát hành."),
+            59605 => (HttpStatusCode.Conflict, "Duplicate Discount Code",
+                      "Chương trình này có mã trùng với một chương trình đang hoạt động khác của cùng sự kiện."),
             59611 => (HttpStatusCode.BadRequest, "Invalid Code Status", "CodeStatus phải là Active hoặc Disabled."),
             59612 => (HttpStatusCode.NotFound, "Discount Code Not Found", "Mã giảm giá không tồn tại."),
             59613 => (HttpStatusCode.Forbidden, "Discount Code Not Authorized", "Bạn không có quyền với mã giảm giá này."),
+            59614 => (HttpStatusCode.Conflict, "Duplicate Discount Code",
+                      "Mã này đang được một chương trình khuyến mãi đang hoạt động khác của cùng sự kiện sử dụng."),
 
             // sp_SetEventSeatUnavailable (BP3 / BR08)
             58801 => (HttpStatusCode.NotFound, "EventSeat Not Found", "EventSeat không tồn tại."),
