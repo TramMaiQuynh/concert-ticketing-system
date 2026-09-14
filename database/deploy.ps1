@@ -373,12 +373,19 @@ Write-Host "    UIX_QueueEntry_ActivePerCustomer    (QueueEntry)" -ForegroundCol
 #   fn_CalculateFinalAmount      <- duoc goi boi sp_ApplyPromotion
 #   fn_GetCustomerTicketCount    <- duoc goi boi sp_CreateBooking
 # ============================================================
-Write-Phase "PHASE 3: FUNCTIONS (3 function)"
+Write-Phase "PHASE 3: FUNCTIONS (7 function)"
 
 $fnDir = Join-Path $DbRoot "Functions"
 Invoke-SqlFile "$fnDir\fn_CalculateBookingSubtotal.sql"   # Phai truoc fn_CalculateFinalAmount
 Invoke-SqlFile "$fnDir\fn_CalculateFinalAmount.sql"       # Goi fn_CalculateBookingSubtotal
 Invoke-SqlFile "$fnDir\fn_GetCustomerTicketCount.sql"
+
+# --- StagePass hinh hoc (D.4): fn_TemplateGeometryToPoints truoc, hai ham
+#     con lai goi no ---
+Invoke-SqlFile "$fnDir\fn_TemplateGeometryIsStructurallyValid.sql"
+Invoke-SqlFile "$fnDir\fn_TemplateGeometryToPoints.sql"
+Invoke-SqlFile "$fnDir\fn_TemplateGeometryIsConvex.sql"       # Goi fn_TemplateGeometryToPoints
+Invoke-SqlFile "$fnDir\fn_TemplateGeometryOverlaps.sql"       # Goi fn_TemplateGeometryToPoints
 
 # ============================================================
 # PHASE 4: TRIGGERS
