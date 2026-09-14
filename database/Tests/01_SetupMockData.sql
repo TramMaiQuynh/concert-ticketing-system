@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 01_SetupMockData.sql
 -- Xoa het data cu, seeding du lieu test sach.
 -- Schema khop voi deploy.ps1 thuc te.
@@ -35,6 +35,11 @@ DELETE FROM Waitlist;
 DELETE FROM EventSeat;
 DELETE FROM TicketCategory;
 DELETE FROM CheckinStaffAssignment;
+-- ConcertArtist tham chieu CA Concert LAN Artist, nen phai xoa truoc ca hai.
+-- Thieu dong nay thi DELETE Concert bi FK chan (loi 547), keo theo Venue va
+-- UserAccount cung khong xoa duoc, va lan chay ke tiep INSERT 'test_admin' se
+-- trung khoa - toan bo bo test chay tren du lieu ban con sot lai cua lan truoc.
+DELETE FROM ConcertArtist;
 DELETE FROM Concert;
 DELETE FROM Artist;
 DELETE FROM Seat;
@@ -102,19 +107,21 @@ DECLARE @CustID2 INT = (SELECT UserID FROM UserAccount WHERE Username = 'test_cu
 DECLARE @StaffID INT = (SELECT UserID FROM UserAccount WHERE Username = 'test_staff');
 
 INSERT INTO Concert (
-    OrganizerUserID, ArtistID, VenueID, ConcertName,
+    OrganizerUserID, VenueID, ConcertName,
     ConcertStatus, StartDatetime, EndDatetime,
     PurchaseLimit, TemporaryHoldDuration,
     FairAccessEnabled, WaitlistEnabled, SalesPaused
 )
 VALUES (
-    @OrgID, @ArtistID, @VenueID, 'Test Concert Live 2025',
+    @OrgID, @VenueID, 'Test Concert Live 2025',
     'Draft',
     DATEADD(DAY, 30, SYSDATETIME()), DATEADD(DAY, 30, DATEADD(HOUR, 3, SYSDATETIME())),
     4, 900,   -- PurchaseLimit=4, HoldDuration=15min
     0, 1, 0
 );
 DECLARE @ConcertID INT = SCOPE_IDENTITY();
+INSERT INTO ConcertArtist (ConcertID, ArtistID, ArtistOrder)
+VALUES (@ConcertID, @ArtistID, 1);
 UPDATE Concert SET ConcertStatus = 'Published' WHERE ConcertID = @ConcertID;
 UPDATE Concert SET ConcertStatus = 'OnSale' WHERE ConcertID = @ConcertID;
 
