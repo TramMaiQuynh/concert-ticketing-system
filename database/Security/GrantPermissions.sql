@@ -190,6 +190,23 @@ GRANT SELECT ON dbo.Refund                     TO api_service;
 GRANT SELECT ON dbo.CheckIn                    TO api_service;
 GRANT SELECT ON dbo.WaitlistEntryEventSeatAllocation TO api_service;
 
+-- StagePass (VenueTemplate/ConcertMapRevision): tang ghi (SP, ownership
+-- chaining) da duoc kiem chung khong can grant rieng, nhung tang DOC (repository
+-- moi doc truc tiep bang, khong qua SP) THI CAN — dung nguyen tac "chi mo dung
+-- luong quyen can thiet" da neu o dau file, khong tu suy dien la duoc mo san.
+GRANT SELECT ON dbo.VenueTemplate              TO api_service;
+GRANT SELECT ON dbo.VenueTemplateVersion       TO api_service;
+GRANT SELECT ON dbo.TemplateFloor              TO api_service;
+GRANT SELECT ON dbo.TemplateObject             TO api_service;
+GRANT SELECT ON dbo.TemplateSection            TO api_service;
+GRANT SELECT ON dbo.TemplateSeat               TO api_service;
+GRANT SELECT ON dbo.ConcertMap                 TO api_service;
+GRANT SELECT ON dbo.ConcertMapRevision         TO api_service;
+GRANT SELECT ON dbo.ConcertMapRevisionFloor    TO api_service;
+GRANT SELECT ON dbo.ConcertMapRevisionObject   TO api_service;
+GRANT SELECT ON dbo.ConcertMapRevisionSection  TO api_service;
+GRANT SELECT ON dbo.ConcertMapRevisionSeat     TO api_service;
+
 -- VW_ActivePromotions: KHONG loc theo SESSION_CONTEXT (khong phai RLS) - chi loc theo
 -- PromotionStatus/StartDatetime/EndDatetime cua Promotion, du lieu cong khai giong het
 -- Concert/EventSeat o tren. Endpoint GET /concerts/{id}/promotions la [AllowAnonymous],

@@ -441,7 +441,7 @@ Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (55 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (60 SP)"
 $spStart = $script:DeployedFileCount
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
@@ -482,13 +482,18 @@ Invoke-SqlFile "$spDir\sp_UpdateRoleStatus.sql"
 
 # --- StagePass venue template SPs (D.2: vong doi VenueTemplate/VenueTemplateVersion) ---
 Invoke-SqlFile "$spDir\sp_CreateVenueTemplate.sql"
+Invoke-SqlFile "$spDir\sp_UpdateVenueTemplate.sql"
 Invoke-SqlFile "$spDir\sp_CreateVenueTemplateVersion.sql"
 Invoke-SqlFile "$spDir\sp_PublishVenueTemplateVersion.sql"
 Invoke-SqlFile "$spDir\sp_DeleteVenueTemplateVersionDraft.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateFloor.sql"
+Invoke-SqlFile "$spDir\sp_DeleteTemplateFloor.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateObject.sql"    # Goi fn_TemplateGeometry*
+Invoke-SqlFile "$spDir\sp_DeleteTemplateObject.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateSection.sql"   # Goi fn_TemplateGeometry*
+Invoke-SqlFile "$spDir\sp_DeleteTemplateSection.sql"
 Invoke-SqlFile "$spDir\sp_ConfigureTemplateSeat.sql"
+Invoke-SqlFile "$spDir\sp_DeleteTemplateSeat.sql"
 Invoke-SqlFile "$spDir\sp_CreateConcertMap.sql"
 Invoke-SqlFile "$spDir\sp_CreateConcertMapRevision.sql"
 Invoke-SqlFile "$spDir\sp_LockConcertMapRevision.sql"
