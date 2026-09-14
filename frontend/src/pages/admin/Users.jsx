@@ -52,6 +52,7 @@ function RoleSection() {
   return (
     <Panel
       title="Cấp và thu hồi vai trò"
+      tone="workflow"
       subtitle="Một người có thể giữ nhiều vai trò cùng lúc. Database từ chối thu hồi vai trò Admin của Admin đang hoạt động CUỐI CÙNG — hệ thống không bao giờ được rơi vào trạng thái không còn quản trị viên nào (UAI01)."
     >
       <form
@@ -121,6 +122,7 @@ function RoleStatusSection() {
   return (
     <Panel
       title="Mở / đóng việc phân công một vai trò"
+      tone="workflow"
       subtitle="Đóng một vai trò chỉ CHẶN VIỆC CẤP MỚI. Người đang giữ vai trò vẫn giữ nguyên quyền — muốn thu hồi của một người cụ thể thì dùng khối “Cấp và thu hồi vai trò” ở trên."
     >
       <form
@@ -177,6 +179,7 @@ function UserStatusSection() {
   return (
     <Panel
       title="Trạng thái tài khoản"
+      tone="attention"
       subtitle="Khóa hoặc vô hiệu hóa một tài khoản. Tài khoản không ở trạng thái Active sẽ không đăng nhập được, và mọi phiên làm việc hiện có cũng mất hiệu lực."
     >
       <form
@@ -229,6 +232,7 @@ function StaffAssignmentSection({ isAdmin }) {
   return (
     <Panel
       title="Phân công nhân viên soát vé"
+      tone="workflow"
       subtitle={
         'Nhân viên chỉ soát được vé của concert mình được phân công — stored procedure trả về '
         + 'UNAUTHORIZED nếu quét vé của concert khác. Chọn trạng thái Revoked để thu hồi phân công.'
