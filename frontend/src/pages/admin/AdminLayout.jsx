@@ -5,7 +5,7 @@ import { invalidateCatalog } from '../../lib/adminCatalog';
 import { Button, Card, EmptyState } from '../../components/ui';
 import {
   IconTicket, IconGrid, IconLayers, IconTag,
-  IconUndo, IconChart, IconDocument, IconUser, IconScan,
+  IconUndo, IconChart, IconDocument, IconUser, IconScan, IconAlert,
 } from '../../components/ui/icons';
 import Catalog from './Catalog';
 import VenueTemplates from './VenueTemplates';
@@ -15,6 +15,7 @@ import Users from './Users';
 import Refunds from './Refunds';
 import Reports from './Reports';
 import Audit from './Audit';
+import DemoConcurrency from './DemoConcurrency';
 
 /**
  * Khu quản trị.
@@ -63,6 +64,10 @@ export default function AdminLayout() {
     // Chỉ Admin: VW_AuditTrail tự trả 0 dòng cho phiên không giữ Role Admin, nên hiện
     // mục này cho Organizer chỉ dẫn họ vào một trang chắc chắn rỗng.
     ...(isAdmin ? [{ to: '/admin/audit', label: 'Nhật ký', desc: 'Tra cứu lịch sử thay đổi (FR59)', icon: IconDocument }] : []),
+    // Chỉ Admin: công cụ TRÌNH DIỄN 5 lỗi tương tranh — không phải nghiệp vụ.
+    // Mọi endpoint của nó mang [Authorize(Roles = "Admin")] và nằm gọn trong
+    // DemoConcurrencyController.cs: xoá controller + trang này là hết dấu vết.
+    ...(isAdmin ? [{ to: '/admin/demo-concurrency', label: 'Demo lỗi', desc: 'Trình diễn 5 lỗi tương tranh', icon: IconAlert }] : []),
     // Cả hai vai trò đều vào được, nhưng thấy khác nhau: Organizer chỉ có khối phân
     // công soát vé cho concert của mình (sp_AddCheckinStaffAssignment mở cho Organizer
     // sở hữu), còn cấp vai trò / khóa tài khoản vẫn là việc riêng của Admin. Nhãn đổi
@@ -129,6 +134,10 @@ export default function AdminLayout() {
           <Route
             path="audit"
             element={isAdmin ? <Audit /> : <Navigate to="/admin/concerts" replace />}
+          />
+          <Route
+            path="demo-concurrency"
+            element={isAdmin ? <DemoConcurrency /> : <Navigate to="/admin/concerts" replace />}
           />
           <Route path="users" element={<Users isAdmin={isAdmin} />} />
           <Route path="*" element={<Navigate to="/admin/concerts" replace />} />
