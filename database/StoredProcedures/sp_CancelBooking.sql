@@ -2,7 +2,7 @@
 -- sp_CancelBooking 
 -- Huy Booking, nha ghe (EventSeat) va huy phan bo (Allocation).
 -- ============================================================
-CREATE PROCEDURE dbo.sp_CancelBooking
+CREATE OR ALTER PROCEDURE dbo.sp_CancelBooking
 (
     @BookingID      INT,
     @CustomerUserID INT
