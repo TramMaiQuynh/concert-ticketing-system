@@ -80,21 +80,52 @@ Giao diện: **http://localhost:5173**
 Dùng khi muốn trở về trạng thái trắng giữa các lần diễn tập mà không cần build lại:
 
 ```powershell
-# Bước A — Deploy lại database sạch
+# Bước A — Dừng backend đang chạy (Ctrl+C ở cửa sổ dotnet run)
+
+# Bước B — Deploy lại database sạch
 cd database
 .\deploy.ps1 -ServerInstance ".\SQLEXPRESS" -DropExisting $true
+cd ..
 
-# Bước B — Cập nhật credentials mới vào appsettings.Local.json
-#   (deploy.ps1 sinh mật khẩu ngẫu nhiên mỗi lần — credentials cũ không còn hợp lệ)
-$creds = Get-Content ..\.deploy\db-credentials.json | ConvertFrom-Json
-# Mở appsettings.Local.json và thay password trong ConnectionStrings.Default
-# bằng $creds.apiServiceConnection (hoặc chạy lại setup-demo.ps1 -SkipBuild)
+# Bước C — Ghi lại cấu hình theo mật khẩu SQL mới (BẮT BUỘC, xem ghi chú dưới)
+.\scripts\setup-demo.ps1 -SkipDatabase
 
-# Bước C — Restart backend (Ctrl+C rồi dotnet run lại)
-
-# Bước D — Bootstrap admin lại
+# Bước D — Chạy lại backend (dotnet run), rồi bootstrap admin
 .\scripts\bootstrap-admin.ps1
 ```
+
+**Bước C không được bỏ.** `deploy.ps1` sinh mật khẩu SQL mới mỗi lần, nên
+`appsettings.Local.json` cũ trỏ tới mật khẩu không còn tồn tại — backend sẽ khởi động
+rồi chết ở lời gọi database đầu tiên. `-SkipDatabase` bảo script bỏ qua phần deploy và
+chỉ làm lại cấu hình + build.
+
+### Xác nhận database thật sự trống
+
+Bước nhỏ nhưng đừng bỏ: nó phân biệt "script báo thành công" với "database đúng là
+trạng thái mình nghĩ".
+
+```powershell
+sqlcmd -S .\SQLEXPRESS -E -d ConcertTicketingDB -I -h -1 -W -Q `
+  "SELECT 'UserAccount', COUNT(*) FROM UserAccount
+   UNION ALL SELECT 'Role',    COUNT(*) FROM Role
+   UNION ALL SELECT 'Concert', COUNT(*) FROM Concert
+   UNION ALL SELECT 'Venue',   COUNT(*) FROM Venue
+   UNION ALL SELECT 'Booking', COUNT(*) FROM Booking;"
+```
+
+Ngay sau deploy (trước `bootstrap-admin.ps1`) kết quả phải đúng như sau:
+
+```
+UserAccount 1     <- duy nhất 'system', PasswordHash NULL, không đăng nhập được
+Role        4     <- Admin / Organizer / Customer / Check-in Staff
+Concert     0
+Venue       0
+Booking     0
+```
+
+Đó là toàn bộ dữ liệu nền: 4 vai trò, 1 tài khoản kỹ thuật cho các tiến trình nền, và
+5 khoá cấu hình hệ thống. **Không một dòng dữ liệu nghiệp vụ nào.** Nếu `UserAccount`
+khác 1, database chưa sạch — đừng bắt đầu buổi demo cho tới khi nó bằng 1.
 
 > **Tại sao `deploy.ps1` sinh mật khẩu mới mỗi lần?** Đây là quyết định bảo mật có chủ đích:
 > nếu `.deploy/db-credentials.json` bị lộ, kẻ tấn công chỉ dùng được đến lần deploy kế tiếp.
@@ -132,15 +163,27 @@ Mật khẩu chung cho mọi tài khoản được tạo trong buổi demo: `Dem
 - Ghi lại ID hiển thị trong giao diện — dùng ở bước tạo Zone.
 
 **c. Tạo khu vực (Zone)**
-- Chọn địa điểm vừa tạo → Thêm Zone.
-- **Khu Seated** (`Seated`): nhập Zone Code, tên khu, tầng.
-- **Khu Đứng** (`GeneralAdmission`): nhập thêm sức chứa (bắt buộc với GA). Khu này bán theo sức chứa, không có ghế đánh số — đúng với cách mô hình hoá khu đứng trước sân khấu.
+- Chọn địa điểm vừa tạo → nhập Mã khu vực (`A`) + Tên hiển thị → Lưu. Ghi lại ID.
+- Khu tạo ở trang này **luôn là khu có ghế** (`Seated`) — đó là mặc định của
+  `sp_CreateZone`, và form ở đây cố ý không hỏi loại khu.
+- Muốn tạo **khu vé đứng** (`GeneralAdmission`, bán theo sức chứa và không có ghế đánh
+  số) thì dùng **Quản trị → Sơ đồ địa điểm** (§4.2) — ở đó mới có ô chọn loại khu và ô
+  sức chứa, vì khu đứng chỉ có ý nghĩa khi đã có mặt phẳng để đặt nó lên.
 
-**d. Tạo ghế (Seated zone)**
-- Tạo ghế đơn: nhập Hàng (`A`) + Số thứ tự trong hàng (`1`) → Lưu. Hệ thống tự sinh `SeatCode`.
-- Tạo hàng loạt: nhập Hàng (`A`), Từ (`2`), Đến (`10`), Tiền tố. Một lệnh tạo 9 ghế liên tiếp `A2`–`A10`.
+**d. Tạo ghế (khu có ghế)**
+- Tạo một ghế: **Mã ghế** (`A1`) + Hàng (`A`) + Số thứ tự trong hàng (`1`) → Lưu.
+  Sau mỗi lần tạo, ô số thứ tự tự tăng để gõ tiếp `A2`, `A3`… nhanh hơn.
+- Tạo hàng loạt: **Tiền tố mã ghế** (`A`) + Hàng (`A`) + Từ (`1`) đến (`12`).
+  Một lệnh tạo 12 ghế `A1`–`A12`, banner trả về dải ID — **cần dải này ở §4.3**.
 
-**Điểm kỹ thuật đáng nói:** thử tạo ghế mà không nhập Hàng/Số thứ tự trong một Seated zone → hệ thống từ chối ngay (`sp_CreateSeat` lỗi 59825: "Ghế trong khu có ghế phải có hàng và số thứ tự trong hàng"). Ràng buộc nằm ở stored procedure, không phải JavaScript — tắt JavaScript cũng không lách được.
+**Điểm kỹ thuật đáng nói:** mã ghế là **định danh**, hàng và số thứ tự mới là **vị trí**
+— hai thứ khác nhau, nên form hỏi cả hai. Thử tạo ghế mà bỏ trống Hàng/Số thứ tự trong
+một khu có ghế → hệ thống từ chối (`sp_CreateSeat` lỗi 59825). Không phải luật hình
+thức: thiếu vị trí thì sơ đồ dồn mọi ghế về cùng một ô và chúng chồng khít lên nhau,
+người dùng chỉ thấy đúng một ghế còn những ghế kia biến mất không một thông báo nào.
+Luật đối xứng cũng đúng — gán vị trí cho ghế trong **khu vé đứng** bị từ chối (59823).
+Cả hai ràng buộc nằm ở stored procedure, không phải JavaScript — tắt JavaScript cũng
+không lách được.
 
 ---
 
@@ -167,13 +210,69 @@ Giao diện chia ba bước theo đúng thứ tự phụ thuộc của database 
 
 ### 4.3 Tạo concert + vòng đời → OnSale (3 phút)
 
+> ⚠️ **Làm bước này TRƯỚC, nếu không sẽ kẹt ngay ở dòng đầu tiên.**
+>
+> **Quản trị → Người dùng → Cấp và thu hồi vai trò**: UserID `2` (tài khoản `admin`
+> do `bootstrap-admin.ps1` tạo — số hiệu ghi sẵn trong `.deploy/bootstrap-info.json`),
+> vai trò **Organizer**, hành động **Cấp**. Rồi **đăng xuất và đăng nhập lại**.
+>
+> **Vì sao:** một concert phải **thuộc về một Organizer** — `sp_CreateConcert` kiểm tra
+> rằng người đứng tên concert đang giữ vai trò Organizer, và từ chối nếu không (lỗi
+> 58006). Vai trò Admin **không** bao hàm Organizer: Admin quản trị hệ thống, Organizer
+> sở hữu sự kiện, và hai việc đó tách nhau có chủ đích. Tài khoản `admin` vừa bootstrap
+> chỉ có Admin (+ Customer mặc định), nên chưa đứng tên concert nào được.
+>
+> Đây cũng là một **điểm đáng nói**: một người giữ được nhiều vai trò cùng lúc, và hệ
+> thống phân quyền theo *vai trò* chứ không theo *cấp bậc* — Admin không tự động làm
+> được mọi việc của Organizer.
+>
+> *Muốn trình diễn rõ sự tách vai hơn:* đăng ký thêm tài khoản `organizer` trên form
+> đăng ký, cấp cho nó vai trò Organizer, rồi làm §4.3 bằng tài khoản đó. Nhớ dùng
+> **cùng một trình duyệt** — khu quản trị nhớ ID đã tạo trong `localStorage`, và sổ tay
+> đó theo trình duyệt chứ không theo tài khoản, nên các ô chọn nghệ sĩ/địa điểm/ghế vẫn
+> còn nguyên sau khi đổi người đăng nhập.
+
 **Quản trị → Concert → Tạo concert mới**
 
-1. Điền thông tin: nghệ sĩ, địa điểm, tên, thời gian, cửa sổ bán vé, giới hạn vé/khách (`PurchaseLimit`).
-2. **Tạo hạng vé**: tên hạng, giá gốc (`BasePrice`) → Lưu.
-3. **Đưa ghế vào kho**: chọn các ghế vừa tạo, gán vào hạng vé → kho vé được lập.
-4. Thử **chuyển sang `OnSale`** khi chưa có ghế trong kho hoặc chưa đặt cửa sổ bán → hệ thống từ chối kèm lý do (`sp_UpdateConcertStatus`, lỗi BR10). Giao diện hiển thị điều kiện còn thiếu thay vì để người dùng đâm vào tường.
-5. Sau khi đủ điều kiện: `Draft` → `Published` → `OnSale`. Concert xuất hiện ở trang chủ.
+1. Điền thông tin: nghệ sĩ, địa điểm, tên, thời gian diễn, cửa sổ bán vé, giới hạn
+   vé/khách (`PurchaseLimit` — để `4`).
+
+   > **Đặt *Mở bán từ* ở một mốc trong QUÁ KHỨ** (ví dụ 5 phút trước). Để ở tương lai
+   > thì concert chưa tới giờ bán, và toàn bộ phần mua vé ở §4.4 sẽ kẹt.
+
+   Concert sinh ra ở trạng thái **Draft** và **không hiện ở trang chủ** — đúng như
+   banner nói.
+2. **Tạo hạng vé**: tên hạng, giá gốc (`BasePrice`) → Lưu. Ghi lại ID.
+3. **Đưa ghế vào kho**: chọn concert + hạng vé, rồi bấm *Chọn tất cả* trong danh sách
+   ghế của sổ tay (hoặc gõ dải ID từ §4.1d). Đây là bước biến ghế của **địa điểm**
+   thành vé bán được: ghế không có giá, giá chỉ xuất hiện khi ghế được đưa vào một
+   concert cụ thể.
+4. Thử **nhảy thẳng** từ `Draft` sang `OnSale` → hệ thống từ chối (**409**). Phải đi
+   đúng `Draft` → `Published` → `OnSale`.
+5. Ngay cả khi đi đúng thứ tự, `OnSale` vẫn bị chặn nếu concert **chưa có ghế nào trong
+   kho vé** (58023) hoặc **chưa đặt cửa sổ bán** (58024) — đó là BR10, và là lý do bước
+   3 không thể bỏ. Giao diện nói trước điều kiện còn thiếu thay vì để người dùng đâm
+   vào tường.
+6. Sau khi đủ điều kiện: `Draft` → `Published` → `OnSale`. Concert xuất hiện ở trang chủ
+   với trạng thái *Đang mở bán*.
+
+---
+
+### 4.3b Khuyến mãi (2 phút) *(tuỳ chọn, nhưng §4.4 có dùng tới mã)*
+
+**Quản trị → Khuyến mãi:**
+
+1. **Chương trình** → chọn concert vừa tạo, tên "Giảm 200k", loại **Fixed**, giá trị
+   `200000`, hiệu lực từ hôm qua đến vài ngày tới, **bật *Yêu cầu mã***.
+2. **Mã giảm giá** → `DEMO200K`, giới hạn 2 lượt/khách.
+
+**Điểm đáng nói:** tạo thêm **một chương trình thứ hai của cùng concert** rồi đặt cho nó
+**cũng mã `DEMO200K`** → hệ thống từ chối (**409**). Ràng buộc
+`UNIQUE(PromotionID, CodeValue)` chỉ bảo đảm mã duy nhất *trong một chương trình*; nếu
+để hai chương trình của cùng một concert cùng đặt một mã thì lúc khách gõ mã đó,
+**không ai xác định được họ định dùng ưu đãi nào**. Luật nằm ở `sp_CreateDiscountCode`
+(58604), và hai đường vòng — bật lại một mã đã tắt (59614), bật lại một chương trình đã
+tắt (59605) — cũng bị chặn bằng đúng lý do đó.
 
 ---
 
@@ -202,13 +301,68 @@ Mở tab trình duyệt riêng (hoặc cửa sổ ẩn danh). **Đăng ký** tà
 
 ### 4.5 Soát vé (2 phút)
 
-Quay lại tab admin. **Quản trị → Người dùng** → tạo tài khoản nhân viên mới → gán role **Check-in Staff** → gán quyền soát vé cho concert vừa tạo (`sp_AddCheckinStaffAssignment`).
+Ba việc, đúng thứ tự:
 
-Đăng nhập bằng tài khoản nhân viên → **Soát vé** → nhập mã vé (copy từ trang Checkout của khách):
+1. **Đăng ký tài khoản nhân viên** trên chính form đăng ký của giao diện (ví dụ
+   `staff` / `Demo@12345`). **Trang *Người dùng* không tạo được tài khoản** — nó chỉ
+   cấp vai trò và phân công; mọi tài khoản đều sinh ra từ form đăng ký công khai, qua
+   `sp_RegisterUser`.
+
+2. Quay lại tab admin → **Quản trị → Người dùng → Cấp và thu hồi vai trò**: nhập
+   **UserID** của nhân viên, vai trò **Check-in Staff**, hành động **Cấp**.
+
+   > **Lấy UserID ở đâu:** API quản trị chưa có đường đọc danh sách người dùng (xem
+   > §6), nên ô này nhận số hiệu chứ không nhận tên đăng nhập. Trên database trống,
+   > `UserID` chạy tuần tự: `system` = 1, `admin` = 2, rồi lần lượt theo thứ tự đăng
+   > ký. Không chắc thì tra:
+   > ```powershell
+   > sqlcmd -S .\SQLEXPRESS -E -d ConcertTicketingDB -I -h -1 -W -Q `
+   >   "SELECT UserID, Username FROM UserAccount ORDER BY UserID;"
+   > ```
+
+3. **Quản trị → Người dùng → Phân công nhân viên soát vé**: nhân viên đó + concert vừa
+   tạo, trạng thái *Active* (`sp_AddCheckinStaffAssignment`).
+
+   > **Đừng bỏ bước này.** Không có phân công thì `sp_CheckInTicket` trả `UNAUTHORIZED`
+   > (BR39) — vé hợp lệ nhưng nhân viên không có quyền ở cổng này. Bỏ qua ở đây thì cả
+   > phần soát vé hỏng ngay trước mặt hội đồng.
+
+Đăng nhập bằng tài khoản nhân viên → **Soát vé** → chọn concert → nhập mã vé (copy từ
+trang Checkout của khách). Bấm *Xem trước* để thấy vé thuộc về ai mà **không** ghi nhận
+lượt vào, rồi mới soát thật:
 
 - `SUCCESS` — vé hợp lệ, lần đầu soát.
 - Quét lại đúng mã → `ALREADY_USED`. Vé chỉ dùng một lần.
 - Đăng nhập tài khoản customer → thử truy cập trang Soát vé → không có lối vào. Gọi thẳng `POST /api/checkin` → **403**. Phân quyền thi hành ở backend và trong stored procedure — giao diện chỉ phản ánh lại.
+
+---
+
+### 4.5b Báo cáo và nhật ký kiểm toán (2 phút)
+
+**Quản trị → Báo cáo** → chọn concert. Ba khối, đúng ba khối mà box-office của
+Eventbrite/Ticketmaster có:
+
+| Khối | Nội dung |
+|---|---|
+| Doanh thu & tồn kho | tổng ghế, còn trống, đang giữ, đã bán, doanh thu, số đơn theo trạng thái |
+| Tỷ lệ vào cổng | vé đã phát hành, đã soát, còn chờ, tỷ lệ % |
+| Người giữ vé | từng ghế · hạng vé · khách · trạng thái vé |
+
+**Điểm đáng nói — hai thứ bảng này KHÔNG có:**
+
+- **Không có mã vé.** Ai đọc được báo cáo cũng đọc được mã vé thì báo cáo trở thành
+  kênh rò rỉ thứ hai cho đúng loại bearer-credential ở §4.4. Mã quét chỉ đi qua thiết
+  bị check-in tại cổng.
+- **Không có tham số "xem báo cáo của ai".** Cả ba khối đọc qua view tự lọc bằng
+  `SESSION_CONTEXT(N'UserID')`: Organizer chỉ thấy concert của chính mình, Admin thấy
+  tất cả, phiên không danh tính thấy **0 dòng**. Phạm vi dữ liệu do database quyết
+  định, không do tham số người gọi truyền lên.
+
+**Quản trị → Nhật ký** *(chỉ Admin)* → tra theo loại thực thể / khoảng thời gian. Toàn
+bộ những gì vừa làm trong buổi demo đều nằm ở đây, kèm đúng tác nhân đã thực hiện.
+
+**Điểm đáng nói:** bảng `AuditRecord` được `TRG_AuditRecord_SecurityGuard` canh giữ —
+**không ai sửa hay xoá được một dòng nhật ký nào**, kể cả `app_admin` (BR50).
 
 ---
 
@@ -220,7 +374,9 @@ Quay lại tab admin. **Quản trị → Người dùng** → tạo tài khoản
 
 18. **Row-Level Security**: `VW_CustomerBookingHistory` lọc theo `SESSION_CONTEXT(N'UserID')`, nên trang "Vé của tôi" không hề gửi `userId` nào lên — database tự giới hạn kết quả trả về đúng chủ sở hữu.
 
-19. **Sổ tay cục bộ (`localStorage`)**: API quản trị gần như toàn bộ là endpoint ghi; các đường đọc (`GET /admin/venues`, `GET /admin/artists`…) chỉ đủ để dropdown chọn địa điểm/nghệ sĩ. Những thứ còn lại (hạng vé, khuyến mãi, ghế) chưa có đường đọc — nên giao diện giữ một sổ tay cục bộ nhớ ID vừa tạo. Đây là điểm đáng nói thẳng: giao diện tốt nhất cũng không bù được một API thiếu đường đọc.
+19. **Hai đường vào database, cố ý**: ứng dụng web luôn kết nối bằng `api_service`; các login theo vai trò (`app_admin`, `app_organizer`, `app_customer`, `app_checkinstaff`) phục vụ đường truy cập trực tiếp vào database. Các view `VW_Organizer*` tồn tại cho đường thứ hai đó (BR37/FR48/BO9/FR15) — chứng minh được: `app_organizer` bị `DENY` trên bảng `Booking` (lỗi 229) nhưng đọc qua view thì đúng, và chỉ thấy concert của chính mình.
+
+20. **Sổ tay cục bộ (`localStorage`)**: API quản trị gần như toàn bộ là endpoint ghi. Các đường đọc hiện có (`GET /admin/venues`, `GET /admin/venues/{id}/zones`, `GET /admin/artists`, cùng ba endpoint báo cáo ở §4.5b) đủ để dropdown chọn địa điểm/nghệ sĩ, màn *Sơ đồ địa điểm* và trang *Báo cáo* chạy bằng dữ liệu thật. Những thứ còn lại (**người dùng**, hạng vé, khuyến mãi, mã giảm giá, ghế) chưa có đường đọc — nên giao diện giữ một sổ tay cục bộ nhớ ID vừa tạo, và §4.5 phải làm việc với UserID. Sổ tay có nút dọn, và mọi ô chọn đều kèm ô nhập ID thủ công để không bao giờ bị kẹt. Đây là điểm đáng nói thẳng: **giao diện tốt nhất cũng không bù được một API thiếu đường đọc.**
 
 ---
 
@@ -409,9 +565,14 @@ Nêu trước sẽ tốt hơn để hội đồng hỏi:
 6. **Chưa kiểm chứng ở quy mô nhiều instance.** Toàn bộ khoá đồng thời (`sp_getapplock`,
    `UPDLOCK`/`READPAST`) nằm trong SQL Server nên đúng khi chạy nhiều instance API,
    nhưng điều đó chưa được kiểm chứng bằng thực nghiệm.
-7. **`GET /bookings/{id}/tickets` chưa có.** Mã vé hiển thị ở trang Checkout ngay sau khi
-   thanh toán; không có màn hình "xem vé lại" riêng. Luồng soát vé phía nhân viên đã hoàn
-   chỉnh — phần còn thiếu là giao diện xem vé của khách.
+7. **Chưa có màn hình "vé của tôi" đúng nghĩa.** Mã vé và QR hiện ở trang đơn hàng
+   (`/checkout/{id}`), và khách mở lại được bất cứ lúc nào từ **Vé của tôi** — nên vé
+   không bị mất sau khi rời trang. Thứ còn thiếu là một màn hình vé riêng (ví
+   `GET /bookings/{id}/tickets`) với vé rời từng ghế, tải về được. Luồng soát vé phía
+   nhân viên thì đã hoàn chỉnh.
+8. **API quản trị thiếu đường đọc**, rõ nhất là danh sách người dùng. Hệ quả trực tiếp
+   thấy ngay trong chính tài liệu này: §4.5 phải làm việc với UserID thay vì tên đăng
+   nhập, và khu quản trị phải tự nhớ ID trong `localStorage` (§4.6 mục 19).
 
 ---
 
@@ -420,7 +581,7 @@ Nêu trước sẽ tốt hơn để hội đồng hỏi:
 ```
 database/     28 bảng, 33 trigger, 3 function, 43 SP, 12 view, RBAC, 159 test
 backend/      .NET 9 · Clean Architecture · Dapper · JWT · 263 test
-frontend/     React 19 · Vite · React Router · khu quản trị đủ 23 endpoint
+frontend/     React 19 · Vite · React Router · khu quản trị 8 mục (Admin) / 6 (Organizer)
 scripts/      setup-demo.ps1  · bootstrap-admin.ps1  · demo-concurrency.ps1
               seed-demo.ps1   (tùy chọn — nạp nhanh dữ liệu sẵn, không dùng trong luồng bảo vệ chính)
 docs/         database_plan.txt — đặc tả gốc, nguồn tham chiếu của toàn hệ thống
