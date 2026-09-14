@@ -35,11 +35,12 @@ BEGIN
                        WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 60101, 'sp_ConfigureTemplateSeat: Chi Admin duoc cau hinh TemplateSeat.', 1;
 
-        DECLARE @VersionStatus VARCHAR(32), @VenueTemplateVersionID INT;
-        SELECT @VersionStatus = vtv.VersionStatus, @VenueTemplateVersionID = vtv.VenueTemplateVersionID
+        DECLARE @VersionStatus VARCHAR(32), @VenueTemplateVersionID INT, @TemplateVenueID INT;
+        SELECT @VersionStatus = vtv.VersionStatus, @VenueTemplateVersionID = vtv.VenueTemplateVersionID, @TemplateVenueID = vt.VenueID
         FROM TemplateSection s
         JOIN TemplateFloor f ON f.TemplateFloorID = s.TemplateFloorID
         JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
+        JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
         WHERE s.TemplateSectionID = @TemplateSectionID;
 
         IF @VersionStatus IS NULL
@@ -50,6 +51,16 @@ BEGIN
 
         IF NOT EXISTS (SELECT 1 FROM Seat WHERE SeatID = @SeatID)
             THROW 60104, 'sp_ConfigureTemplateSeat: SeatID khong ton tai.', 1;
+
+        -- Bat bien "ghe tren so do StagePass phai la Seat that CUA DUNG VENUE"
+        -- — cung tinh than TRG_SeatVenueConsistency/TRG_EventSeatVenue dang
+        -- thi hanh cho Zone/EventSeat. Thieu kiem tra nay se cho phep dung
+        -- nham ghe cua mot dia diem khac tren template cua dia diem nay.
+        IF NOT EXISTS (
+            SELECT 1 FROM Seat st JOIN Zone z ON z.ZoneID = st.ZoneID
+            WHERE st.SeatID = @SeatID AND z.VenueID = @TemplateVenueID
+        )
+            THROW 60111, 'sp_ConfigureTemplateSeat: SeatID khong thuoc dung Venue cua VenueTemplate.', 1;
 
         IF ISNULL(@SeatKey, '') = ''
             THROW 60105, 'sp_ConfigureTemplateSeat: SeatKey khong duoc de trong.', 1;

@@ -300,3 +300,26 @@ SET @SQL = N'
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@secB, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@tsB OUTPUT;
     IF @tsB IS NULL THROW 59999, ''SeatID o template khac phai duoc phep, tsB phai duoc gan'', 1;';
 EXEC test.sp_RunTest @Suite,'ConfigureSeat_SameSeatIDAcrossDifferentTemplates_OK','SUCCESS',NULL,@SQL;
+
+-- Dung nham ghe cua MOT VENUE KHAC tren template cua venue nay phai bi tu
+-- choi — cung tinh than TRG_SeatVenueConsistency/TRG_EventSeatVenue dang
+-- thi hanh cho Zone/EventSeat, phat hien la mot khoang trong luc thiet ke
+-- SP tao ConcertMapRevision (can hai Venue de kiem tra le lech), da vien
+-- vien vao goc (sp_ConfigureTemplateSeat) truoc khi viet test nay.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @ven1 INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @ven2 INT;
+    EXEC dbo.sp_CreateVenue @ActorUserID=@adm, @VenueName=N''REG SeatWrongVenue Venue2'', @Address=N''123 Test St'', @NewVenueID=@ven2 OUTPUT;
+    DECLARE @zone2 INT;
+    EXEC dbo.sp_CreateZone @ActorUserID=@adm, @VenueID=@ven2, @ZoneCode=N''Z1'', @ZoneName=N''Zone 1'', @NewZoneID=@zone2 OUTPUT;
+    DECLARE @seat2 INT;
+    EXEC dbo.sp_CreateSeat @ActorUserID=@adm, @ZoneID=@zone2, @SeatCode=N''A1'', @SeatLabel=N''A1'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@seat2 OUTPUT;
+
+    DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven1, @TemplateName=N''REG SeatWrongVenue Template'', @NewVenueTemplateID=@vt OUTPUT;
+    EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@seat2, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;';
+EXEC test.sp_RunTest @Suite,'ConfigureSeat_SeatFromWrongVenue_Fail60111','ERROR',60111,@SQL;
