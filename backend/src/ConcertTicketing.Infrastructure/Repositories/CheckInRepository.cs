@@ -55,4 +55,37 @@ public class CheckInRepository : ICheckInRepository
             info,
             p.Get<DateTime?>("@CheckInTimestamp"));
     }
+
+    public async Task<CheckInPreview?> PreviewAsync(CheckInRequest request)
+    {
+        using var conn = await _factory.OpenAsync();
+
+        // Chỉ đọc, không gọi sp_CheckInTicket (SP đó luôn ghi nhận một lượt check-in mỗi
+        // lần gọi, kể cả khi thất bại). Tên khách đi qua VW_CheckInStaffUserAccount thay vì
+        // đọc thẳng UserAccount: view đó đã ẩn PasswordHash và tự giới hạn — qua
+        // SESSION_CONTEXT do IDbConnectionFactory set theo JWT của nhân viên đang gọi —
+        // chỉ còn thấy khách có vé thuộc Concert mình được phân công (BR39). Nhân viên chưa
+        // được phân công cho Concert này sẽ không JOIN được sang view -> trả về null, y hệt
+        // vé không tồn tại, không lộ vé đó có tồn tại hay không.
+        var sql = @"
+            SELECT t.TicketID, t.TicketStatus,
+                   s.SeatCode, z.ZoneName, tc.CategoryName,
+                   ua.DisplayName, ua.Username
+            FROM   Ticket t
+            JOIN   EventSeat es      ON es.EventSeatID = t.EventSeatID
+            JOIN   Seat s            ON s.SeatID = es.SeatID
+            LEFT JOIN Zone z         ON z.ZoneID = s.ZoneID
+            JOIN   TicketCategory tc ON tc.ConcertID = es.ConcertID
+                                    AND tc.TicketCategoryID = es.TicketCategoryID
+            JOIN   Booking b         ON b.BookingID = t.BookingID
+            JOIN   VW_CheckInStaffUserAccount ua ON ua.UserID = b.CustomerUserID
+            WHERE  t.TicketCode = @TicketCode
+              AND  t.ConcertID  = @ConcertID;";
+
+        var p = new DynamicParameters();
+        p.Add("@TicketCode", request.TicketCode, DbType.AnsiString, size: 64);
+        p.Add("@ConcertID",  request.ConcertId,  DbType.Int32);
+
+        return await conn.QuerySingleOrDefaultAsync<CheckInPreview>(sql, p);
+    }
 }
