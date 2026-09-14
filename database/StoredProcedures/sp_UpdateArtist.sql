@@ -47,9 +47,11 @@ BEGIN
         -- dang duoc Concert CHUA ket thuc tham chieu - neu khong, Concert do se giu
         -- tham chieu toi mot Artist khong con su dung duoc cho den khi dien xong.
         IF @ArtistStatus = 'Retired' AND @OldStatus = 'Active'
-           AND EXISTS (SELECT 1 FROM Concert
-                       WHERE ArtistID = @ArtistID
-                         AND ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed'))
+           AND EXISTS (SELECT 1
+                       FROM ConcertArtist ca
+                       JOIN Concert c ON c.ConcertID = ca.ConcertID
+                       WHERE ca.ArtistID = @ArtistID
+                         AND c.ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed'))
             THROW 59115, 'sp_UpdateArtist: Khong the Retire Artist dang duoc Concert chua ket thuc tham chieu.', 1;
 
         UPDATE Artist
