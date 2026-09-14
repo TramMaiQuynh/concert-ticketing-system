@@ -259,9 +259,16 @@ SET @SQL = N'
         THROW 59904, ''sp_CreateVenue khong cat het khoang trang dau/cuoi cua VenueName.'', 1;';
 EXEC test.sp_RunTest @Suite,'CreateVenue_TrimsName_OK','SUCCESS',NULL,@SQL;
 
+-- @VenueID phai lay tu du lieu that (khong ghi cung so 1): DELETE trong
+-- Teardown-MockData.sql khong reset IDENTITY seed cua Venue, nen tu lan chay
+-- thu hai tro di VenueID=1 khong con ton tai va bai test se sai lech muc dich
+-- (vd. UpdateVenue_InvalidStatus_Fail59403 nhan nham 59402 "Venue khong ton
+-- tai" thay vi 59403 dang muon kiem). Dung cung mot cach lay @vid tu Venue nhu
+-- da dung o duoi (dong ~425).
 SET @SQL = N'
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
-    EXEC sp_UpdateVenue @ActorUserID=@uid, @VenueID=1, @VenueName=N''Venue trai phep'';';
+    DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
+    EXEC sp_UpdateVenue @ActorUserID=@uid, @VenueID=@vid, @VenueName=N''Venue trai phep'';';
 EXEC test.sp_RunTest @Suite,'UpdateVenue_NonAdmin_Fail59401','ERROR',59401,@SQL;
 
 SET @SQL = N'
@@ -271,12 +278,14 @@ EXEC test.sp_RunTest @Suite,'UpdateVenue_NotFound_Fail59402','ERROR',59402,@SQL;
 
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
-    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=1, @VenueStatus=''Archived'';';
+    DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=@vid, @VenueStatus=''Archived'';';
 EXEC test.sp_RunTest @Suite,'UpdateVenue_InvalidStatus_Fail59403','ERROR',59403,@SQL;
 
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
-    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=1, @VenueName=N''   '';';
+    DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=@vid, @VenueName=N''   '';';
 EXEC test.sp_RunTest @Suite,'UpdateVenue_EmptyName_Fail59404','ERROR',59404,@SQL;
 
 -- Khong duoc ngung su dung Venue dang duoc Concert CHUA ket thuc tham chieu:
