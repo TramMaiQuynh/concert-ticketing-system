@@ -7,7 +7,7 @@ GO
 -- Dung trong sp_CreateBooking de tinh SubtotalAmount (§12.9.1).
 -- Tra ve: DECIMAL(18,0) - tong gia goc.
 -- ============================================================
-CREATE FUNCTION dbo.fn_CalculateBookingSubtotal
+CREATE OR ALTER FUNCTION dbo.fn_CalculateBookingSubtotal
 (
     @BookingID INT
 )
