@@ -139,8 +139,11 @@ Write-Host ""
 Write-Host "    [2] Frontend:  cd frontend" -ForegroundColor White
 Write-Host "                   npm run dev" -ForegroundColor White
 Write-Host ""
-Write-Host "  Sau khi backend chay, nap du lieu demo:"
-Write-Host "                   .\scripts\seed-demo.ps1" -ForegroundColor White
+Write-Host "  Sau khi backend chay, bootstrap tai khoan admin:"
+Write-Host "                   .\scripts\bootstrap-admin.ps1" -ForegroundColor White
+Write-Host ""
+Write-Host "  Database dang TRONG (chi co tai khoan 'system' va 4 Role)."
+Write-Host "  Moi du lieu nghiep vu duoc tao bang tay tren giao dien - xem README-DEMO.md."
 Write-Host ""
 Write-Host "  Giao dien: $FrontendUrl"
 Write-Host ""
