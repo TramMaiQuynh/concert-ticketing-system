@@ -522,6 +522,86 @@ Cửa sổ tranh chấp được nới rộng bằng `WAITFOR` nên kết quả 
 
 ---
 
+## 4b. Chạy hai máy để tranh chấp thật (tuỳ chọn — hotspot điện thoại)
+
+Kịch bản `demo-concurrency.ps1` ở §4.7 chứng minh cơ chế ở **tầng database** (hai tiến
+trình `sqlcmd` song song). Nếu muốn hội đồng thấy **hai người thật bấm trên hai máy**,
+dựng như sau. Toàn bộ đã được chạy thử end-to-end, kể cả màn giành ghế.
+
+**Mạng:** phát hotspot từ điện thoại, cả hai laptop nối vào đó. Không dùng WiFi trường —
+mạng tổ chức thường bật *client isolation*, khiến hai máy không thấy nhau.
+
+### Chuẩn bị một lần trên laptop-server
+
+```powershell
+# PowerShell chay quyen Administrator
+New-NetFirewallRule -DisplayName "ConcertTicketing Backend LAN"  -Direction Inbound -Protocol TCP -LocalPort 5295 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "ConcertTicketing Frontend LAN" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private
+```
+
+Khi Windows hỏi mạng hotspot là loại gì → chọn **Private**. Kiểm tra bằng
+`Get-NetConnectionProfile`; nếu ra `Public` thì
+`Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`.
+
+### Mỗi lần chạy
+
+```powershell
+# 1. Lay IP cua laptop-server TRONG mang hotspot (doi moi lan noi lai)
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^127\.|^169\.254\.' } | Select IPAddress, InterfaceAlias
+
+# 2. Deploy + build, tro thang vao IP do
+.\scripts\setup-demo.ps1 -ApiUrl "http://<IP>:5295" -FrontendUrl "http://<IP>:5173"
+
+# 3. Cua so [1] - backend, lang nghe moi giao dien mang
+cd backend\src\ConcertTicketing.API
+dotnet run --launch-profile lan
+
+# 4. Cua so [2] - frontend
+cd frontend
+npm run dev:lan
+
+# 5. Cua so [3] - bootstrap admin (van goi qua localhost, binh thuong)
+.\scriptsootstrap-admin.ps1
+```
+
+**Cả hai máy** (kể cả laptop-server) mở `http://<IP>:5173`.
+
+> **Ba chỗ bắt buộc dùng đúng biến thể LAN**, nếu không máy kia không kết nối được:
+> `-ApiUrl`/`-FrontendUrl` khi gọi `setup-demo.ps1`, `--launch-profile lan` thay cho
+> `dotnet run`, và `npm run dev:lan` thay cho `npm run dev`. Profile mặc định chỉ lắng
+> nghe `127.0.0.1`. Bản thân `setup-demo.ps1` sẽ tự in lại ba lưu ý này khi phát hiện
+> địa chỉ không phải localhost.
+
+> **`AllowedHosts` — chỗ dễ sập nhất.** `appsettings.json` giới hạn
+> `"localhost;127.0.0.1"` để chống Host header injection. Hệ quả: mọi request đến qua IP
+> LAN bị trả **400 "Invalid Hostname"** *trước khi* chạm tới controller — CORS không liên
+> quan gì, và thông báo lỗi không gợi ý gì về nguyên nhân. `setup-demo.ps1` nay tự thêm
+> host của `-ApiUrl` vào danh sách, nên chỉ cần truyền đúng tham số là xong.
+
+### Kiểm tra trước khi vào phòng — từ laptop teammate
+
+```powershell
+Test-NetConnection -ComputerName <IP> -Port 5295
+Test-NetConnection -ComputerName <IP> -Port 5173
+```
+
+Cả hai `TcpTestSucceeded : True` mới yên tâm.
+
+### Diễn màn tranh chấp
+
+Hai người đăng nhập hai tài khoản khách khác nhau, cùng mở sơ đồ ghế của một concert,
+cùng chọn **đúng một ghế**, rồi đếm 1-2-3 cùng bấm **Giữ chỗ**. Một người vào được
+trang thanh toán; người kia nhận thông báo *"ghế đã được người khác đặt"* (HTTP 409 từ
+`sp_CreateBooking`).
+
+> **Nói thẳng điểm khác biệt:** cách này thuyết phục về mặt thị giác nhưng **không tái
+> hiện được 100%** — nếu hai người bấm lệch nhau vài trăm mili-giây thì người sau chỉ
+> đơn giản thấy ghế đã bị chiếm, không còn là tranh chấp đồng thời thật. Script ở §4.7
+> mới là thứ chứng minh chặt chẽ, vì nó nới cửa sổ tranh chấp bằng `WAITFOR`. Dùng cả
+> hai: máy đôi để hội đồng *thấy*, script để *chứng minh*.
+
+---
+
 ## 5. Lệnh chạy kiểm thử
 
 ```powershell
