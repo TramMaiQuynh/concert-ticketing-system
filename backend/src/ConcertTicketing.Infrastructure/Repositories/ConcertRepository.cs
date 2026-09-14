@@ -229,6 +229,26 @@ public class ConcertRepository : IConcertRepository
                 x.TicketCategoryID, x.CategoryName, x.InventoryStatus, x.Price)).ToList());
     }
 
+    public async Task<IEnumerable<ActivePromotion>> ListActivePromotionsAsync(int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+
+        // JOIN Concert để giữ đúng PublicConcertFilter: VW_ActivePromotions tự nó không biết
+        // ConcertStatus, nên nếu không lọc ở đây, một concert còn Draft (chưa công bố) sẽ lộ
+        // tên và giá trị khuyến mãi qua endpoint [AllowAnonymous] trước khi Organizer sẵn sàng.
+        var sql = @"
+            SELECT vp.PromotionID, vp.ConcertID, vp.PromotionName, vp.PromotionDescription,
+                   vp.DiscountType, vp.DiscountValue, vp.StartDatetime, vp.EndDatetime,
+                   vp.CodeRequiredFlag, vp.MaxApplicableQuantity, vp.MaxDiscountAmount
+            FROM   VW_ActivePromotions vp
+            JOIN   Concert c ON c.ConcertID = vp.ConcertID
+            WHERE  vp.ConcertID = @ConcertID
+              AND  " + PublicConcertFilter + @"
+            ORDER BY vp.StartDatetime;";
+
+        return await conn.QueryAsync<ActivePromotion>(sql, new { ConcertID = concertId });
+    }
+
     // Kiểu trung gian chỉ dùng cho việc đọc ba tập kết quả ở trên.
     private sealed class VenueMapRow
     {
