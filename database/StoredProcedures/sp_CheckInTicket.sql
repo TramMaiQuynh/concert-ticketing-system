@@ -176,9 +176,44 @@ BEGIN
 
     END TRY
     BEGIN CATCH
+        -- Dangling-else da tung o day: "IF @TranCounter = 0 IF @@TRANCOUNT > 0
+        -- ROLLBACK TRANSACTION; ELSE IF XACT_STATE() <> -1 ROLLBACK TRANSACTION
+        -- sp_CheckInTicket_Save;" khong co BEGIN/END nen T-SQL gan ELSE vao IF
+        -- LONG BEN TRONG (IF @@TRANCOUNT > 0), khong phai IF @TranCounter = 0 nhu
+        -- thut le the hien. Hau qua da kiem chung truc tiep bang SQL:
+        --   - @TranCounter = 0 (duong duy nhat CheckInRepository dung - khong bao
+        --     gio mo transaction truoc khi goi SP nay): neu mot trigger tren
+        --     Ticket/CheckIn/AuditRecord tu ROLLBACK TRANSACTION roi THROW (dung
+        --     mau ma MOI trigger khac trong du an dang dung) trong luc SP dang ghi,
+        --     @@TRANCOUNT da ve 0 truoc khi toi day. Code cu van thu
+        --     ROLLBACK TRANSACTION sp_CheckInTicket_Save - savepoint chua bao gio
+        --     duoc tao o nhanh nay (nhanh nay dung BEGIN TRANSACTION, khong phai
+        --     SAVE TRANSACTION) va cung khong con transaction nao de rollback -
+        --     nem loi 3903 ("no corresponding BEGIN TRANSACTION") de vao ngay
+        --     giua loi goc co y nghia tu trigger, xoa mat moi dau vet nguyen nhan
+        --     that.
+        --   - @TranCounter > 0 (SP duoc goi long trong mot transaction co san -
+        --     day cung chinh la trang thai @@TRANCOUNT khi test.sp_RunTest goi SP
+        --     nay, vi no tu BEGIN TRAN truoc): dieu kien outer sai nen TOAN BO
+        --     nhanh long ben trong bi bo qua - khong he thu ROLLBACK TO SAVEPOINT
+        --     ngay ca khi XACT_STATE() = 1 (chua doomed) va le ra rollback nay
+        --     hoan toan thuc hien duoc. Cac thay doi da ghi truoc do trong pham vi
+        --     savepoint (vd. Ticket -> Used) bi bo lai nguyen ven, khong duoc lui
+        --     ve truoc khi loi duoc nem tiep len caller.
+        --
+        -- Sua dung: tach BEGIN/END ro rang cho nhanh @TranCounter = 0, va bo sung
+        -- dieu kien @@TRANCOUNT > 0 cho ca hai nhanh - da kiem chung bang thuc
+        -- nghiem truc tiep rang ROLLBACK TRANSACTION <savepoint> tu choi voi loi
+        -- 3931 khi XACT_STATE() = -1 (doomed, "chi duoc rollback toan bo") va voi
+        -- loi 3903 khi @@TRANCOUNT = 0 (khong con transaction nao) - ca hai truong
+        -- hop nay dung la phai bo qua, de nguyen loi goc duoc THROW tiep len,
+        -- khong phai mot khiem khuyet con sot lai.
         IF @TranCounter = 0
-            IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-        ELSE IF XACT_STATE() <> -1
+        BEGIN
+            IF @@TRANCOUNT > 0
+                ROLLBACK TRANSACTION;
+        END
+        ELSE IF @@TRANCOUNT > 0 AND XACT_STATE() <> -1
             ROLLBACK TRANSACTION sp_CheckInTicket_Save;
         THROW;
     END CATCH
