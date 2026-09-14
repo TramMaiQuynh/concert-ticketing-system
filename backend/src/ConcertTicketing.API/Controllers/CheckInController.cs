@@ -34,6 +34,22 @@ public class CheckInController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Xem trước vé thuộc về ai TRƯỚC khi xác nhận — không gọi sp_CheckInTicket nên
+    /// không ghi nhận lượt check-in nào. Rate limit RIÊNG (không dùng chung "checkin"):
+    /// đây là thao tác đọc, tách ngân sách khỏi thao tác check-in thật để một nhân viên
+    /// vừa tra cứu vừa check-in mỗi vé không bị giảm một nửa thông lượng xử lý thật.
+    /// </summary>
+    [HttpGet("preview")]
+    [EnableRateLimiting("checkin-preview")]
+    [ProducesResponseType(typeof(CheckInPreview), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Preview([FromQuery] CheckInRequest request)
+    {
+        var preview = await _checkInRepository.PreviewAsync(request);
+        return preview is null ? NotFound() : Ok(preview);
+    }
+
     private int GetCurrentUserId()
     {
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
