@@ -39,3 +39,7 @@ frontend/.env.local
 ~$*
 *_bak.*
 redis_bin/
+
+# ── Tài liệu nội bộ — không đưa lên GitHub ──────────────────────────────────
+# Kịch bản bảo vệ chi tiết: giữ riêng trên máy, không công khai trước buổi bảo vệ.
+README-DEMO.md
