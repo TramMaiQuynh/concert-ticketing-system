@@ -2,7 +2,7 @@
 -- sp_RegisterUser 
 -- Dang ky tai khoan khach hang moi va gan Role mac dinh (Customer).
 -- ============================================================
-CREATE PROCEDURE dbo.sp_RegisterUser
+CREATE OR ALTER PROCEDURE dbo.sp_RegisterUser
 (
     @Username      VARCHAR(64),
     @Email         NVARCHAR(255),
