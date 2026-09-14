@@ -9,13 +9,10 @@ CREATE TABLE Zone (
 
     -- ── HINH HOC CUA KHU (FR11a) ───────────────────────────────────────────
     --
-    -- ZoneType phan biet hai ban chat khac han nhau, dung nhu cach cac he thong
-    -- so do cho ngoi thuong mai lam:
-    --   'Seated'            khu co ghe danh so — ban theo tung ghe.
-    --   'GeneralAdmission'  khu dung/tu do — ban theo SUC CHUA, khong co dong
-    --                       Seat nao. Concert gan nhu luon co loai khu nay (pit
-    --                       truoc san khau, bai co). Tao hang nghin dong Seat gia
-    --                       de mo phong no la sai ban chat va lang phi.
+    -- Phien ban hien tai ban ve theo tung ghe (reserved seating). Zone luon la
+    -- khu co ghe danh so. General admission can mot kho inventory theo suc chua
+    -- rieng, phan bo/hoan tra/giu cho rieng va luong dat ve khong co Seat; khong
+    -- duoc mo phong no bang mot Zone hien thi tren so do nhung khong the mua.
     --
     -- ZoneLevel la tang/khan dai (1 = tang tret). Nha hat va san van dong xep khu
     -- chong len nhau theo chieu cao; mot mat phang phang khong bieu dien duoc dieu
@@ -36,10 +33,10 @@ CREATE TABLE Zone (
     ZoneWidth    INT NULL,
     ZoneHeight   INT NULL,
     ZoneRotation DECIMAL(6, 2) NULL,
-    ZoneCapacity INT NULL,
+    ZoneCapacity INT NULL, -- de NULL; giu cot cho mo hinh capacity inventory sau nay.
 
     CONSTRAINT CHK_Zone_Status CHECK (ZoneStatus IN ('Active', 'Retired')),
-    CONSTRAINT CHK_Zone_Type CHECK (ZoneType IN ('Seated', 'GeneralAdmission')),
+    CONSTRAINT CHK_Zone_Type CHECK (ZoneType = 'Seated'),
     CONSTRAINT CHK_Zone_Level CHECK (ZoneLevel IS NULL OR ZoneLevel > 0),
     CONSTRAINT CHK_Zone_Size CHECK (
             (ZoneWidth  IS NULL OR ZoneWidth  > 0)
@@ -64,12 +61,7 @@ CREATE TABLE Zone (
     CONSTRAINT CHK_Zone_PositionNonNegative CHECK (
         ZoneX IS NULL OR (ZoneX >= 0 AND ZoneY >= 0)
     ),
-    -- Suc chua chi thuoc ve khu ve dung, va khu ve dung thi bat buoc phai co: khong
-    -- co so nay thi khu do khong ban duoc gi, vi no khong co ghe de dem.
-    CONSTRAINT CHK_Zone_CapacityMatchesType CHECK (
-        (ZoneType = 'GeneralAdmission' AND ZoneCapacity IS NOT NULL AND ZoneCapacity > 0)
-     OR (ZoneType <> 'GeneralAdmission' AND ZoneCapacity IS NULL)
-    ),
+    CONSTRAINT CHK_Zone_CapacityMatchesType CHECK (ZoneCapacity IS NULL),
 
     CONSTRAINT PK_Zone PRIMARY KEY CLUSTERED (ZoneID),
     CONSTRAINT FK_Zone_Venue FOREIGN KEY (VenueID) REFERENCES Venue(VenueID),
