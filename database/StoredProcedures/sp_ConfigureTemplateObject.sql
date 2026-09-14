@@ -39,10 +39,20 @@ BEGIN
                        WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 60061, 'sp_ConfigureTemplateObject: Chi Admin duoc cau hinh TemplateObject.', 1;
 
+        -- UPDLOCK+HOLDLOCK tren CA HAI dong (TemplateFloor VA VenueTemplateVersion):
+        -- chi khoa Floor la khong du — da tai hien duoc bang thuc nghiem (2
+        -- phien song song) rang neu chi khoa Floor, sp_PublishVenueTemplateVersion
+        -- (khoa dong VenueTemplateVersion) van chen duoc va Publish thanh cong
+        -- NGAY GIUA luc SP nay dang o khoang "da doc VersionStatus=Draft nhung
+        -- chua INSERT xong" — INSERT sau do van thanh cong vao mot version DA
+        -- Published, pha vo bat bien "Published la bat bien" ma toan bo thiet
+        -- ke snapshot ConcertMapRevision dua vao. Khoa ca dong Version bat
+        -- buoc sp_PublishVenueTemplateVersion phai doi SP nay COMMIT/ROLLBACK
+        -- xong moi duoc tiep tuc, dung tinh than sp_CreateZone khoa dong Venue.
         DECLARE @VersionStatus VARCHAR(32), @CanvasWidth INT, @CanvasHeight INT;
         SELECT @VersionStatus = vtv.VersionStatus, @CanvasWidth = f.CanvasWidth, @CanvasHeight = f.CanvasHeight
         FROM TemplateFloor f WITH (UPDLOCK, HOLDLOCK)
-        JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
+        JOIN VenueTemplateVersion vtv WITH (UPDLOCK, HOLDLOCK) ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
         WHERE f.TemplateFloorID = @TemplateFloorID;
 
         IF @VersionStatus IS NULL

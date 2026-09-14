@@ -75,3 +75,24 @@ ON AuditRecord (ActorUserID, EventTimestamp);
 CREATE NONCLUSTERED INDEX IX_AuditRecord_TransactionRef
 ON AuditRecord (TransactionReference)
 WHERE TransactionReference IS NOT NULL;
+
+-- ============================================================
+-- StagePass (VenueTemplate/ConcertMapRevision) — phat hien luc soat lai
+-- tang database (kiem tra "kỹ lưỡng" theo yeu cau)
+-- ============================================================
+-- Hau het bang StagePass moi da co index phu FK qua UNIQUE constraint cua
+-- chinh no (vd UQ_TemplateSection_Floor_Key(TemplateFloorID, SectionKey) —
+-- cot dau la TemplateFloorID nen loc theo rieng TemplateFloorID van SEEK
+-- duoc). Rieng TemplateObject va ConcertMapRevisionObject KHONG co UNIQUE
+-- constraint nao (khong co khoa tu nhien — mot Floor co the co nhieu Object
+-- cung ObjectType, vd nhieu 'Wall'), nen cot FK cua chung khong duoc index
+-- nao phu ca. Day la CAU HOI CO THAT, khong phai du phong: sp_ConfigureTemplateFloor
+-- (kiem tra thu nho canvas), sp_ConfigureTemplateSection (kiem tra Section
+-- khong chong San khau) deu loc TemplateObject theo TemplateFloorID; tuong
+-- tu sp_CreateConcertMapRevision doc TemplateObject roi ghi sang
+-- ConcertMapRevisionObject theo ConcertMapRevisionFloorID moi tao.
+CREATE NONCLUSTERED INDEX IX_TemplateObject_Floor
+ON TemplateObject (TemplateFloorID);
+
+CREATE NONCLUSTERED INDEX IX_ConcertMapRevisionObject_Floor
+ON ConcertMapRevisionObject (ConcertMapRevisionFloorID);

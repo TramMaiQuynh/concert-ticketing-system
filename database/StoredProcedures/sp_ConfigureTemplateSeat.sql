@@ -35,11 +35,17 @@ BEGIN
                        WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 60101, 'sp_ConfigureTemplateSeat: Chi Admin duoc cau hinh TemplateSeat.', 1;
 
+        -- UPDLOCK+HOLDLOCK tren dong VenueTemplateVersion — xem giai thich chi
+        -- tiet trong sp_ConfigureTemplateObject.sql: neu doc VersionStatus
+        -- khong khoa, sp_PublishVenueTemplateVersion co the chen vao va
+        -- Publish thanh cong giua luc SP nay dang o khoang "da doc Draft
+        -- nhung chua INSERT xong", khien Seat moi van duoc them vao mot
+        -- version DA Published.
         DECLARE @VersionStatus VARCHAR(32), @VenueTemplateVersionID INT, @TemplateVenueID INT;
         SELECT @VersionStatus = vtv.VersionStatus, @VenueTemplateVersionID = vtv.VenueTemplateVersionID, @TemplateVenueID = vt.VenueID
         FROM TemplateSection s
         JOIN TemplateFloor f ON f.TemplateFloorID = s.TemplateFloorID
-        JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
+        JOIN VenueTemplateVersion vtv WITH (UPDLOCK, HOLDLOCK) ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
         JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
         WHERE s.TemplateSectionID = @TemplateSectionID;
 

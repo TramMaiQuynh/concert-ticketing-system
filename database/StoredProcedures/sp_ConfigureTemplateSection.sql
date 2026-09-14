@@ -33,10 +33,17 @@ BEGIN
                        WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 60081, 'sp_ConfigureTemplateSection: Chi Admin duoc cau hinh TemplateSection.', 1;
 
+        -- UPDLOCK+HOLDLOCK tren CA HAI dong (TemplateFloor VA VenueTemplateVersion)
+        -- — xem giai thich chi tiet trong sp_ConfigureTemplateObject.sql: da
+        -- tai hien duoc bang thuc nghiem (2 phien song song, WAITFOR mo phong
+        -- khoang ho) rang chi khoa Floor la KHONG du, sp_PublishVenueTemplateVersion
+        -- van chen vao va Publish thanh cong giua chung, khien Section moi van
+        -- duoc them vao mot version DA Published — pha vo bat bien "Published
+        -- la bat bien".
         DECLARE @VersionStatus VARCHAR(32), @CanvasWidth INT, @CanvasHeight INT;
         SELECT @VersionStatus = vtv.VersionStatus, @CanvasWidth = f.CanvasWidth, @CanvasHeight = f.CanvasHeight
         FROM TemplateFloor f WITH (UPDLOCK, HOLDLOCK)
-        JOIN VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
+        JOIN VenueTemplateVersion vtv WITH (UPDLOCK, HOLDLOCK) ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
         WHERE f.TemplateFloorID = @TemplateFloorID;
 
         IF @VersionStatus IS NULL
