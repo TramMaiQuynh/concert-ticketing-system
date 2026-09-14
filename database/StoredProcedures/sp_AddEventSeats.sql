@@ -74,6 +74,20 @@ BEGIN
         )
             THROW 58219, 'sp_AddEventSeats (BR50e): Co Seat hoac Zone da Retired, khong the dua vao kho ve.', 1;
 
+        -- Mot Venue da bat so do khong duoc co EventSeat nam trong khu chua dat
+        -- vi tri. Neu cho phep, trang mua ve chuyen sang renderer SVG va cac ve
+        -- nay se bien mat khoi man hinh, du database van con kho hang.
+        IF EXISTS (
+            SELECT 1
+            FROM @SeatRequests sr
+            JOIN Seat s  ON s.SeatID = sr.SeatID
+            JOIN Zone z  ON z.ZoneID = s.ZoneID
+            JOIN Venue v ON v.VenueID = s.VenueID
+            WHERE v.MapWidth IS NOT NULL
+              AND (z.ZoneX IS NULL OR z.ZoneY IS NULL OR z.ZoneWidth IS NULL OR z.ZoneHeight IS NULL)
+        )
+            THROW 58220, 'sp_AddEventSeats: Khu cua Seat chua co vi tri tren so do Venue.', 1;
+
         IF EXISTS (
             SELECT 1 FROM EventSeat es
             JOIN @SeatRequests sr ON sr.SeatID = es.SeatID
