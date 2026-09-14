@@ -239,7 +239,7 @@ Ba concert được tạo sẵn (số hiệu in ra ở cuối `seed-demo.ps1`, c
     trùng ghế bằng chính database, không phải bằng khóa ở tầng ứng dụng.
 17. **Bộ kiểm thử**: `database/Tests/Run-All-Tests.ps1` → 159 test SQL, kèm test đồng
     thời chạy nhiều kết nối song song chứng minh chống oversell.
-    `dotnet test` ở `backend/` → 191 unit + 59 integration.
+    `dotnet test` ở `backend/` → 191 unit + 72 integration.
 
     > ⚠️ **Chạy bộ test SQL sẽ XOÁ SẠCH dữ liệu demo** (xem §5). Hãy để bước này ở
     > CUỐI buổi, hoặc chạy `.\scripts\seed-demo.ps1` lại sau đó.
@@ -260,6 +260,43 @@ Ba concert được tạo sẵn (số hiệu in ra ở cuối `seed-demo.ps1`, c
 
 ---
 
+### 4.6 Trình diễn 5 hiện tượng tranh chấp đồng thời — 5 phút
+
+Chạy **ở cuối buổi**, sau khi đã trình diễn xong tính năng (kịch bản tự dựng dữ liệu
+riêng mang tiền tố `DEMO-CC`, không đụng vào 3 concert demo):
+
+```powershell
+cd T:\coding\concert_ticketing_system
+.\scripts\demo-concurrency.ps1                      # chạy cả 5
+.\scripts\demo-concurrency.ps1 -Scenario phantom    # hoặc chạy riêng từng cái
+```
+
+Mỗi hiện tượng diễn **hai vế** — chỉ một vế thì không chứng minh được gì:
+
+| # | Hiện tượng | Vế 1: lỗi có thật | Vế 2: hệ thống chặn được |
+|---|---|---|---|
+| 1 | **Lost Update** | Đọc trạng thái rồi mới ghi → cả hai khách cùng "giữ được" ghế A01 | `sp_CreateBooking` cập nhật có điều kiện + kiểm `@@ROWCOUNT` → đúng một người thắng, người kia nhận *"ghế đã được người khác đặt"* |
+| 2 | **Dirty Read** | Với `NOLOCK`, khách B thấy ghế `OnHold` từ giao dịch **sau đó bị hủy** → bị báo hết ghế oan | READ COMMITTED mặc định → B chờ rồi thấy đúng `Available` |
+| 3 | **Non-repeatable Read** | Đọc trần hai lần trong một lượt xử lý → `Available` rồi `OnHold` | `WITH (UPDLOCK)` → hai lần đọc giống hệt nhau |
+| 4 | **Phantom Read** | Đếm hàng đợi hai lần → 0 rồi 1, mọc thêm người | `WITH (UPDLOCK, HOLDLOCK)` như `sp_JoinQueue` → hai lần đếm bằng nhau |
+| 5 | **Deadlock** | Hai giao dịch khoá hai ghế theo thứ tự ngược → SQL Server chọn nạn nhân, lỗi **1205** | Luồng đặt vé thật với ghế chồng nhau, thứ tự ngược → **không** deadlock |
+
+**Điểm nhấn đáng nói ở mục 5:** `sp_CreateBooking` giữ ghế bằng **một câu lệnh tập hợp
+duy nhất**, nên SQL Server luôn khoá theo thứ tự chỉ mục chứ không theo thứ tự khách
+chọn ghế. Hai giao dịch vì thế luôn xin khoá cùng chiều và không thể tạo thành vòng
+chờ — đây là tính chất thiết kế, không phải may mắn.
+
+**Nói thẳng nếu hội đồng hỏi:** hệ thống **không** nâng mức cô lập toàn cục lên
+REPEATABLE READ / SERIALIZABLE. Hiện tượng 3 và 4 **vẫn xảy ra được** ở những truy vấn
+đọc trần không đặt khoá — đó là hành vi đúng của READ COMMITTED. Hệ thống chọn đặt khoá
+đúng điểm nóng (`UPDLOCK` ở 25/43 thủ tục, `HOLDLOCK` ở các chỗ đếm phạm vi, thêm
+`sp_getapplock` ở 4 thủ tục nặng) để đổi lấy thông lượng, thay vì khoá toàn cục.
+
+Cửa sổ tranh chấp trong kịch bản được nới rộng bằng `WAITFOR`, nên kết quả **tái hiện
+được mọi lần**, không phụ thuộc may rủi về thời điểm.
+
+---
+
 ## 5. Lệnh chạy kiểm thử
 
 ```powershell
@@ -267,7 +304,7 @@ Ba concert được tạo sẵn (số hiệu in ra ở cuối `seed-demo.ps1`, c
 cd database\Tests
 .\Run-All-Tests.ps1
 
-# Backend — 191 unit + 59 integration
+# Backend — 191 unit + 72 integration
 cd backend
 dotnet test
 ```
