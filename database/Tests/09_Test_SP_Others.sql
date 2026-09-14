@@ -35,10 +35,11 @@ SET @SQL = N'
     DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @cid2 INT, @pid2 INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@aid,@vid,''Concert 2'',''Draft'',DATEADD(d,20,SYSDATETIME()),DATEADD(d,21,SYSDATETIME()),4,0,0,0);
+    VALUES (@org,@vid,''Concert 2'',''Draft'',DATEADD(d,20,SYSDATETIME()),DATEADD(d,21,SYSDATETIME()),4,0,0,0);
     SET @cid2 = SCOPE_IDENTITY();
+    INSERT INTO ConcertArtist (ConcertID,ArtistID,ArtistOrder) VALUES (@cid2,@aid,1);
     UPDATE Concert SET ConcertStatus = ''Published'' WHERE ConcertID = @cid2;
     UPDATE Concert SET ConcertStatus = ''OnSale'' WHERE ConcertID = @cid2;
     INSERT INTO Promotion (ConcertID,PromotionName,DiscountType,DiscountValue,
