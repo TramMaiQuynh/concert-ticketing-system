@@ -1,27 +1,41 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/client';
 import { useVenues } from '../../lib/adminCatalog';
 import { Field, Select, Check, Panel, Banner, IdPicker, useAction } from '../../components/form';
-import { Badge, Textarea, Input, Button } from '../../components/ui';
+import { Badge, Textarea, Input, Button, PageHeader } from '../../components/ui';
 import { ADMIN_STATUS_LABEL } from '../../domain/enums';
 import { TEMPLATE_STATUS_TONE, VERSION_STATUS_TONE } from '../../domain/tone';
+import {
+  geometryToPoints, pointsToSvgPath, isConvexPolygon, polygonsOverlap, pointsWithinCanvas,
+} from '../../lib/geometry';
 
 /**
  * VENUE TEMPLATE STUDIO (StagePass D.2/D.4) — chỉ Admin.
  *
- * Lớp dữ liệu THÊM MỚI, không thay thế trang "Sơ đồ địa điểm" (VenueMap.jsx):
- * Zone/Seat hiện có vẫn hoạt động nguyên vẹn cho các Venue không cần mức độ
- * chi tiết này. Trang này phục vụ mô hình nhiều tầng + khu dạng đa giác tự do
+ * Lớp dữ liệu THÊM MỚI. Trang "Sơ đồ địa điểm" cũ và `VenueMap.jsx` KHÔNG còn
+ * trong mã nguồn frontend (chỉ còn được nhắc trong tài liệu thiết kế), và
+ * `PUT /admin/venues/{venueId}/map` cũng không tồn tại — nên đây hiện là CÁCH
+ * DUY NHẤT để dựng hình học của một địa điểm. Trang này phục vụ mô hình nhiều
+ * tầng + khu dạng đa giác tự do
  * kiểu Ticketmaster — VenueTemplate → VenueTemplateVersion (có phiên bản,
  * Published là BẤT BIẾN) → TemplateFloor → TemplateObject/TemplateSection →
  * TemplateSeat (ghế tham chiếu Seat thật, không tạo hệ định danh song song).
  *
- * PHẠM VI ĐÃ CHỌN CÓ CHỦ ĐÍCH cho lượt đầu này: chỉnh hình học bằng Ô NHẬP SỐ
- * (x/y/width/height/rotation) + xem trước SVG trực tiếp — KHÔNG kéo-thả bằng
- * chuột như ZoneLayoutEditor. Vẫn là một trình soạn thảo dùng được thật (gõ
- * số, thấy ngay kết quả, gửi lên được validate đầy đủ ở server), chỉ khác
- * cách nhập liệu. Khu dạng đa giác (không phải chữ nhật) nhập qua ô JSON thô
- * ở chế độ "nâng cao" — xem quy ước GeometryJson v1 trong TemplateSection.sql.
+ * BA CÁCH nhập hình học cho Section/Object (GeometryModeTabs), người dùng tự
+ * chọn theo hình dạng cần vẽ:
+ *   - "Hình chữ nhật": ô nhập số (x/y/width/height/rotation) — nhanh cho khu
+ *     đơn giản, đa số trường hợp thật.
+ *   - "Vẽ đa giác (chuột)": PolygonDrawEditor — click từng đỉnh lên mặt bằng,
+ *     kéo để chỉnh, xem trước va chạm NGAY bằng đúng thuật toán server
+ *     (isConvexPolygon/polygonsOverlap trong lib/geometry.js, mirror của
+ *     fn_TemplateGeometryIsConvex/Overlaps.sql) — cùng nguyên tắc "client báo
+ *     ngay, server thi hành thật" mà chế độ nhập hình chữ nhật trong chính file
+ *     này đã dùng, áp dụng tiếp cho đa giác tự do.
+ *   - "JSON thô": lối thoát cho người dùng thạo kỹ thuật muốn dán toạ độ có
+ *     sẵn (import từ nguồn khác) — không bắt buộc dùng.
+ * Khu dạng đa giác nhiều đỉnh (mô phỏng khán đài cong, sân khấu giữa…) giờ vẽ
+ * bằng tay được thật, không chỉ gõ JSON — xem quy ước GeometryJson v1 trong
+ * TemplateSection.sql.
  */
 export default function VenueTemplates() {
   const venues = useVenues();
@@ -30,6 +44,7 @@ export default function VenueTemplates() {
 
   return (
     <>
+      <PageHeader title="Mẫu sơ đồ" subtitle="Nhiều tầng, khu dạng đa giác tự do, phiên bản có publish." />
       <Panel
         title="Chọn địa điểm"
         tone="inventory"
@@ -72,27 +87,28 @@ function geometryJsonToRect(json) {
   }
 }
 
-/** Danh sách đỉnh (theo chu vi) để vẽ SVG preview — dùng chung cho rect và polygon. */
-function geometryToPoints(json) {
+/** Trả về [[x,y],...] nếu là polygon (đúng quy ước v1), null nếu là rect hoặc không đọc được. */
+function geometryJsonToPolygon(json) {
   try {
     const g = JSON.parse(json);
-    if (g?.shape === 'rect') {
-      const cx = Number(g.x) + Number(g.width) / 2, cy = Number(g.y) + Number(g.height) / 2;
-      const hw = Number(g.width) / 2, hh = Number(g.height) / 2;
-      const rad = (Number(g.rotation) || 0) * Math.PI / 180;
-      const cos = Math.cos(rad), sin = Math.sin(rad);
-      const local = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
-      return local.map(([lx, ly]) => [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos]);
-    }
-    if (g?.shape === 'polygon' && Array.isArray(g.points)) return g.points;
-  } catch { /* ignored — form đang gõ dở, xem trước bỏ qua đến khi hợp lệ */ }
-  return null;
+    if (g?.shape !== 'polygon' || !Array.isArray(g.points)) return null;
+    return g.points;
+  } catch {
+    return null;
+  }
 }
 
-function pointsToSvgPath(points) {
-  if (!points || points.length === 0) return '';
-  return `M ${points.map((p) => `${p[0]},${p[1]}`).join(' L ')} Z`;
+function polygonToGeometryJson(points) {
+  return JSON.stringify({ version: 1, shape: 'polygon', points });
 }
+
+// Cùng quy ước lưới 10 đơn vị với chế độ nhập hình chữ nhật trong file này — toạ
+// độ đẹp, dễ căn chỉnh bằng mắt hơn số lẻ do chuột sinh ra.
+const snap = (value) => Math.round(value / 10) * 10;
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+// geometryToPoints/pointsToSvgPath: chuyển sang lib/geometry.js (dùng chung với
+// trang khách hàng components/SeatMap.jsx) — xem import ở đầu file.
 
 /* ══ Mẫu sơ đồ (VenueTemplate) ═════════════════════════════════════════════ */
 
@@ -130,7 +146,7 @@ function TemplatesPanel({ venue }) {
           ) : templates.length === 0 ? (
             <p className="text-sm text-muted">Địa điểm này chưa có Mẫu sơ đồ nào.</p>
           ) : (
-            <table className="data">
+            <table className="table">
               <thead><tr><th>Tên</th><th>Trạng thái</th><th /></tr></thead>
               <tbody>
                 {templates.map((t) => (
@@ -150,7 +166,7 @@ function TemplatesPanel({ venue }) {
         </div>
       </Panel>
 
-      {template && <VersionsPanel key={template.venueTemplateID} template={template} />}
+      {template && <VersionsPanel key={template.venueTemplateID} template={template} venueId={venue.venueID} />}
     </>
   );
 }
@@ -162,6 +178,7 @@ function CreateTemplateForm({ venue, onDone }) {
   return (
     <form
       className="row gap-2 wrap"
+      style={{ alignItems: 'flex-start' }}
       onSubmit={(e) => {
         e.preventDefault();
         act.run(async () => {
@@ -172,9 +189,15 @@ function CreateTemplateForm({ venue, onDone }) {
       }}
     >
       <Field label="Tên mẫu mới" hint="Ví dụ: 'Nhà hát', 'Sân khấu cuối'.">
-        {(a) => <Input {...a} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhà hát" required style={{ width: 260 }} />}
+        {(a) => <Input {...a} value={name} onChange={(e) => setName(e.target.value)} maxLength={255} placeholder="Nhà hát" required style={{ width: 260 }} />}
       </Field>
-      <Button type="submit" variant="primary" loading={act.busy} style={{ alignSelf: 'flex-end' }}>Tạo mẫu</Button>
+      {/* Field bên cạnh có dòng gợi ý (hint) khiến nó cao hơn nút một dòng. Bọc nút
+          trong một "field" giả có nhãn rỗng cùng chiều cao nhãn thật, để phần Ô NHẬP
+          của cả hai — chứ không phải đáy toàn khối — thẳng hàng với nhau. */}
+      <div className="field">
+        <span className="field__label" aria-hidden="true">&nbsp;</span>
+        <Button type="submit" variant="primary" loading={act.busy}>Tạo mẫu</Button>
+      </div>
       <Banner state={act.state} />
     </form>
   );
@@ -217,7 +240,7 @@ function RenameArchiveTemplate({ template, onDone }) {
         }, 'Đã đổi tên.');
       }}
     >
-      <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ width: 180 }} />
+      <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={255} autoFocus style={{ width: 180 }} />
       <Button type="submit" size="sm" variant="primary" loading={act.busy}>Lưu</Button>
       <Button size="sm" onClick={() => { setEditing(false); setName(template.templateName); }}>Huỷ</Button>
     </form>
@@ -226,7 +249,7 @@ function RenameArchiveTemplate({ template, onDone }) {
 
 /* ══ Phiên bản (VenueTemplateVersion) ═════════════════════════════════════ */
 
-function VersionsPanel({ template }) {
+function VersionsPanel({ template, venueId }) {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [versionId, setVersionId] = useState('');
@@ -256,6 +279,7 @@ function VersionsPanel({ template }) {
       >
         <form
           className="row gap-2 wrap"
+          style={{ alignItems: 'flex-start' }}
           onSubmit={(e) => {
             e.preventDefault();
             act.run(async () => {
@@ -276,9 +300,12 @@ function VersionsPanel({ template }) {
               allowEmpty emptyLabel="— không sao chép —"
             />
           </Field>
-          <Button type="submit" variant="primary" loading={act.busy} disabled={hasDraft} style={{ alignSelf: 'flex-end' }}>
-            {hasDraft ? 'Đã có Draft mở' : 'Tạo Draft mới'}
-          </Button>
+          <div className="field">
+            <span className="field__label" aria-hidden="true">&nbsp;</span>
+            <Button type="submit" variant="primary" loading={act.busy} disabled={hasDraft}>
+              {hasDraft ? 'Đã có Draft mở' : 'Tạo Draft mới'}
+            </Button>
+          </div>
           <Banner state={act.state} />
         </form>
 
@@ -288,7 +315,7 @@ function VersionsPanel({ template }) {
           ) : versions.length === 0 ? (
             <p className="text-sm text-muted">Mẫu này chưa có version nào.</p>
           ) : (
-            <table className="data">
+            <table className="table">
               <thead><tr><th>Version</th><th>Trạng thái</th><th>Tạo lúc</th><th>Công bố lúc</th></tr></thead>
               <tbody>
                 {versions.map((v) => (
@@ -310,7 +337,7 @@ function VersionsPanel({ template }) {
       </Panel>
 
       {version && version.versionStatus === 'Draft' && (
-        <StudioPanel key={version.venueTemplateVersionID} version={version} onVersionListChanged={load} />
+        <StudioPanel key={version.venueTemplateVersionID} version={version} venueId={venueId} onVersionListChanged={load} />
       )}
       {version && version.versionStatus !== 'Draft' && (
         <ReadOnlyVersionPanel key={version.venueTemplateVersionID} version={version} />
@@ -321,7 +348,7 @@ function VersionsPanel({ template }) {
 
 /* ══ Studio — chỉnh Draft ═══════════════════════════════════════════════════ */
 
-function StudioPanel({ version, onVersionListChanged }) {
+function StudioPanel({ version, venueId, onVersionListChanged }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [floorId, setFloorId] = useState('');
@@ -399,6 +426,7 @@ function StudioPanel({ version, onVersionListChanged }) {
             <FloorEditor
               key={floor.templateFloorID}
               version={version}
+              venueId={venueId}
               floor={floor}
               onDone={load}
             />
@@ -422,6 +450,7 @@ function CreateFloorForm({ version, existingOrders, onDone }) {
   return (
     <form
       className="row gap-2 wrap"
+      style={{ alignItems: 'flex-start' }}
       onSubmit={(e) => {
         e.preventDefault();
         act.run(async () => {
@@ -434,18 +463,21 @@ function CreateFloorForm({ version, existingOrders, onDone }) {
         }, 'Đã thêm tầng.');
       }}
     >
-      <Field label="Mã tầng (FloorKey)" hint="vd. ground, balcony"><Input value={f.floorKey} onChange={(e) => set('floorKey')(e.target.value)} required style={{ width: 140 }} /></Field>
-      <Field label="Tên tầng"><Input value={f.floorName} onChange={(e) => set('floorName')(e.target.value)} placeholder="Tầng trệt" style={{ width: 160 }} /></Field>
+      <Field label="Mã tầng (FloorKey)" hint="vd. ground, balcony"><Input value={f.floorKey} onChange={(e) => set('floorKey')(e.target.value)} maxLength={64} required style={{ width: 140 }} /></Field>
+      <Field label="Tên tầng"><Input value={f.floorName} onChange={(e) => set('floorName')(e.target.value)} maxLength={255} placeholder="Tầng trệt" style={{ width: 160 }} /></Field>
       <Field label="Thứ tự"><Input type="number" min="1" value={f.floorOrder} onChange={(e) => set('floorOrder')(e.target.value)} style={{ width: 90 }} /></Field>
       <Field label="Rộng"><Input type="number" min="1" value={f.canvasWidth} onChange={(e) => set('canvasWidth')(e.target.value)} style={{ width: 100 }} /></Field>
       <Field label="Cao"><Input type="number" min="1" value={f.canvasHeight} onChange={(e) => set('canvasHeight')(e.target.value)} style={{ width: 100 }} /></Field>
-      <Button type="submit" variant="primary" loading={act.busy} style={{ alignSelf: 'flex-end' }}>Thêm tầng</Button>
+      <div className="field">
+        <span className="field__label" aria-hidden="true">&nbsp;</span>
+        <Button type="submit" variant="primary" loading={act.busy}>Thêm tầng</Button>
+      </div>
       <Banner state={act.state} />
     </form>
   );
 }
 
-function FloorEditor({ version, floor, onDone }) {
+function FloorEditor({ version, venueId, floor, onDone }) {
   const act = useAction();
   const [f, setF] = useState({ floorKey: floor.floorKey, floorName: floor.floorName ?? '', floorOrder: floor.floorOrder, canvasWidth: floor.canvasWidth, canvasHeight: floor.canvasHeight });
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
@@ -465,8 +497,8 @@ function FloorEditor({ version, floor, onDone }) {
           }, 'Đã lưu tầng.');
         }}
       >
-        <Field label="Mã tầng"><Input value={f.floorKey} onChange={(e) => set('floorKey')(e.target.value)} required style={{ width: 140 }} /></Field>
-        <Field label="Tên tầng"><Input value={f.floorName} onChange={(e) => set('floorName')(e.target.value)} style={{ width: 160 }} /></Field>
+        <Field label="Mã tầng"><Input value={f.floorKey} onChange={(e) => set('floorKey')(e.target.value)} maxLength={64} required style={{ width: 140 }} /></Field>
+        <Field label="Tên tầng"><Input value={f.floorName} onChange={(e) => set('floorName')(e.target.value)} maxLength={255} style={{ width: 160 }} /></Field>
         <Field label="Thứ tự"><Input type="number" min="1" value={f.floorOrder} onChange={(e) => set('floorOrder')(e.target.value)} style={{ width: 90 }} /></Field>
         <Field label="Rộng"><Input type="number" min="1" value={f.canvasWidth} onChange={(e) => set('canvasWidth')(e.target.value)} style={{ width: 100 }} /></Field>
         <Field label="Cao"><Input type="number" min="1" value={f.canvasHeight} onChange={(e) => set('canvasHeight')(e.target.value)} style={{ width: 100 }} /></Field>
@@ -488,7 +520,7 @@ function FloorEditor({ version, floor, onDone }) {
 
       <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)', alignItems: 'start' }}>
         <ObjectsEditor floor={floor} onDone={onDone} />
-        <SectionsEditor floor={floor} onDone={onDone} />
+        <SectionsEditor venueId={venueId} floor={floor} onDone={onDone} />
       </div>
     </div>
   );
@@ -523,7 +555,7 @@ function FloorCanvasPreview({ floor }) {
           const cy = pts.reduce((sum, p) => sum + p[1], 0) / pts.length;
           return (
             <g key={s.templateSectionID}>
-              <path d={pointsToSvgPath(pts)} fill="var(--accent-soft, rgba(99,102,241,0.15))" stroke="var(--accent, #6366f1)" strokeWidth={1.5} />
+              <path d={pointsToSvgPath(pts)} fill="var(--accent-soft, rgba(168,126,111,0.15))" stroke="var(--accent, #A87E6F)" strokeWidth={1.5} />
               <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fill="var(--text)" style={{ fontSize: 13, fontWeight: 600 }}>
                 {s.sectionName || s.sectionKey} ({s.seats.length})
               </text>
@@ -574,14 +606,23 @@ function ObjectForm({ floor, existing, onDone, onCancel }) {
   const act = useAction();
   const isEdit = !!existing;
   const initialRect = existing ? (geometryJsonToRect(existing.geometryJson) ?? RECT_DEFAULT) : RECT_DEFAULT;
+  const initialPolygon = existing ? (geometryJsonToPolygon(existing.geometryJson) ?? []) : [];
   const [objectType, setObjectType] = useState(existing?.objectType ?? 'Stage');
   const [label, setLabel] = useState(existing?.label ?? '');
-  const [advanced, setAdvanced] = useState(existing ? geometryJsonToRect(existing.geometryJson) === null : false);
+  const [mode, setMode] = useState(() => {
+    if (!existing) return 'rect';
+    if (geometryJsonToRect(existing.geometryJson)) return 'rect';
+    if (geometryJsonToPolygon(existing.geometryJson)) return 'draw';
+    return 'json';
+  });
   const [rect, setRect] = useState(initialRect);
+  const [polygon, setPolygon] = useState(initialPolygon);
+  const [polygonValid, setPolygonValid] = useState(initialPolygon.length >= 3);
   const [rawJson, setRawJson] = useState(existing?.geometryJson ?? rectToGeometryJson(RECT_DEFAULT));
 
-  const geometryJson = advanced ? rawJson : rectToGeometryJson(rect);
+  const geometryJson = mode === 'json' ? rawJson : mode === 'draw' ? polygonToGeometryJson(polygon) : rectToGeometryJson(rect);
   const previewPoints = geometryToPoints(geometryJson);
+  const canSubmit = mode !== 'draw' || polygonValid;
 
   return (
     <form
@@ -598,19 +639,27 @@ function ObjectForm({ floor, existing, onDone, onCancel }) {
     >
       <div className="row gap-2 wrap">
         <Field label="Loại"><Select value={objectType} onChange={setObjectType} options={OBJECT_TYPES} labels={OBJECT_TYPE_LABEL} /></Field>
-        <Field label="Nhãn (tuỳ chọn)"><Input value={label} onChange={(e) => setLabel(e.target.value)} style={{ width: 160 }} /></Field>
-        <Check label="Nhập JSON thô (đa giác)" checked={advanced} onChange={setAdvanced} />
+        <Field label="Nhãn (tuỳ chọn)"><Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={255} style={{ width: 160 }} /></Field>
       </div>
-      {advanced ? (
+      <GeometryModeTabs mode={mode} onChange={setMode} />
+      {mode === 'json' ? (
         <Field label="GeometryJson" hint='vd. {"version":1,"shape":"polygon","points":[[0,0],[100,0],[100,100]]}'>
           <Textarea value={rawJson} onChange={(e) => setRawJson(e.target.value)} rows={3} style={{ fontFamily: 'monospace', fontSize: 12 }} />
         </Field>
+      ) : mode === 'draw' ? (
+        <PolygonDrawEditor
+          canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight}
+          points={polygon} onChange={setPolygon} onValidityChange={setPolygonValid}
+          others={[]} objects={floor.objects.filter((o) => o.templateObjectID !== existing?.templateObjectID)}
+        />
       ) : (
         <RectFields rect={rect} onChange={setRect} />
       )}
-      <MiniPreview canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight} points={previewPoints} tone="object" />
+      {mode !== 'draw' && (
+        <MiniPreview canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight} points={previewPoints} tone="object" />
+      )}
       <div className="row gap-2">
-        <Button type="submit" variant="primary" size="sm" loading={act.busy}>{isEdit ? 'Lưu' : 'Thêm'}</Button>
+        <Button type="submit" variant="primary" size="sm" loading={act.busy} disabled={!canSubmit}>{isEdit ? 'Lưu' : 'Thêm'}</Button>
         <Button type="button" size="sm" onClick={onCancel}>Huỷ</Button>
       </div>
       <Banner state={act.state} />
@@ -620,7 +669,7 @@ function ObjectForm({ floor, existing, onDone, onCancel }) {
 
 /* ══ Khu ghế (TemplateSection) + Ghế (TemplateSeat) ═══════════════════════ */
 
-function SectionsEditor({ floor, onDone }) {
+function SectionsEditor({ venueId, floor, onDone }) {
   const [editingId, setEditingId] = useState(null);
   return (
     <Panel title="Khu ghế (Section)" subtitle="Không được chồng Sân khấu hoặc Section khác cùng tầng — máy chủ kiểm tra va chạm thật (SAT).">
@@ -628,7 +677,7 @@ function SectionsEditor({ floor, onDone }) {
         {floor.sections.map((s) => (
           <div key={s.templateSectionID} className="stagepass-item">
             {editingId === s.templateSectionID ? (
-              <SectionForm floor={floor} existing={s} onDone={() => { setEditingId(null); onDone(); }} onCancel={() => setEditingId(null)} />
+              <SectionForm venueId={venueId} floor={floor} existing={s} onDone={() => { setEditingId(null); onDone(); }} onCancel={() => setEditingId(null)} />
             ) : (
               <>
                 <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
@@ -644,7 +693,7 @@ function SectionsEditor({ floor, onDone }) {
           </div>
         ))}
         {editingId === 'new' ? (
-          <SectionForm floor={floor} onDone={() => { setEditingId(null); onDone(); }} onCancel={() => setEditingId(null)} />
+          <SectionForm venueId={venueId} floor={floor} onDone={() => { setEditingId(null); onDone(); }} onCancel={() => setEditingId(null)} />
         ) : (
           <Button size="sm" onClick={() => setEditingId('new')}>+ Thêm khu</Button>
         )}
@@ -653,18 +702,37 @@ function SectionsEditor({ floor, onDone }) {
   );
 }
 
-function SectionForm({ floor, existing, onDone, onCancel }) {
+function SectionForm({ venueId, floor, existing, onDone, onCancel }) {
   const act = useAction();
   const isEdit = !!existing;
+  const [zones, setZones] = useState([]);
+  const [zoneId, setZoneId] = useState(existing?.zoneID ? String(existing.zoneID) : '');
   const initialRect = existing ? (geometryJsonToRect(existing.geometryJson) ?? RECT_DEFAULT) : RECT_DEFAULT;
+  const initialPolygon = existing ? (geometryJsonToPolygon(existing.geometryJson) ?? []) : [];
   const [sectionKey, setSectionKey] = useState(existing?.sectionKey ?? '');
   const [sectionName, setSectionName] = useState(existing?.sectionName ?? '');
-  const [advanced, setAdvanced] = useState(existing ? geometryJsonToRect(existing.geometryJson) === null : false);
+  const [mode, setMode] = useState(() => {
+    if (!existing) return 'rect';
+    if (geometryJsonToRect(existing.geometryJson)) return 'rect';
+    if (geometryJsonToPolygon(existing.geometryJson)) return 'draw';
+    return 'json';
+  });
   const [rect, setRect] = useState(initialRect);
+  const [polygon, setPolygon] = useState(initialPolygon);
+  const [polygonValid, setPolygonValid] = useState(initialPolygon.length >= 3);
   const [rawJson, setRawJson] = useState(existing?.geometryJson ?? rectToGeometryJson(RECT_DEFAULT));
 
-  const geometryJson = advanced ? rawJson : rectToGeometryJson(rect);
+  const geometryJson = mode === 'json' ? rawJson : mode === 'draw' ? polygonToGeometryJson(polygon) : rectToGeometryJson(rect);
   const previewPoints = geometryToPoints(geometryJson);
+  const othersOnFloor = floor.sections.filter((s) => s.templateSectionID !== existing?.templateSectionID);
+  const canSubmit = mode !== 'draw' || polygonValid;
+
+  useEffect(() => {
+    api.get(`/admin/venues/${venueId}/zones`)
+      .then((res) => setZones(Array.isArray(res.data) ? res.data.filter((z) => z.zoneStatus === 'Active') : []));
+  }, [venueId]);
+
+  const zoneItems = zones.map((z) => ({ id: z.zoneID, name: `${z.zoneCode} · ${z.zoneName || 'Không tên'}` }));
 
   return (
     <form
@@ -672,7 +740,7 @@ function SectionForm({ floor, existing, onDone, onCancel }) {
       onSubmit={(e) => {
         e.preventDefault();
         act.run(async () => {
-          const body = { sectionKey, sectionName: sectionName || null, geometryJson };
+          const body = { zoneId: Number(zoneId), sectionKey, sectionName: sectionName || null, geometryJson };
           if (isEdit) await api.put(`/admin/template-floors/${floor.templateFloorID}/sections/${existing.templateSectionID}`, body);
           else await api.post(`/admin/template-floors/${floor.templateFloorID}/sections`, body);
           onDone();
@@ -680,20 +748,29 @@ function SectionForm({ floor, existing, onDone, onCancel }) {
       }}
     >
       <div className="row gap-2 wrap">
-        <Field label="Mã khu (SectionKey)"><Input value={sectionKey} onChange={(e) => setSectionKey(e.target.value)} required style={{ width: 140 }} /></Field>
-        <Field label="Tên khu"><Input value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="Khu VIP" style={{ width: 160 }} /></Field>
-        <Check label="Nhập JSON thô (đa giác)" checked={advanced} onChange={setAdvanced} />
+        <IdPicker label="Khu vật lý (Zone)" items={zoneItems} value={zoneId} onChange={setZoneId} required />
+        <Field label="Mã khu (SectionKey)"><Input value={sectionKey} onChange={(e) => setSectionKey(e.target.value)} maxLength={64} required style={{ width: 140 }} /></Field>
+        <Field label="Tên khu"><Input value={sectionName} onChange={(e) => setSectionName(e.target.value)} maxLength={255} placeholder="Khu VIP" style={{ width: 160 }} /></Field>
       </div>
-      {advanced ? (
+      <GeometryModeTabs mode={mode} onChange={setMode} />
+      {mode === 'json' ? (
         <Field label="GeometryJson" hint="Đa giác phải LỒI — hệ thống từ chối hình lõm để đảm bảo va chạm chính xác.">
           <Textarea value={rawJson} onChange={(e) => setRawJson(e.target.value)} rows={3} style={{ fontFamily: 'monospace', fontSize: 12 }} />
         </Field>
+      ) : mode === 'draw' ? (
+        <PolygonDrawEditor
+          canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight}
+          points={polygon} onChange={setPolygon} onValidityChange={setPolygonValid}
+          others={othersOnFloor} objects={floor.objects}
+        />
       ) : (
         <RectFields rect={rect} onChange={setRect} />
       )}
-      <MiniPreview canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight} points={previewPoints} tone="section" others={floor.sections.filter((s) => s.templateSectionID !== existing?.templateSectionID)} objects={floor.objects} />
+      {mode !== 'draw' && (
+        <MiniPreview canvasWidth={floor.canvasWidth} canvasHeight={floor.canvasHeight} points={previewPoints} tone="section" others={othersOnFloor} objects={floor.objects} />
+      )}
       <div className="row gap-2">
-        <Button type="submit" variant="primary" size="sm" loading={act.busy}>{isEdit ? 'Lưu' : 'Thêm'}</Button>
+        <Button type="submit" variant="primary" size="sm" loading={act.busy} disabled={!zoneId || !canSubmit}>{isEdit ? 'Lưu' : 'Thêm'}</Button>
         <Button type="button" size="sm" onClick={onCancel}>Huỷ</Button>
       </div>
       <Banner state={act.state} />
@@ -733,8 +810,9 @@ function SeatForm({ section, onDone, onCancel }) {
   const [isAccessible, setIsAccessible] = useState(false);
 
   useEffect(() => {
-    api.get('/admin/seats', { params: { limit: 200 } }).then((res) => setSeats(Array.isArray(res.data) ? res.data : []));
-  }, []);
+    api.get('/admin/seats', { params: { zoneId: section.zoneID, limit: 200 } })
+      .then((res) => setSeats(Array.isArray(res.data) ? res.data : []));
+  }, [section.zoneID]);
 
   const items = seats.map((s) => ({ id: s.seatID, name: `${s.seatCode} · ${s.venueName}/${s.zoneName ?? '—'}` }));
 
@@ -752,8 +830,8 @@ function SeatForm({ section, onDone, onCancel }) {
       }}
     >
       <IdPicker label="Seat" items={items} value={seatId} onChange={setSeatId} />
-      <Field label="SeatKey"><Input value={seatKey} onChange={(e) => setSeatKey(e.target.value)} required style={{ width: 100 }} /></Field>
-      <Field label="Hàng"><Input value={rowLabel} onChange={(e) => setRowLabel(e.target.value)} style={{ width: 70 }} /></Field>
+      <Field label="SeatKey"><Input value={seatKey} onChange={(e) => setSeatKey(e.target.value)} maxLength={64} required style={{ width: 100 }} /></Field>
+      <Field label="Hàng"><Input value={rowLabel} onChange={(e) => setRowLabel(e.target.value)} maxLength={16} style={{ width: 70 }} /></Field>
       <Field label="Số"><Input type="number" value={seatNumber} onChange={(e) => setSeatNumber(e.target.value)} style={{ width: 70 }} /></Field>
       <Check label="Accessible" checked={isAccessible} onChange={setIsAccessible} />
       <Button type="submit" variant="primary" size="sm" loading={act.busy} style={{ alignSelf: 'flex-end' }}>Thêm</Button>
@@ -764,6 +842,184 @@ function SeatForm({ section, onDone, onCancel }) {
 }
 
 /* ══ Thành phần dùng chung ══════════════════════════════════════════════════ */
+
+const GEOMETRY_MODES = [
+  { value: 'rect', label: 'Hình chữ nhật' },
+  { value: 'draw', label: 'Vẽ đa giác (chuột)' },
+  { value: 'json', label: 'JSON thô' },
+];
+
+/** Chọn cách nhập hình học — dùng chung cho TemplateObject và TemplateSection. */
+function GeometryModeTabs({ mode, onChange }) {
+  return (
+    <div className="row gap-1 wrap" role="radiogroup" aria-label="Kiểu nhập hình học">
+      {GEOMETRY_MODES.map((m) => (
+        <button
+          key={m.value} type="button"
+          className={`btn btn--sm ${mode === m.value ? 'btn--primary' : 'btn--secondary'}`}
+          aria-pressed={mode === m.value}
+          onClick={() => onChange(m.value)}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Vẽ đa giác bằng chuột — click từng đỉnh lên mặt bằng, đóng hình bằng cách
+ * bấm gần đỉnh đầu (chấm xanh) hoặc nút "Xong", rồi kéo từng đỉnh để chỉnh.
+ *
+ * Xem trước va chạm NGAY lúc vẽ bằng đúng thuật toán server
+ * (isConvexPolygon/polygonsOverlap trong lib/geometry.js, mirror thật của
+ * fn_TemplateGeometryIsConvex/Overlaps.sql) — tô đỏ khi lõm, chồng Sân khấu,
+ * chồng Section khác cùng tầng, hoặc có đỉnh ra ngoài mặt bằng. Server vẫn là
+ * nơi thi hành thật (sp_ConfigureTemplateSection từ chối lại lần nữa nếu có
+ * sai sót), đúng nguyên tắc "client báo ngay, server thi hành" đã dùng cho
+ * `polygonsOverlap` trong lib/geometry.js — chỉ khác ở đây là cho đa giác tự
+ * do, không phải hình chữ nhật.
+ */
+function PolygonDrawEditor({ canvasWidth, canvasHeight, points, onChange, onValidityChange, others = [], objects = [] }) {
+  const svgRef = useRef(null);
+  const [drawing, setDrawing] = useState(points.length < 3);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [cursor, setCursor] = useState(null);
+
+  const pointAt = useCallback((event) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    return [
+      clamp(snap((event.clientX - rect.left) / rect.width * canvasWidth), 0, canvasWidth),
+      clamp(snap((event.clientY - rect.top) / rect.height * canvasHeight), 0, canvasHeight),
+    ];
+  }, [canvasWidth, canvasHeight]);
+
+  const closeThreshold = Math.max(canvasWidth, canvasHeight) * 0.03;
+
+  const handleClick = (event) => {
+    if (!drawing) return;
+    const p = pointAt(event);
+    if (!p) return;
+    if (points.length >= 3) {
+      const [fx, fy] = points[0];
+      if (Math.hypot(p[0] - fx, p[1] - fy) <= closeThreshold) { setDrawing(false); return; }
+    }
+    onChange([...points, p]);
+  };
+
+  const handleMove = (event) => {
+    if (drawing) { setCursor(pointAt(event)); return; }
+    if (dragIndex == null) return;
+    const p = pointAt(event);
+    if (!p) return;
+    const next = points.slice();
+    next[dragIndex] = p;
+    onChange(next);
+  };
+
+  const startDrag = (index) => (event) => {
+    event.stopPropagation();
+    svgRef.current?.setPointerCapture?.(event.pointerId);
+    setDragIndex(index);
+  };
+  const endDrag = (event) => {
+    svgRef.current?.releasePointerCapture?.(event.pointerId);
+    setDragIndex(null);
+  };
+
+  const undoLast = () => onChange(points.slice(0, -1));
+  const restart = () => { onChange([]); setDrawing(true); setCursor(null); };
+
+  // Kiểm tra đúng chuỗi mà sp_ConfigureTemplateSection thi hành: đủ đỉnh -> lồi
+  // -> trong mặt bằng -> không chồng Sân khấu -> không chồng Section khác.
+  const enoughPoints = points.length >= 3;
+  const convex = enoughPoints && isConvexPolygon(points);
+  const withinBounds = enoughPoints && pointsWithinCanvas(points, canvasWidth, canvasHeight);
+  const overlapsStage = convex && withinBounds && objects.some((o) => {
+    if (o.objectType !== 'Stage') return false;
+    const op = geometryToPoints(o.geometryJson);
+    return op && isConvexPolygon(op) && polygonsOverlap(points, op);
+  });
+  const overlapsSection = convex && withinBounds && !overlapsStage && others.some((s) => {
+    const op = geometryToPoints(s.geometryJson);
+    return op && isConvexPolygon(op) && polygonsOverlap(points, op);
+  });
+  const valid = !drawing && convex && withinBounds && !overlapsStage && !overlapsSection;
+  const problem = drawing ? null
+    : !enoughPoints ? 'Cần ít nhất 3 đỉnh.'
+    : !convex ? 'Hình lõm — máy chủ chỉ chấp nhận đa giác lồi.'
+    : !withinBounds ? 'Có đỉnh nằm ngoài mặt bằng.'
+    : overlapsStage ? 'Đang chồng lên Sân khấu.'
+    : overlapsSection ? 'Đang chồng lên một Section khác cùng tầng.'
+    : null;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ báo lên khi tính hợp lệ đổi, không cần theo dõi callback
+  useEffect(() => { onValidityChange?.(valid); }, [valid]);
+
+  const drawPreview = drawing && cursor && points.length > 0 ? [...points, cursor] : points;
+  const fillColor = !enoughPoints ? 'var(--surface-sunken)' : problem ? 'rgba(220,38,38,0.25)' : 'var(--accent-soft, rgba(168,126,111,0.35))';
+  const strokeColor = !enoughPoints ? 'var(--border-strong)' : problem ? '#dc2626' : 'var(--accent, #A87E6F)';
+
+  return (
+    <div className="stack gap-2">
+      <div className="row gap-2 wrap">
+        <Button type="button" size="sm" onClick={restart}>Vẽ lại</Button>
+        {drawing && points.length > 0 && <Button type="button" size="sm" onClick={undoLast}>Xoá điểm cuối</Button>}
+        {drawing && points.length >= 3 && (
+          <Button type="button" size="sm" variant="primary" onClick={() => setDrawing(false)}>Xong ({points.length} đỉnh)</Button>
+        )}
+        {!drawing && <Button type="button" size="sm" onClick={() => setDrawing(true)}>Vẽ thêm đỉnh</Button>}
+      </div>
+
+      <div className="seatmap-frame" style={{ maxWidth: 480 }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'none', cursor: drawing ? 'crosshair' : 'default' }}
+          onClick={handleClick}
+          onPointerMove={handleMove}
+          onPointerUp={endDrag}
+        >
+          <rect x={0.5} y={0.5} width={canvasWidth - 1} height={canvasHeight - 1} fill="none" stroke="var(--border-subtle)" strokeWidth={2} strokeDasharray="10 8" />
+          {objects.map((o, i) => {
+            const p = geometryToPoints(o.geometryJson);
+            return p ? <path key={i} d={pointsToSvgPath(p)} fill="var(--surface-inverse)" opacity={0.6} /> : null;
+          })}
+          {others.map((s) => {
+            const p = geometryToPoints(s.geometryJson);
+            return p ? <path key={s.templateSectionID} d={pointsToSvgPath(p)} fill="var(--surface-sunken)" stroke="var(--border-subtle)" /> : null;
+          })}
+          {drawPreview.length >= 2 && (
+            <path
+              d={drawing ? `M ${drawPreview.map((p) => `${p[0]},${p[1]}`).join(' L ')}` : pointsToSvgPath(drawPreview)}
+              fill={drawing ? 'none' : fillColor}
+              stroke={strokeColor}
+              strokeWidth={2}
+              strokeLinejoin="round"
+            />
+          )}
+          {points.map((p, i) => (
+            <circle
+              key={i} cx={p[0]} cy={p[1]} r={drawing ? 5 : 7}
+              fill={i === 0 && drawing && points.length >= 3 ? '#16a34a' : 'var(--accent, #A87E6F)'}
+              stroke="var(--surface)" strokeWidth={1.5}
+              style={{ cursor: drawing ? 'default' : 'grab' }}
+              onPointerDown={!drawing ? startDrag(i) : undefined}
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div className="text-xs" style={{ color: problem ? '#dc2626' : 'var(--text-muted)' }}>
+        {drawing
+          ? `Bấm vào mặt bằng để đặt từng đỉnh (đã đặt ${points.length}). Bấm gần đỉnh đầu (chấm xanh) hoặc nút "Xong" để đóng hình.`
+          : (problem ?? `Đa giác hợp lệ, ${points.length} đỉnh — kéo các chấm để chỉnh, hoặc "Vẽ lại" để làm mới.`)}
+      </div>
+    </div>
+  );
+}
 
 function RectFields({ rect, onChange }) {
   const set = (k) => (v) => onChange({ ...rect, [k]: v });
@@ -794,8 +1050,8 @@ function MiniPreview({ canvasWidth, canvasHeight, points, tone, others = [], obj
         })}
         {points && (
           <path d={pointsToSvgPath(points)}
-                fill={tone === 'object' ? 'var(--surface-inverse)' : 'rgba(99,102,241,0.35)'}
-                stroke={tone === 'object' ? 'var(--text)' : 'var(--accent, #6366f1)'} strokeWidth={2} />
+                fill={tone === 'object' ? 'var(--surface-inverse)' : 'rgba(168,126,111,0.35)'}
+                stroke={tone === 'object' ? 'var(--text)' : 'var(--accent, #A87E6F)'} strokeWidth={2} />
         )}
         {!points && <text x={canvasWidth / 2} y={canvasHeight / 2} textAnchor="middle" fill="var(--text-muted)" style={{ fontSize: 14 }}>JSON chưa hợp lệ</text>}
       </svg>

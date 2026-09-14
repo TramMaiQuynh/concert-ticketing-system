@@ -10,7 +10,6 @@
 -- Luu y ve du lieu mock (01_SetupMockData): he thong co DUNG MOT Admin
 -- (test_admin) va Concert mock dang o trang thai OnSale.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -220,6 +219,143 @@ SET @SQL = N'
 EXEC test.sp_RunTest @Suite,'UpdateArtist_InvalidStatus_Fail59113','ERROR',59113,@SQL;
 
 -- ============================================================
+-- sp_CreateVenue / sp_UpdateVenue (BP2 / FR07 / FR59b / BR50e)
+--
+-- Truoc day ca 7 ma loi cua hai SP nay (58101, 58102, 59401..59405) khong co
+-- BAT KY bai test nao, trong khi day la cong chan quyen va cong chan duy nhat
+-- cua duong tao/ngung su dung dia diem.
+-- ============================================================
+SET @SQL = N'
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@uid, @VenueName=N''Venue trai phep'',
+         @Address=NULL, @NewVenueID=@v OUTPUT;';
+EXEC test.sp_RunTest @Suite,'CreateVenue_NonAdmin_Fail58101','ERROR',58101,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''   '',
+         @Address=NULL, @NewVenueID=@v OUTPUT;';
+EXEC test.sp_RunTest @Suite,'CreateVenue_EmptyName_Fail58102','ERROR',58102,@SQL;
+
+-- Tao duoc, trang thai Active, VA ten duoc CAT khoang trang dau/cuoi.
+--
+-- Vi sao phai kiem bang DATALENGTH chu khong chi bang <>:
+--   T-SQL BO QUA khoang trang CUOI khi so sanh chuoi, nen `N'X  ' <> N'X'` la FALSE.
+--   Do tren database: phep <> bat duoc khoang trang DAU nhung KHONG bat duoc khoang
+--   trang CUOI. Neu chi dung <> thi mot ban sua chi-cat-khoang-trang-cuoi se lot qua
+--   bai test nay ma van xanh. DATALENGTH dem theo BYTE nen bat duoc ca hai dau.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''  Venue co khoang trang  '',
+         @Address=NULL, @NewVenueID=@v OUTPUT;
+    IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v AND VenueStatus=''Active'')
+        THROW 59903, ''Venue khong duoc tao dung trang thai Active.'', 1;
+    IF (SELECT VenueName FROM Venue WHERE VenueID=@v) <> N''Venue co khoang trang''
+       OR (SELECT DATALENGTH(VenueName) FROM Venue WHERE VenueID=@v)
+          <> DATALENGTH(N''Venue co khoang trang'')
+        THROW 59904, ''sp_CreateVenue khong cat het khoang trang dau/cuoi cua VenueName.'', 1;';
+EXEC test.sp_RunTest @Suite,'CreateVenue_TrimsName_OK','SUCCESS',NULL,@SQL;
+
+SET @SQL = N'
+    DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    EXEC sp_UpdateVenue @ActorUserID=@uid, @VenueID=1, @VenueName=N''Venue trai phep'';';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_NonAdmin_Fail59401','ERROR',59401,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=999999, @VenueName=N''Venue khong ton tai'';';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_NotFound_Fail59402','ERROR',59402,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=1, @VenueStatus=''Archived'';';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_InvalidStatus_Fail59403','ERROR',59403,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=1, @VenueName=N''   '';';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_EmptyName_Fail59404','ERROR',59404,@SQL;
+
+-- Khong duoc ngung su dung Venue dang duoc Concert CHUA ket thuc tham chieu:
+-- Concert do se tro toi mot dia diem khong con hoat dong cho toi ngay dien.
+-- Dung mot Venue rieng va mot Concert moi o trang thai Draft: Concert mock cua
+-- 01_SetupMockData da bi chuyen sang Cancelled boi bai JoinQueue_... o tren,
+-- ma Cancelled la trang thai ket thuc nen KHONG con chan duoc gi.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''Venue dang duoc dung'',
+         @Address=NULL, @NewVenueID=@v OUTPUT;
+    INSERT INTO Concert (ConcertName, ConcertStatus, VenueID, PurchaseLimit,
+                         FairAccessEnabled, WaitlistEnabled, SalesPaused)
+    VALUES (N''Concert chua ket thuc'', ''Draft'', @v, 4, 0, 1, 0);
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=@v, @VenueStatus=''Inactive'';';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_DeactivateInUse_Fail59405','ERROR',59405,@SQL;
+
+-- Chieu nguoc lai: Venue khong bi Concert nao tham chieu thi ngung su dung duoc.
+-- Neu thieu bai nay thi mot guard 59405 qua chat (chan ca truong hop hop le)
+-- van cho ket qua xanh.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''Venue ranh'', @Address=NULL, @NewVenueID=@v OUTPUT;
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=@v, @VenueStatus=''Inactive'';
+    IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID=@v AND VenueStatus=''Inactive'')
+        THROW 59905, ''Venue ranh khong chuyen duoc sang Inactive.'', 1;';
+EXEC test.sp_RunTest @Suite,'UpdateVenue_DeactivateUnused_OK','SUCCESS',NULL,@SQL;
+
+-- ── Địa điểm ở phía TIÊU THỤ: tạo Concert (58005 / 58009) ───────────────────
+-- Hai mã này là mặt còn lại của vòng đời địa điểm: Concert mới chỉ tạo được khi
+-- địa điểm TỒN TẠI và đang Active. Cùng nhóm với 7 mã trên, trước đây cả hai
+-- không có bài test nào — một thay đổi vô tình nới lỏng chúng sẽ không bị phát hiện.
+-- (sp_CreateConcert kiểm Artist TRƯỚC khi kiểm Venue, nên mỗi bài phải dựng một
+--  nghệ sĩ Active hợp lệ; sp_CreateArtist không chặn trùng tên nên đặt tên riêng.)
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @aid INT;
+    EXEC sp_CreateArtist @ActorUserID=@adm, @ArtistName=N''Nghe si cho test venue 1'',
+         @ArtistDescription=NULL, @NewArtistID=@aid OUTPUT;
+    DECLARE @artJson NVARCHAR(MAX) = N''['' + CAST(@aid AS NVARCHAR(20)) + N'']'';
+    DECLARE @st DATETIME2 = DATEADD(DAY, 10, SYSDATETIME());
+    DECLARE @et DATETIME2 = DATEADD(HOUR, 3, @st);
+    DECLARE @cid INT;
+    EXEC sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=999999,
+         @ConcertName=N''Concert voi venue khong ton tai'',
+         @StartDatetime=@st, @EndDatetime=@et,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL,
+         @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL,
+         @NewConcertID=@cid OUTPUT, @ActorUserID=@org;';
+EXEC test.sp_RunTest @Suite,'CreateConcert_VenueNotFound_Fail58005','ERROR',58005,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @aid INT;
+    EXEC sp_CreateArtist @ActorUserID=@adm, @ArtistName=N''Nghe si cho test venue 2'',
+         @ArtistDescription=NULL, @NewArtistID=@aid OUTPUT;
+    DECLARE @artJson NVARCHAR(MAX) = N''['' + CAST(@aid AS NVARCHAR(20)) + N'']'';
+    DECLARE @v INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''Venue da ngung dung'',
+         @Address=NULL, @NewVenueID=@v OUTPUT;
+    EXEC sp_UpdateVenue @ActorUserID=@adm, @VenueID=@v, @VenueStatus=''Inactive'';
+    DECLARE @st DATETIME2 = DATEADD(DAY, 10, SYSDATETIME());
+    DECLARE @et DATETIME2 = DATEADD(HOUR, 3, @st);
+    DECLARE @cid INT;
+    EXEC sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@v,
+         @ConcertName=N''Concert tai venue da ngung dung'',
+         @StartDatetime=@st, @EndDatetime=@et,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL,
+         @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL,
+         @NewConcertID=@cid OUTPUT, @ActorUserID=@org;';
+EXEC test.sp_RunTest @Suite,'CreateConcert_VenueInactive_Fail58009','ERROR',58009,@SQL;
+
+-- ============================================================
 -- sp_UpdateRoleStatus (§12.3.2 / §24.4 / BR52)
 -- Truoc khi co SP nay, gia tri Role.RoleStatus = 'Inactive' khong co bat ky duong
 -- ghi nao, nen cong kiem tra kha nang phan cong trong sp_AssignRole khong bao gio
@@ -412,11 +548,16 @@ EXEC test.sp_RunTest @Suite,'ConfigureVenueMap_PartialUpdateKeepsStage_OK','SUCC
 -- ============================================================
 -- sp_CreateZone / sp_UpdateZone / sp_CreateSeat / sp_UpdateSeat - kiem tra hinh hoc
 --
--- Truoc dot nay, 13 ma loi rieng biet (59811-59819, 59821-59824) trai tren bon
--- thu tuc nay KHONG co bai kiem nao cham toi: moi lan goi trong toan bo bo test
--- deu bo trong tham so hinh hoc. Danh muc duoi day phu het ca 13 ma, uu tien kep
--- cho 59814/59815 (dung duong vua sua WITH (UPDLOCK)) va 59824 (co nhanh loai tru
--- chinh no o UpdateSeat ma CreateSeat khong co).
+-- Truoc dot nay, cac ma loi hinh hoc cua bon thu tuc nay KHONG co bai kiem nao
+-- cham toi: moi lan goi trong toan bo bo test deu bo trong tham so hinh hoc.
+-- Danh muc duoi day do phu cac ma THAT SU duoc nem, uu tien kep cho 59814/59815
+-- (dung duong vua sua WITH (UPDLOCK)) va 59824 (co nhanh loai tru chinh no o
+-- UpdateSeat ma CreateSeat khong co).
+--
+-- 59811, 59817, 59819 KHONG co bai kiem o day va khong the co: khong thu tuc nao
+-- con nem chung (59811 trung nghia 59831; 59817 trung nghia 59818; 59819 thuoc
+-- nhanh doi mo hinh khu GA ma he thong khong mo hinh hoa). Xem comment tuong ung
+-- trong ErrorHandlingMiddleware.cs.
 -- ============================================================
 
 -- 59831: Reserved seating hien chi ho tro ZoneType=Seated.

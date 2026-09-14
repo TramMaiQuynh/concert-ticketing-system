@@ -309,7 +309,7 @@ export default function Checkout() {
 
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontWeight: 'var(--weight-semibold)' }}>Tổng cộng</span>
-              <span className="tabular" style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)' }}>
+              <span className="price" style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', color: 'var(--accent)' }}>
                 {formatMoney(booking.finalAmount)}
               </span>
             </div>

@@ -3,7 +3,6 @@
 -- Test sp_ApplyPromotion, sp_CheckInTicket, sp_ProcessRefund,
 --      sp_ReleaseExpiredHolds, sp_AllocateWaitlist.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

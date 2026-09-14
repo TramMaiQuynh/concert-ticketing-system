@@ -2,7 +2,10 @@ import { useState } from 'react';
 import api from '../../api/client';
 import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useArtists, useVenues } from '../../lib/adminCatalog';
+import { findSameNameArtists } from '../../lib/artistName';
+import { seatBatchPlan } from '../../lib/seatCode';
 import { Field, Select, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
+import { Alert, Button, PageHeader } from '../../components/ui';
 import {
   ArtistStatus, VenueStatus, ZoneStatus, SeatStatus, ADMIN_STATUS_LABEL,
 } from '../../domain/enums';
@@ -15,12 +18,27 @@ import {
  * một Zone (khoá ngoại, không phải quy ước). Đặt đúng thứ tự thì người dùng khỏi
  * phải đoán nên bắt đầu từ đâu.
  *
- * Sửa danh mục chỉ dành cho Admin — đúng như `[Authorize(Roles = "Admin")]` trên
- * các endpoint PUT. Organizer vẫn tạo được (endpoint POST mở cho cả hai vai trò).
+ * Toàn bộ trang này chỉ dành cho Admin: các endpoint PUT đều mang
+ * `[Authorize(Roles = "Admin")]`, và POST cũng không đồng nhất — `artists` cùng
+ * `zones/{id}/seats/batch` yêu cầu Admin, số còn lại mở cho cả Organizer ở tầng
+ * controller rồi được stored procedure kiểm quyền lại lần nữa.
+ * Organizer không vào được trang này; họ chọn nghệ sĩ và địa điểm có sẵn ngay trong
+ * biểu mẫu tạo concert.
  */
 export default function Catalog({ isAdmin }) {
+  if (!isAdmin) {
+    return (
+      <>
+        <PageHeader title="Danh mục" subtitle="Dữ liệu nền của venue do Admin quản lý một lần và được chọn lại khi tạo concert." />
+        <Panel tone="workflow" title="Danh mục dùng chung">
+          <p className="field-hint">Organizer chọn nghệ sĩ và địa điểm có sẵn trong biểu mẫu tạo concert. Tạo hoặc sửa venue, khu vật lý và ghế vật lý là quyền Admin.</p>
+        </Panel>
+      </>
+    );
+  }
   return (
     <>
+      <PageHeader title="Danh mục" subtitle="Nghệ sĩ, địa điểm, khu vực và ghế — theo đúng thứ tự phụ thuộc: Venue → Zone → Seat." />
       <ArtistSection isAdmin={isAdmin} />
       <VenueSection isAdmin={isAdmin} />
       <ZoneSection isAdmin={isAdmin} />
@@ -32,10 +50,9 @@ export default function Catalog({ isAdmin }) {
 /* ── Nghệ sĩ ─────────────────────────────────────────────────────────────── */
 
 function ArtistSection({ isAdmin }) {
-  // Đọc thật từ CSDL (GET /admin/artists), không phải sổ tay localStorage: trước đây
-  // trang này tự tạo nghệ sĩ xong lại KHÔNG hiện nó ra sau khi tải lại trang hay xoá
-  // sổ tay — trong khi Concerts.jsx đã dùng đúng nguồn này để chọn nghệ sĩ khi tạo
-  // concert. Cùng một dữ liệu, hai nguồn khác nhau là lỗi, không phải lựa chọn.
+  // Đọc thật từ CSDL (GET /admin/artists) — cùng nguồn mà Concerts.jsx dùng để chọn
+  // nghệ sĩ khi tạo concert. Một dữ liệu chỉ có MỘT nguồn: lưu tạm ở localStorage sẽ
+  // tạo ra nguồn thứ hai lệch nhau, và đó là lỗi chứ không phải lựa chọn.
   const artists = useArtists({ includeInactive: true });
   const items = artists.items;
   const create = useAction();
@@ -48,6 +65,14 @@ function ArtistSection({ isAdmin }) {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editStatus, setEditStatus] = useState('');
+
+  // "Tìm trước khi tạo" — PHẢI nằm sau khai báo `name` ở trên: biến `const` không đọc
+  // được trước dòng khai báo của chính nó.
+  // Dùng bản ghi thô từ máy chủ (artists.raw) chứ không dùng items đã gắn nhãn, vì
+  // nhãn có kèm trạng thái ("Sơn Tùng · Active") và sẽ làm so tên sai.
+  // Cảnh báo MỀM: tên trùng vẫn tạo được, vì chặn cứng sẽ chặn nhầm hai nghệ sĩ thật
+  // sự khác nhau — đúng lý do sp_CreateArtist không đặt UNIQUE.
+  const sameNameArtists = findSameNameArtists(name, artists.raw);
 
   const submitCreate = (e) => {
     e.preventDefault();
@@ -91,13 +116,21 @@ function ArtistSection({ isAdmin }) {
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={255} required />
             </Field>
             <Field label="Mô tả">
-              <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+              <input value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={500} />
             </Field>
           </div>
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !name.trim()}>
-            {create.busy ? 'Đang tạo…' : 'Tạo nghệ sĩ'}
-          </button>
+          <Button type="submit" variant="primary" loading={create.busy} disabled={!name.trim()} style={{ marginTop: '16px' }}>
+            Tạo nghệ sĩ
+          </Button>
           <Banner state={create.state} />
+          {sameNameArtists.length > 0 && (
+            <Alert tone="warning" style={{ marginTop: 'var(--space-4)' }}>
+              Đã có {sameNameArtists.length} nghệ sĩ cùng tên trong danh mục:{' '}
+              {sameNameArtists.map((a) => `#${a.artistID} ${a.artistName}`).join(', ')}.
+              {' '}Vẫn tạo được, nhưng hai bản ghi cùng một nghệ sĩ sẽ làm báo cáo theo
+              nghệ sĩ tách thành nhiều dòng.
+            </Alert>
+          )}
         </form>
         {items.length > 0 && (
           <Recent items={items} label="nghệ sĩ"
@@ -114,8 +147,8 @@ function ArtistSection({ isAdmin }) {
           <form onSubmit={submitUpdate}>
             <IdPicker label="Nghệ sĩ cần sửa" items={items} value={editId} onChange={setEditId} />
             <div className="field-grid" style={{ marginTop: '16px' }}>
-              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} /></Field>
-              <Field label="Mô tả mới"><input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} /></Field>
+              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={255} /></Field>
+              <Field label="Mô tả mới"><input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} maxLength={500} /></Field>
               <Field label="Trạng thái">
                 <Select
                   value={editStatus} onChange={setEditStatus} allowEmpty
@@ -123,9 +156,9 @@ function ArtistSection({ isAdmin }) {
                 />
               </Field>
             </div>
-            <button className="btn-primary" style={{ marginTop: '16px' }} disabled={update.busy || !editId}>
-              {update.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
-            </button>
+            <Button type="submit" variant="primary" loading={update.busy} disabled={!editId} style={{ marginTop: '16px' }}>
+              Lưu thay đổi
+            </Button>
             <Banner state={update.state} />
           </form>
         </Panel>
@@ -174,12 +207,12 @@ function VenueSection({ isAdmin }) {
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={255} required />
             </Field>
             <Field label="Địa chỉ">
-              <input value={address} onChange={(e) => setAddress(e.target.value)} />
+              <input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={500} />
             </Field>
           </div>
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !name.trim()}>
-            {create.busy ? 'Đang tạo…' : 'Tạo địa điểm'}
-          </button>
+          <Button type="submit" variant="primary" loading={create.busy} disabled={!name.trim()} style={{ marginTop: '16px' }}>
+            Tạo địa điểm
+          </Button>
           <Banner state={create.state} />
         </form>
         {items.length > 0 && (
@@ -192,7 +225,7 @@ function VenueSection({ isAdmin }) {
         <Panel
           title="Cập nhật địa điểm"
           tone="edit"
-          subtitle="Đổi địa điểm bị chặn nếu concert đã có ghế trong kho vé — trigger TRG_ConcertVenueChangeGuard sẽ từ chối."
+          subtitle="Bỏ trống ô nào thì trường đó giữ nguyên. Đặt trạng thái Inactive để ngừng dùng địa điểm cho concert mới (BR50e) — không ngưng được địa điểm đang có concert chưa kết thúc."
         >
           <form
             onSubmit={(e) => {
@@ -210,16 +243,16 @@ function VenueSection({ isAdmin }) {
           >
             <IdPicker label="Địa điểm cần sửa" items={items} value={editId} onChange={setEditId} />
             <div className="field-grid" style={{ marginTop: '16px' }}>
-              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} /></Field>
-              <Field label="Địa chỉ mới"><input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></Field>
+              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={255} /></Field>
+              <Field label="Địa chỉ mới"><input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} maxLength={500} /></Field>
               <Field label="Trạng thái">
                 <Select value={editStatus} onChange={setEditStatus} allowEmpty
                         options={Object.values(VenueStatus)} labels={ADMIN_STATUS_LABEL} />
               </Field>
             </div>
-            <button className="btn-primary" style={{ marginTop: '16px' }} disabled={update.busy || !editId}>
-              {update.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
-            </button>
+            <Button type="submit" variant="primary" loading={update.busy} disabled={!editId} style={{ marginTop: '16px' }}>
+              Lưu thay đổi
+            </Button>
             <Banner state={update.state} />
           </form>
         </Panel>
@@ -231,15 +264,15 @@ function VenueSection({ isAdmin }) {
 /* ── Khu vực ─────────────────────────────────────────────────────────────── */
 
 function ZoneSection({ isAdmin }) {
+  const zones = useAdminCatalog('zone');
+  const { items } = zones;
   const venues = useVenues();
-  const { items } = useAdminCatalog('zone');
   const create = useAction();
   const update = useAction();
 
   const [venueId, setVenueId] = useState('');
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-
+  const [zoneCode, setZoneCode] = useState('');
+  const [zoneName, setZoneName] = useState('');
   const [editId, setEditId] = useState('');
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -247,33 +280,31 @@ function ZoneSection({ isAdmin }) {
 
   return (
     <>
-      <Panel tone="create" title="Khu vực (Zone)" subtitle="Mỗi khu vực thuộc về một địa điểm. Ghế được tạo bên trong khu vực.">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.run(async () => {
-              const res = await api.post(`/admin/venues/${Number(venueId)}/zones`, {
-                zoneCode: code.trim(),
-                zoneName: name.trim() || null,
-              });
-              setCode(''); setName('');
-              return res.data.id;
-            }, (id) => `Đã tạo khu vực. ID = ${id} — dùng ID này để tạo ghế bên dưới.`);
-          }}
-        >
-          <IdPicker label="Thuộc địa điểm" items={venues.items} value={venueId} onChange={setVenueId} />
-          <div className="field-grid" style={{ marginTop: '16px' }}>
-            <Field label="Mã khu vực" hint="Ví dụ: VIP, A, STAND-B" required>
-              <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={64} required />
-            </Field>
-            <Field label="Tên hiển thị"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Panel tone="create" title="Khu vật lý" subtitle="Tạo khu thuộc venue. Hình dạng và tầng của khu chỉ được đặt trong Bản vẽ địa điểm.">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          create.run(async () => {
+            const res = await api.post(`/admin/venues/${Number(venueId)}/zones`, {
+              zoneCode: zoneCode.trim(), zoneName: zoneName.trim() || null,
+            });
+            await zones.reload();
+            setZoneCode(''); setZoneName('');
+            return res.data.id;
+          }, (id) => `Đã tạo khu vật lý #${id}. Tiếp theo, tạo ghế cho khu này rồi đặt khu lên Bản vẽ địa điểm.`);
+        }}>
+          <div className="field-grid">
+            <IdPicker label="Địa điểm" items={venues.items} value={venueId} onChange={setVenueId} />
+            <Field label="Mã khu" required><input value={zoneCode} onChange={(e) => setZoneCode(e.target.value)} maxLength={64} required /></Field>
+            <Field label="Tên khu"><input value={zoneName} onChange={(e) => setZoneName(e.target.value)} maxLength={255} /></Field>
           </div>
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !venueId || !code.trim()}>
-            {create.busy ? 'Đang tạo…' : 'Tạo khu vực'}
-          </button>
+          <Button type="submit" variant="primary" loading={create.busy} disabled={!venueId || !zoneCode.trim()} style={{ marginTop: '16px' }}>Tạo khu</Button>
           <Banner state={create.state} />
         </form>
-        {items.length > 0 && <Recent items={items} label="khu vực" />}
+        {items.length > 0 ? (
+          <Recent items={items} label="khu vật lý" />
+        ) : (
+          <p className="field-hint">Chưa có khu vật lý nào.</p>
+        )}
       </Panel>
 
       {isAdmin && (
@@ -293,16 +324,16 @@ function ZoneSection({ isAdmin }) {
           >
             <IdPicker label="Khu vực cần sửa" items={items} value={editId} onChange={setEditId} />
             <div className="field-grid" style={{ marginTop: '16px' }}>
-              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} /></Field>
-              <Field label="Mô tả"><input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} /></Field>
+              <Field label="Tên mới"><input value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={255} /></Field>
+              <Field label="Mô tả"><input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} maxLength={500} /></Field>
               <Field label="Trạng thái">
                 <Select value={editStatus} onChange={setEditStatus} allowEmpty
                         options={Object.values(ZoneStatus)} labels={ADMIN_STATUS_LABEL} />
               </Field>
             </div>
-            <button className="btn-primary" style={{ marginTop: '16px' }} disabled={update.busy || !editId}>
-              {update.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
-            </button>
+            <Button type="submit" variant="primary" loading={update.busy} disabled={!editId} style={{ marginTop: '16px' }}>
+              Lưu thay đổi
+            </Button>
             <Banner state={update.state} />
           </form>
         </Panel>
@@ -314,165 +345,96 @@ function ZoneSection({ isAdmin }) {
 /* ── Ghế ─────────────────────────────────────────────────────────────────── */
 
 function SeatSection({ isAdmin }) {
-  const venues = useVenues();
+  const seats = useAdminCatalog('seat');
+  const { items } = seats;
   const zones = useAdminCatalog('zone');
-  const { items } = useAdminCatalog('seat');
   const create = useAction();
-  const bulk = useAction();
+  const batch = useAction();
   const update = useAction();
 
-  const [venueId, setVenueId] = useState('');
   const [zoneId, setZoneId] = useState('');
-  const [code, setCode] = useState('');
-  const [label, setLabel] = useState('');
-  // Ghế trong khu có ghế BẮT BUỘC có vị trí trên lưới (sp_CreateSeat, 59825): thiếu
-  // vị trí thì sơ đồ dồn mọi ghế về cùng một ô và chúng chồng khít lên nhau.
-  const [row, setRow] = useState('A');
-  const [col, setCol] = useState('1');
-
-  const [bulkPrefix, setBulkPrefix] = useState('');
-  const [bulkRow, setBulkRow] = useState('A');
-  const [bulkFrom, setBulkFrom] = useState('1');
-  const [bulkTo, setBulkTo] = useState('12');
-
+  const [prefix, setPrefix] = useState('');
+  const [row, setRow] = useState('');
+  const [column, setColumn] = useState('');
+  const [batchRow, setBatchRow] = useState('');
+  const [batchStart, setBatchStart] = useState('1');
+  const [batchEnd, setBatchEnd] = useState('');
   const [editId, setEditId] = useState('');
   const [editLabel, setEditLabel] = useState('');
   const [editStatus, setEditStatus] = useState('');
-  const venueZones = zones.items.filter((zone) => zone.raw.venueID === Number(venueId)
-    && zone.raw.zoneStatus === 'Active' && zone.raw.zoneType === 'Seated');
-  const chooseVenue = (id) => {
-    setVenueId(id);
-    setZoneId('');
-  };
 
-  /**
-   * Tạo hàng loạt: API chỉ có endpoint tạo MỘT ghế, nên phần lặp nằm ở đây.
-   * Gọi tuần tự chứ không song song — mỗi lời gọi là một transaction riêng, bắn
-   * song song hàng chục request chỉ làm tăng tranh chấp khoá mà không nhanh hơn
-   * đáng kể, và khi lỗi giữa chừng thì khó nói được đã tạo tới đâu.
-   */
-  const submitBulk = (e) => {
-    e.preventDefault();
-    const from = Number(bulkFrom);
-    const to = Number(bulkTo);
-    bulk.run(async () => {
-      const seats = [];
-      for (let i = from; i <= to; i += 1) {
-        const seatCode = `${bulkPrefix.trim()}${i}`;
-        seats.push({
-          seatCode,
-          seatLabel: seatCode,
-          // Cả loạt nằm trên CÙNG một hàng; số chạy của loạt chính là số thứ tự
-          // trong hàng, nên sơ đồ vẽ ra đúng một dãy ghế liền nhau.
-          seatRowLabel: bulkRow.trim(),
-          seatColumnNumber: i,
-        });
-      }
-      await api.post(`/admin/zones/${Number(zoneId)}/seats/batch`, { seats });
-      return seats.length;
-    }, (count) => `Đã tạo trọn bộ ${count} ghế.`);
-  };
-
-  const rangeValid = Number(bulkTo) >= Number(bulkFrom) && Number(bulkTo) - Number(bulkFrom) < 200;
-  // Gương lại luật 59821 của sp_CreateSeat: hàng và cột đi thành cặp. Chặn ở đây để
-  // người dùng thấy ngay khi đang gõ, chứ không phải sau một vòng gọi API hỏng.
-  const positionHalfFilled = !row.trim() !== !col.trim();
+  // Kế hoạch cho CẢ HAI form, tính bằng CÙNG một hàm (lib/seatCode.js): form đơn lẻ
+  // chỉ là trường hợp một hàng × một số. Nhờ vậy hai form không thể sinh ra hai kiểu
+  // mã khác nhau. `blocked` cũng chính là câu hiện ra cho người dùng, nên nút không
+  // bao giờ xám mà không nói vì sao.
+  // Hai form không có ô "Nhãn ghế": nhãn do lib/seatCode.js đặt bằng CHÍNH mã ghế, nên
+  // ghế luôn có tên hiển thị; muốn nhãn khác mã thì sửa ở khối "Cập nhật ghế".
+  // Cùng một câu giải thích cho ô "Tiền tố mã ghế" ở CẢ HAI form: hai form dùng chung
+  // một bộ trường thì cũng phải giải thích giống nhau.
+  const prefixHint = 'Ví dụ Vip. Hệ thống tự thêm dấu gạch rồi hàng và số → Vip-A1';
+  const singlePlan = seatBatchPlan({ zoneId, prefix, rows: row, start: column, end: column, singleSeat: true });
+  const batchPlan = seatBatchPlan({
+    zoneId, prefix, rows: batchRow, start: batchStart, end: batchEnd,
+  });
 
   return (
     <>
-      <Panel tone="create" title="Ghế" subtitle="Ghế là tài sản của địa điểm, chưa gắn giá. Giá chỉ xuất hiện khi ghế được đưa vào một concert (EventSeat).">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            create.run(async () => {
-              const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
-                seatCode: code.trim(),
-                seatLabel: label.trim() || null,
-                // Ghế có vị trí đầy đủ để luôn hiện đúng một ô trên sơ đồ.
-                seatRowLabel: row.trim() || null,
-                seatColumnNumber: col.trim() ? Number(col) : null,
-              });
-              setCode(''); setLabel('');
-              // Giữ nguyên hàng, tăng cột: tạo liên tiếp A1, A2, A3… không phải gõ lại.
-              if (col.trim()) setCol(String(Number(col) + 1));
-              return res.data.id;
-            }, (id) => `Đã tạo ghế. ID = ${id}.`);
-          }}
-        >
+      <Panel tone="create" title="Ghế vật lý" subtitle="Ghế thuộc một khu vật lý, có hàng và số ghế. Giá chỉ xuất hiện khi ghế được đưa vào một concert.">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          create.run(async () => {
+            const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
+              ...singlePlan.entries[0],
+            });
+            await seats.reload();
+            setRow(''); setColumn('');
+            return res.data.id;
+          }, (id) => `Đã tạo ghế vật lý #${id}.`);
+        }}>
           <div className="field-grid">
-            <IdPicker label="Thuộc địa điểm" items={venues.items} value={venueId} onChange={chooseVenue} />
-            <IdPicker label="Thuộc khu vực" hint="Chỉ hiện khu vực của địa điểm đã chọn."
-                      items={venueZones} value={zoneId} onChange={setZoneId} />
+            <IdPicker label="Khu vật lý" items={zones.items} value={zoneId} onChange={setZoneId} />
+            <Field label="Tiền tố mã ghế" required hint={prefixHint}><input value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={64} required /></Field>
+            <Field label="Hàng" required hint="Một hàng duy nhất, ví dụ A. Muốn nhiều hàng thì dùng khối bên dưới."><input value={row} onChange={(e) => setRow(e.target.value)} maxLength={16} required /></Field>
+            <Field label="Số ghế" required><input type="number" min="1" value={column} onChange={(e) => setColumn(e.target.value)} required /></Field>
           </div>
-          <div className="field-grid" style={{ marginTop: '16px' }}>
-            <Field label="Mã ghế" required>
-              <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={64} required />
-            </Field>
-            <Field label="Nhãn hiển thị"><input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
-            <Field label="Hàng" hint="Vị trí trên sơ đồ; đi cùng số thứ tự trong hàng.">
-              <input value={row} onChange={(e) => setRow(e.target.value)} maxLength={8} />
-            </Field>
-            <Field label="Số thứ tự trong hàng">
-              <input type="number" min="1" value={col} onChange={(e) => setCol(e.target.value)} />
-            </Field>
-          </div>
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={create.busy || !zoneId || !code.trim() || positionHalfFilled}>
-            {create.busy ? 'Đang tạo…' : 'Tạo một ghế'}
-          </button>
-          {positionHalfFilled && (
-            <div className="field-hint" style={{ color: 'var(--warning)' }}>
-              Hàng và số thứ tự đi thành cặp: điền cả hai, hoặc bỏ trống cả hai.
-            </div>
-          )}
+          <Button type="submit" variant="primary" loading={create.busy} disabled={singlePlan.blocked !== null} style={{ marginTop: '16px' }}>Tạo ghế</Button>
+          {singlePlan.blocked
+            ? <p className="field-hint">{singlePlan.blocked}</p>
+            : <p className="field-hint">{singlePlan.preview}</p>}
           <Banner state={create.state} />
         </form>
-
-        <hr style={{ border: 'none', borderTop: '1px dashed var(--border-focus)', margin: '24px 0' }} />
-
-        <form onSubmit={submitBulk}>
-          <h4 style={{ marginBottom: '6px', fontSize: '0.9375rem' }}>Tạo hàng loạt</h4>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', marginBottom: '16px' }}>
-            Toàn bộ lưới được gửi trong một giao dịch: nếu trùng mã hoặc trùng vị trí,
-            hệ thống không tạo dở bất kỳ ghế nào.
-          </p>
-
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          // Kế hoạch đã tính ở trên, bằng CÙNG hàm với form đơn lẻ (lib/seatCode.js).
+          batch.run(async () => {
+            // Dùng CHÍNH kế hoạch đã quyết định nút có bấm được hay không: nếu dựng
+            // payload ở một chỗ khác thì có ngày nút cho bấm mà gửi lên danh sách khác.
+            const entries = batchPlan.entries;
+            await api.post(`/admin/zones/${Number(zoneId)}/seats/batch`, { seats: entries });
+            await seats.reload();
+            setBatchEnd('');
+            return entries.length;
+          }, (count) => `Đã tạo nguyên tử ${count} ghế trong khu đã chọn.`);
+        }} style={{ marginTop: '24px' }}>
+          <div className="overline" style={{ marginBottom: '12px' }}>Tạo nhiều hàng ghế một lúc</div>
+          <IdPicker label="Khu vật lý" items={zones.items} value={zoneId} onChange={setZoneId} />
           <div className="field-grid">
-            <IdPicker label="Thuộc địa điểm" items={venues.items} value={venueId} onChange={chooseVenue} />
-            <IdPicker label="Thuộc khu vực" hint="Chỉ hiện khu vực của địa điểm đã chọn."
-                      items={venueZones} value={zoneId} onChange={setZoneId} />
+            <Field label="Tiền tố mã ghế" required hint={prefixHint}><input value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="Vip" maxLength={64} required /></Field>
+            <Field label="Danh sách hàng" required hint="Một hàng (A), một khoảng (A-H), hoặc nhiều mục (A,B,D-H)."><input value={batchRow} onChange={(e) => setBatchRow(e.target.value)} placeholder="A-H" required /></Field>
+            <Field label="Từ số ghế" required><input type="number" min="1" value={batchStart} onChange={(e) => setBatchStart(e.target.value)} required /></Field>
+            <Field label="Đến số ghế" required><input type="number" min="1" value={batchEnd} onChange={(e) => setBatchEnd(e.target.value)} required /></Field>
           </div>
-
-          <div className="field-grid" style={{ marginTop: '16px' }}>
-            <Field label="Tiền tố mã ghế" hint="Ví dụ 'A' sẽ ra A1, A2, A3…" required>
-              <input value={bulkPrefix} onChange={(e) => setBulkPrefix(e.target.value)} maxLength={32} required />
-            </Field>
-            <Field label="Hàng" hint="Cả loạt nằm trên cùng một hàng của sơ đồ." required>
-              <input value={bulkRow} onChange={(e) => setBulkRow(e.target.value)} maxLength={8} required />
-            </Field>
-            <Field label="Từ số"><input type="number" min="1" value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} /></Field>
-            <Field label="Đến số"><input type="number" min="1" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} /></Field>
-          </div>
-          <button
-            className="btn-outline"
-            style={{ marginTop: '16px' }}
-            disabled={bulk.busy || !zoneId || !bulkPrefix.trim() || !bulkRow.trim() || !rangeValid}
-          >
-            {bulk.busy ? 'Đang tạo hàng loạt…' : `Tạo ${Math.max(0, Number(bulkTo) - Number(bulkFrom) + 1)} ghế`}
-          </button>
-          {!zoneId && (
-            <div className="field-hint" style={{ color: 'var(--warning)' }}>
-              Chọn địa điểm, rồi chọn khu vực — ghế phải nằm trong một khu cụ thể.
-            </div>
-          )}
-          {!rangeValid && (
-            <div className="field-hint" style={{ color: 'var(--warning)' }}>
-              Khoảng số không hợp lệ (tối đa 200 ghế mỗi lần).
-            </div>
-          )}
-          <Banner state={bulk.state} />
+          <Button type="submit" variant="secondary" loading={batch.busy} disabled={batchPlan.blocked !== null} style={{ marginTop: '16px' }}>Tạo hàng loạt</Button>
+          {batchPlan.blocked
+            ? <p className="field-hint">{batchPlan.blocked}</p>
+            : <p className="field-hint">{batchPlan.preview}</p>}
+          <Banner state={batch.state} />
         </form>
-
-        {items.length > 0 && <Recent items={items} label="ghế" />}
+        {items.length > 0 ? (
+          <Recent items={items} label="ghế vật lý" />
+        ) : (
+          <p className="field-hint">Chưa có ghế vật lý nào.</p>
+        )}
       </Panel>
 
       {isAdmin && (
@@ -491,15 +453,15 @@ function SeatSection({ isAdmin }) {
           >
             <IdPicker label="Ghế cần sửa" items={items} value={editId} onChange={setEditId} />
             <div className="field-grid" style={{ marginTop: '16px' }}>
-              <Field label="Nhãn mới"><input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} /></Field>
+              <Field label="Nhãn mới"><input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} maxLength={255} /></Field>
               <Field label="Trạng thái">
                 <Select value={editStatus} onChange={setEditStatus} allowEmpty
                         options={Object.values(SeatStatus)} labels={ADMIN_STATUS_LABEL} />
               </Field>
             </div>
-            <button className="btn-primary" style={{ marginTop: '16px' }} disabled={update.busy || !editId}>
-              {update.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
-            </button>
+            <Button type="submit" variant="primary" loading={update.busy} disabled={!editId} style={{ marginTop: '16px' }}>
+              Lưu thay đổi
+            </Button>
             <Banner state={update.state} />
           </form>
         </Panel>

@@ -92,14 +92,14 @@ BEGIN
 
             MERGE INTO TemplateSection AS tgt
             USING (
-                SELECT s.TemplateSectionID AS OldID, fm.NewID AS NewFloorID, s.SectionKey, s.SectionName, s.GeometryJson
+                SELECT s.TemplateSectionID AS OldID, fm.NewID AS NewFloorID, s.ZoneID, s.SectionKey, s.SectionName, s.GeometryJson
                 FROM TemplateSection s
                 JOIN @FloorMap fm ON fm.OldID = s.TemplateFloorID
             ) AS src
             ON 1 = 0
             WHEN NOT MATCHED THEN
-                INSERT (TemplateFloorID, SectionKey, SectionName, GeometryJson)
-                VALUES (src.NewFloorID, src.SectionKey, src.SectionName, src.GeometryJson)
+                INSERT (TemplateFloorID, ZoneID, SectionKey, SectionName, GeometryJson)
+                VALUES (src.NewFloorID, src.ZoneID, src.SectionKey, src.SectionName, src.GeometryJson)
             OUTPUT src.OldID, inserted.TemplateSectionID INTO @SectionMap(OldID, NewID);
 
             MERGE INTO TemplateSeat AS tgt

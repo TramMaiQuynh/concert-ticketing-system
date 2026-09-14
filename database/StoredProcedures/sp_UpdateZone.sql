@@ -216,6 +216,22 @@ BEGIN
                          AND  c.ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed'))
             THROW 59415, 'sp_UpdateZone: Khong the Retire Zone dang co ghe trong kho ve cua Concert chua ket thuc.', 1;
 
+        -- Khong duoc thao do mot Zone ma mot VenueTemplateVersion DA PUBLISHED
+        -- con tham chieu (qua TemplateSection.ZoneID — xem TemplateSection.sql).
+        -- Truoc ban sua nay, kiem tra nay khong ton tai: Zone bi Retire trong khi
+        -- Template Published van "goi" no, khien Template do khong con chup
+        -- snapshot/ban ve duoc nhung khong co dau hieu gi bao truoc — loi chi lo
+        -- ra rat muon, luc sp_AddEventSeatsFromMapRevision tu choi vi Zone Retired
+        -- (60249), kho truy nguyen ve nguyen nhan that.
+        IF @ZoneStatus = 'Retired' AND @OldStatus = 'Active'
+           AND EXISTS (SELECT 1
+                       FROM   TemplateSection ts
+                       JOIN   TemplateFloor   tf  ON tf.TemplateFloorID = ts.TemplateFloorID
+                       JOIN   VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+                       WHERE  ts.ZoneID = @ZoneID
+                         AND  vtv.VersionStatus = 'Published')
+            THROW 59416, 'sp_UpdateZone: Khong the Retire Zone dang duoc mot Mau so do (VenueTemplateVersion) da Publish tham chieu.', 1;
+
         UPDATE Zone
         SET    ZoneName        = COALESCE(@ZoneName, ZoneName),
                ZoneDescription = COALESCE(@ZoneDescription, ZoneDescription),

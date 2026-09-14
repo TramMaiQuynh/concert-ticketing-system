@@ -7,7 +7,6 @@
 -- tu dung du lieu cua chinh no (sp_RunTest luon ROLLBACK, xem bai hoc da
 -- rut ra o file 16 va test #9 cua file 15).
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -44,12 +43,16 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG FloorPublished'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    -- Bypass truc tiep TemplateSection (khong qua sp_ConfigureTemplateSection)
+    -- vi test nay can mo phong mot Section DA co tren mot version SAP Publish;
+    -- ZoneID gio la NOT NULL nen phai gan @zn (zone cua @s1) o day.
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -162,10 +165,11 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
+    DECLARE @zn INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''VIP'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SecOK'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     IF @sec IS NULL THROW 59999, ''TemplateSectionID phai duoc gan'', 1;';
 EXEC test.sp_RunTest @Suite,'ConfigureSection_Create_OK','SUCCESS',NULL,@SQL;
 
@@ -173,32 +177,36 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
+    DECLARE @zn INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''VIP'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SecConcave'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''LShape'', @GeometryJson=N''{"version":1,"shape":"polygon","points":[[0,0],[200,0],[200,100],[100,100],[100,200],[0,200]]}'', @TemplateSectionID=@sec OUTPUT;';
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''LShape'', @GeometryJson=N''{"version":1,"shape":"polygon","points":[[0,0],[200,0],[200,100],[100,100],[100,200],[0,200]]}'', @TemplateSectionID=@sec OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ConfigureSection_ConcavePolygon_Fail60086','ERROR',60086,@SQL;
 
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @vt INT, @vtv INT, @fl INT, @obj INT, @sec INT;
+    DECLARE @zn INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''VIP'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SecOverlapStage'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
     EXEC dbo.sp_ConfigureTemplateObject @ActorUserID=@adm, @TemplateFloorID=@fl, @ObjectType=N''Stage'', @GeometryJson=N''{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}'', @TemplateObjectID=@obj OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":350,"y":40,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;';
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":350,"y":40,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ConfigureSection_OverlapsStage_Fail60088','ERROR',60088,@SQL;
 
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec1 INT, @sec2 INT;
+    DECLARE @zn1 INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''VIP'');
+    DECLARE @zn2 INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''GA'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SecOverlapSibling'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec1 OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''GA'', @GeometryJson=N''{"version":1,"shape":"rect","x":50,"y":50,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec2 OUTPUT;';
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn1, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec1 OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn2, @SectionKey=N''GA'', @GeometryJson=N''{"version":1,"shape":"rect","x":50,"y":50,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec2 OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ConfigureSection_OverlapsSibling_Fail60089','ERROR',60089,@SQL;
 
 -- Cap nhat CHINH Section do (khong doi hinh) khong duoc tu bao chong len
@@ -208,11 +216,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
+    DECLARE @zn INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven AND ZoneCode=N''VIP'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SecUpdateSelf'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @SectionName=N''Khu VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":150,"height":150,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @SectionName=N''Khu VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":150,"height":150,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     IF (SELECT SectionName FROM TemplateSection WHERE TemplateSectionID=@sec) <> N''Khu VIP''
         THROW 59999, ''SectionName phai duoc cap nhat'', 1;';
 EXEC test.sp_RunTest @Suite,'ConfigureSection_UpdateSelf_NoFalseOverlap_OK','SUCCESS',NULL,@SQL;
@@ -224,11 +233,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatOK'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     IF @ts IS NULL THROW 59999, ''TemplateSeatID phai duoc gan'', 1;';
 EXEC test.sp_RunTest @Suite,'ConfigureSeat_Create_OK','SUCCESS',NULL,@SQL;
@@ -237,11 +247,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts1 INT, @ts2 INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatDupKey'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts1 OUTPUT;
     DECLARE @s2 INT = (SELECT TOP 1 SeatID FROM Seat WHERE SeatID <> @s1);
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s2, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=2, @TemplateSeatID=@ts2 OUTPUT;';
@@ -251,12 +262,13 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @s2  INT = (SELECT TOP 1 SeatID FROM Seat WHERE SeatID <> @s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts1 INT, @ts2 INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatDupGrid'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts1 OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s2, @SeatKey=N''S2'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts2 OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ConfigureSeat_DuplicateGridSlot_Fail60109','ERROR',60109,@SQL;
@@ -267,12 +279,22 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn1 INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec1 INT, @sec2 INT, @ts1 INT, @ts2 INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatDupAcrossSections'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec1 OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''GA'', @GeometryJson=N''{"version":1,"shape":"rect","x":200,"y":200,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec2 OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn1, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec1 OUTPUT;
+    -- sp_ConfigureTemplateSection nay gio bat buoc @ZoneID va chi cho phep MOT
+    -- Section moi Zone trong CUNG version (60096). De giu nguyen y do ban dau
+    -- cua test (hai Section KHAC NHAU cung tro toi MOT SeatID trong cung
+    -- version, kiem tra 60107), ta INSERT THANG vao TemplateSection thay vi
+    -- goi lai SP cho sec2 — mo phong du lieu da ton tai (vd. du lieu legacy
+    -- truoc rang buoc 60096) ma van giu ZoneID = zn1 de sp_ConfigureTemplateSeat
+    -- (kiem tra 60112 truoc 60107) khong chan nham SeatID hop le nay.
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn1, N''GA'', N''{"version":1,"shape":"rect","x":200,"y":200,"width":100,"height":100,"rotation":0}'');
+    SET @sec2 = SCOPE_IDENTITY();
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec1, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts1 OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec2, @SeatID=@s1, @SeatKey=N''S1DUP'', @RowLabel=N''B'', @SeatNumber=1, @TemplateSeatID=@ts2 OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ConfigureSeat_DuplicateSeatIDAcrossSections_Fail60107','ERROR',60107,@SQL;
@@ -285,18 +307,19 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vtA INT, @vtvA INT, @flA INT, @secA INT, @tsA INT;
     DECLARE @vtB INT, @vtvB INT, @flB INT, @secB INT, @tsB INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatSharedAcrossTemplates A'', @NewVenueTemplateID=@vtA OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vtA, @NewVenueTemplateVersionID=@vtvA OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtvA, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@flA OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@flA, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@secA OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@flA, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@secA OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@secA, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@tsA OUTPUT;
 
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG SeatSharedAcrossTemplates B'', @NewVenueTemplateID=@vtB OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vtB, @NewVenueTemplateVersionID=@vtvB OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtvB, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@flB OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@flB, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@secB OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@flB, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@secB OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@secB, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@tsB OUTPUT;
     IF @tsB IS NULL THROW 59999, ''SeatID o template khac phai duoc phep, tsB phai duoc gan'', 1;';
 EXEC test.sp_RunTest @Suite,'ConfigureSeat_SameSeatIDAcrossDifferentTemplates_OK','SUCCESS',NULL,@SQL;
@@ -317,9 +340,15 @@ SET @SQL = N'
     EXEC dbo.sp_CreateSeat @ActorUserID=@adm, @ZoneID=@zone2, @SeatCode=N''A1'', @SeatLabel=N''A1'', @SeatRowLabel=N''A'', @SeatColumnNumber=1, @NewSeatID=@seat2 OUTPUT;
 
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    DECLARE @znSection INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven1 AND ZoneCode=N''VIP'');
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven1, @TemplateName=N''REG SeatWrongVenue Template'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@znSection, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@seat2, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;';
-EXEC test.sp_RunTest @Suite,'ConfigureSeat_SeatFromWrongVenue_Fail60111','ERROR',60111,@SQL;
+-- LUU Y: sp_ConfigureTemplateSeat gio gop kiem tra "dung Venue" VA "dung Zone"
+-- vao MOT dieu kien duy nhat, nem MOT ma loi duy nhat 60112 (xem
+-- sp_ConfigureTemplateSeat.sql dong 66-70) — ma 60111 rieng cho "sai Venue" da
+-- khong con ton tai trong SP (ErrorHandlingMiddleware.cs van con anh xa 60111
+-- nhung khong SP nao con nem no). Cap nhat ky vong test tu 60111 sang 60112.
+EXEC test.sp_RunTest @Suite,'ConfigureSeat_SeatFromWrongVenue_Fail60112','ERROR',60112,@SQL;

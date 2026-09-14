@@ -52,8 +52,8 @@ export default function Home() {
     <div className="container">
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section style={{ padding: 'var(--space-6) 0 var(--space-10)' }}>
-        <h1 style={{ fontSize: 'clamp(2rem, 5vw, var(--text-5xl))', lineHeight: 'var(--leading-5xl)', maxWidth: '16ch' }}>
-          Đặt vé cho đêm nhạc bạn không muốn bỏ lỡ.
+        <h1 style={{ fontSize: 'clamp(2rem, 5vw, var(--text-5xl))', lineHeight: 1.22 }}>
+          Đặt vé cho đêm nhạc<br />bạn không muốn bỏ lỡ.
         </h1>
         <p
           className="text-secondary"

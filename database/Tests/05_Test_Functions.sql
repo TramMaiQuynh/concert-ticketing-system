@@ -2,7 +2,6 @@
 -- 05_Test_Functions.sql
 -- Test 3 scalar functions.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

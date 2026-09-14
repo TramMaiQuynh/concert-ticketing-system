@@ -4,7 +4,6 @@
 -- cho cung 1 EventSeat -> chi 1 duoc thanh cong.
 -- Chay truc tiep trong SQL Server, khong can PowerShell thread.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

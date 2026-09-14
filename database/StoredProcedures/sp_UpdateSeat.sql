@@ -97,6 +97,19 @@ BEGIN
                          AND  c.ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed'))
             THROW 59425, 'sp_UpdateSeat: Khong the Retire Seat dang nam trong kho ve cua Concert chua ket thuc.', 1;
 
+        -- Cung khuon kiem tra vua them cho sp_UpdateZone: khong duoc thao do mot
+        -- Seat ma mot VenueTemplateVersion DA PUBLISHED con tham chieu qua
+        -- TemplateSeat.SeatID.
+        IF @SeatStatus = 'Retired' AND @OldStatus = 'Active'
+           AND EXISTS (SELECT 1
+                       FROM   TemplateSeat    tseat
+                       JOIN   TemplateSection ts  ON ts.TemplateSectionID = tseat.TemplateSectionID
+                       JOIN   TemplateFloor   tf  ON tf.TemplateFloorID   = ts.TemplateFloorID
+                       JOIN   VenueTemplateVersion vtv ON vtv.VenueTemplateVersionID = tf.VenueTemplateVersionID
+                       WHERE  tseat.SeatID = @SeatID
+                         AND  vtv.VersionStatus = 'Published')
+            THROW 59426, 'sp_UpdateSeat: Khong the Retire Seat dang duoc mot Mau so do (VenueTemplateVersion) da Publish tham chieu.', 1;
+
         UPDATE Seat
         SET    SeatLabel  = COALESCE(@SeatLabel, SeatLabel),
                SeatStatus = COALESCE(@SeatStatus, SeatStatus),

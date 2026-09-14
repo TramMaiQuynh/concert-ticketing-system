@@ -33,12 +33,14 @@
 CREATE TABLE TemplateSection (
     TemplateSectionID INT IDENTITY(1,1) NOT NULL,
     TemplateFloorID    INT NOT NULL,
+    ZoneID             INT NOT NULL,           -- khu vật lý mà Section này biểu diễn
     SectionKey         VARCHAR(64) NOT NULL,   -- định danh ổn định, vd 'VIP', 'BALCONY-L'
     SectionName        NVARCHAR(255) NULL,
     GeometryJson       NVARCHAR(MAX) NOT NULL,
 
     CONSTRAINT PK_TemplateSection PRIMARY KEY CLUSTERED (TemplateSectionID),
     CONSTRAINT FK_TemplateSection_Floor FOREIGN KEY (TemplateFloorID) REFERENCES TemplateFloor(TemplateFloorID),
+    CONSTRAINT FK_TemplateSection_Zone FOREIGN KEY (ZoneID) REFERENCES Zone(ZoneID),
     CONSTRAINT UQ_TemplateSection_Floor_Key UNIQUE (TemplateFloorID, SectionKey),
     CONSTRAINT CHK_TemplateSection_GeometryJson CHECK (ISJSON(GeometryJson) = 1)
 );

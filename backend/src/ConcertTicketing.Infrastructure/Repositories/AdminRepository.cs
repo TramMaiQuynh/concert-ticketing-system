@@ -31,14 +31,10 @@ public partial class AdminRepository : IAdminRepository
         using var conn = await _factory.OpenAsync();
         return await conn.QueryAsync<VenueListItem>(@"
             SELECT v.VenueID, v.VenueName, v.Address, v.VenueStatus,
-                   CAST(CASE WHEN v.MapWidth IS NOT NULL AND v.MapHeight IS NOT NULL
-                             THEN 1 ELSE 0 END AS BIT) AS HasSeatMap,
                    (SELECT COUNT(*) FROM Zone z
                      WHERE z.VenueID = v.VenueID AND z.ZoneStatus = 'Active')  AS ZoneCount,
                    (SELECT COUNT(*) FROM Seat s
-                     WHERE s.VenueID = v.VenueID AND s.SeatStatus = 'Active')  AS SeatCount,
-                   v.MapWidth, v.MapHeight,
-                   v.StageX, v.StageY, v.StageWidth, v.StageHeight
+                     WHERE s.VenueID = v.VenueID AND s.SeatStatus = 'Active')  AS SeatCount
             FROM   Venue v
             WHERE  (@IncludeInactive = 1 OR v.VenueStatus = 'Active')
             ORDER BY v.VenueName;",
@@ -50,14 +46,12 @@ public partial class AdminRepository : IAdminRepository
     {
         using var conn = await _factory.OpenAsync();
         return await conn.QueryAsync<VenueZoneListItem>(@"
-            SELECT z.ZoneID, z.ZoneCode, z.ZoneName, z.ZoneType, z.ZoneStatus,
-                   z.ZoneLevel, z.ZoneCapacity,
+            SELECT z.ZoneID, z.ZoneCode, z.ZoneName, z.ZoneStatus,
                    (SELECT COUNT(*) FROM Seat s
-                     WHERE s.ZoneID = z.ZoneID AND s.SeatStatus = 'Active') AS SeatCount,
-                   z.ZoneX, z.ZoneY, z.ZoneWidth, z.ZoneHeight, z.ZoneRotation
+                     WHERE s.ZoneID = z.ZoneID AND s.SeatStatus = 'Active') AS SeatCount
             FROM   Zone z
             WHERE  z.VenueID = @VenueID
-            ORDER BY z.ZoneLevel, z.ZoneCode;",
+            ORDER BY z.ZoneCode;",
             new { VenueID = venueId });
     }
 
@@ -286,14 +280,6 @@ public partial class AdminRepository : IAdminRepository
         p.Add("@VenueID", venueId, DbType.Int32);
         p.Add("@ZoneCode", r.ZoneCode, DbType.AnsiString, size: 64);
         p.Add("@ZoneName", r.ZoneName, DbType.String, size: 255);
-        p.Add("@ZoneType", r.ZoneType, DbType.AnsiString, size: 24);
-        p.Add("@ZoneLevel", r.ZoneLevel, DbType.Int32);
-        p.Add("@ZoneX", r.ZoneX, DbType.Int32);
-        p.Add("@ZoneY", r.ZoneY, DbType.Int32);
-        p.Add("@ZoneWidth", r.ZoneWidth, DbType.Int32);
-        p.Add("@ZoneHeight", r.ZoneHeight, DbType.Int32);
-        p.Add("@ZoneRotation", r.ZoneRotation, DbType.Decimal);
-        p.Add("@ZoneCapacity", r.ZoneCapacity, DbType.Int32);
         p.Add("@NewZoneID", dbType: DbType.Int32, direction: ParameterDirection.Output);
         await conn.ExecuteAsync("sp_CreateZone", p, commandType: CommandType.StoredProcedure);
         return p.Get<int>("@NewZoneID");
@@ -493,15 +479,6 @@ public partial class AdminRepository : IAdminRepository
         p.Add("@ZoneName", r.ZoneName, DbType.String, size: 255);
         p.Add("@ZoneDescription", r.ZoneDescription, DbType.String, size: 500);
         p.Add("@ZoneStatus", r.ZoneStatus, DbType.AnsiString, size: 32);
-        p.Add("@ZoneType", r.ZoneType, DbType.AnsiString, size: 24);
-        p.Add("@ZoneLevel", r.ZoneLevel, DbType.Int32);
-        p.Add("@ZoneX", r.ZoneX, DbType.Int32);
-        p.Add("@ZoneY", r.ZoneY, DbType.Int32);
-        p.Add("@ZoneWidth", r.ZoneWidth, DbType.Int32);
-        p.Add("@ZoneHeight", r.ZoneHeight, DbType.Int32);
-        p.Add("@ZoneRotation", r.ZoneRotation, DbType.Decimal);
-        p.Add("@ZoneCapacity", r.ZoneCapacity, DbType.Int32);
-        p.Add("@ClearGeometry", r.ClearGeometry, DbType.Boolean);
         await conn.ExecuteAsync("sp_UpdateZone", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -516,31 +493,6 @@ public partial class AdminRepository : IAdminRepository
         p.Add("@SeatRowLabel", r.SeatRowLabel, DbType.String, size: 16);
         p.Add("@SeatColumnNumber", r.SeatColumnNumber, DbType.Int32);
         await conn.ExecuteAsync("sp_UpdateSeat", p, commandType: CommandType.StoredProcedure);
-    }
-
-    /// <summary>
-    /// Khai báo mặt phẳng toạ độ và vị trí sân khấu của địa điểm (FR11a).
-    ///
-    /// Tách khỏi UpdateVenueAsync vì đây là mối quan tâm khác hẳn: nó có bộ kiểm
-    /// tra riêng ở stored procedure (sân khấu phải nằm trong mặt phẳng; mặt phẳng
-    /// không được thu nhỏ hơn vùng các khu đang chiếm) và được gọi với tần suất
-    /// khác hẳn việc đổi tên hay địa chỉ.
-    /// </summary>
-    public async Task ConfigureVenueMapAsync(int actorUserId, int venueId, ConfigureVenueMapRequest r)
-    {
-        using var conn = await _factory.OpenAsync();
-        var p = new DynamicParameters();
-        p.Add("@ActorUserID", actorUserId, DbType.Int32);
-        p.Add("@VenueID", venueId, DbType.Int32);
-        p.Add("@MapWidth", r.MapWidth, DbType.Int32);
-        p.Add("@MapHeight", r.MapHeight, DbType.Int32);
-        p.Add("@StageX", r.StageX, DbType.Int32);
-        p.Add("@StageY", r.StageY, DbType.Int32);
-        p.Add("@StageWidth", r.StageWidth, DbType.Int32);
-        p.Add("@StageHeight", r.StageHeight, DbType.Int32);
-        p.Add("@ClearStage", r.ClearStage, DbType.Boolean);
-        p.Add("@ClearMap", r.ClearMap, DbType.Boolean);
-        await conn.ExecuteAsync("sp_ConfigureVenueMap", p, commandType: CommandType.StoredProcedure);
     }
 
     // ── Cấu hình Fair Access / Waitlist theo Concert (FR64a, BR43, BR45b, BR47b) ──

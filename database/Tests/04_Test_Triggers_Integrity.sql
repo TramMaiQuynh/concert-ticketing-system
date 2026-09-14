@@ -2,7 +2,6 @@
 -- 04_Test_Triggers_Integrity.sql
 -- Test cac trigger toan ven du lieu (BR50-BR53).
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

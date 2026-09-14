@@ -11,7 +11,6 @@
 -- thuan (khong ghi CSDL) — van dung sp_RunTest de bao cao PASS/FAIL thong
 -- nhat voi cac file khac, nhung @SQL chi doc va tu THROW khi ket qua sai.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

@@ -26,7 +26,7 @@ Thumbs.db
 .vs/
 
 # ── Bí mật triển khai — KHÔNG BAO GIỜ commit ────────────────────────────────
-# Sinh ra bởi database/deploy.ps1 và scripts/setup-demo.ps1
+# Sinh ra bởi database/deploy.ps1 và scripts/setup.ps1
 .deploy/
 **/appsettings.Local.json
 frontend/.env
@@ -39,7 +39,3 @@ frontend/.env.local
 ~$*
 *_bak.*
 redis_bin/
-
-# ── Tài liệu nội bộ — không đưa lên GitHub ──────────────────────────────────
-# Kịch bản bảo vệ chi tiết: giữ riêng trên máy, không công khai trước buổi bảo vệ.
-README-DEMO.md

@@ -7,7 +7,6 @@
 -- Du lieu mock (01_SetupMockData): Concert mock dang OnSale, FairAccessEnabled = 0,
 -- co san 1 Promotion (CodeRequiredFlag = 1) va 1 DiscountCode Active.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

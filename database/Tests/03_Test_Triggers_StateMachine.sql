@@ -3,7 +3,6 @@
 -- Test TRG_*_StateTransition (BR49).
 -- Chuyen doi trang thai KHONG hop le -> phai loi.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

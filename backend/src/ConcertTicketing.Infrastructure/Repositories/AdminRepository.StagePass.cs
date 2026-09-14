@@ -58,6 +58,26 @@ public partial class AdminRepository
             new { VenueTemplateID = venueTemplateId });
     }
 
+    public async Task<IEnumerable<ConcertPublishedTemplateVersionItem>> ListPublishedTemplateVersionsForConcertAsync(int actorUserId, int concertId)
+    {
+        using var conn = await _factory.OpenAsync();
+        return await conn.QueryAsync<ConcertPublishedTemplateVersionItem>(@"
+            SELECT vtv.VenueTemplateVersionID, vt.VenueTemplateID, vt.TemplateName, vtv.VersionNumber
+            FROM dbo.Concert c
+            JOIN dbo.VenueTemplate vt ON vt.VenueID = c.VenueID AND vt.TemplateStatus = 'Active'
+            JOIN dbo.VenueTemplateVersion vtv ON vtv.VenueTemplateID = vt.VenueTemplateID
+                                                 AND vtv.VersionStatus = 'Published'
+            WHERE c.ConcertID = @ConcertID
+              AND (c.OrganizerUserID = @ActorUserID OR EXISTS (
+                    SELECT 1 FROM dbo.UserRoleAssignment ura
+                    JOIN dbo.Role r ON r.RoleID = ura.RoleID
+                    JOIN dbo.UserAccount ua ON ua.UserID = ura.UserID
+                    WHERE ura.UserID = @ActorUserID AND ura.AssignmentStatus = 'Active'
+                      AND r.RoleName = 'Admin' AND ua.AccountStatus = 'Active'))
+            ORDER BY vt.TemplateName, vtv.VersionNumber DESC;",
+            new { ActorUserID = actorUserId, ConcertID = concertId });
+    }
+
     public async Task<int> CreateVenueTemplateVersionAsync(int actorUserId, int venueTemplateId, CreateVenueTemplateVersionRequest r)
     {
         using var conn = await _factory.OpenAsync();
@@ -89,7 +109,7 @@ public partial class AdminRepository
             JOIN dbo.TemplateFloor f ON f.TemplateFloorID = o.TemplateFloorID
             WHERE f.VenueTemplateVersionID = @VersionID;
 
-            SELECT s.TemplateSectionID, s.TemplateFloorID, s.SectionKey, s.SectionName, s.GeometryJson
+            SELECT s.TemplateSectionID, s.TemplateFloorID, s.ZoneID, s.SectionKey, s.SectionName, s.GeometryJson
             FROM dbo.TemplateSection s
             JOIN dbo.TemplateFloor f ON f.TemplateFloorID = s.TemplateFloorID
             WHERE f.VenueTemplateVersionID = @VersionID;
@@ -120,7 +140,7 @@ public partial class AdminRepository
             objectsByFloor[f.TemplateFloorID].ToList(),
             sectionsByFloor[f.TemplateFloorID]
                 .Select(s => new TemplateSectionDetail(
-                    s.TemplateSectionID, s.SectionKey, s.SectionName, s.GeometryJson,
+                    s.TemplateSectionID, s.ZoneID, s.SectionKey, s.SectionName, s.GeometryJson,
                     seatsBySection[s.TemplateSectionID].ToList()))
                 .ToList()))
             .ToList();
@@ -203,6 +223,7 @@ public partial class AdminRepository
         var p = new DynamicParameters();
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@TemplateFloorID", templateFloorId, DbType.Int32);
+        p.Add("@ZoneID", r.ZoneID, DbType.Int32);
         p.Add("@SectionKey", r.SectionKey, DbType.AnsiString, size: 64);
         p.Add("@SectionName", r.SectionName, DbType.String, size: 255);
         p.Add("@GeometryJson", r.GeometryJson, DbType.String, size: -1);
@@ -249,12 +270,22 @@ public partial class AdminRepository
 
     // ── ConcertMap / ConcertMapRevision (D.5) ───────────────────────────────
 
-    public async Task<ConcertMapDto?> GetConcertMapAsync(int concertId)
+    public async Task<ConcertMapDto?> GetConcertMapAsync(int actorUserId, int concertId)
     {
         using var conn = await _factory.OpenAsync();
         return await conn.QueryFirstOrDefaultAsync<ConcertMapDto>(@"
-            SELECT ConcertMapID, ConcertID FROM dbo.ConcertMap WHERE ConcertID = @ConcertID;",
-            new { ConcertID = concertId });
+            SELECT cm.ConcertMapID, cm.ConcertID
+            FROM dbo.ConcertMap cm
+            JOIN dbo.Concert c ON c.ConcertID = cm.ConcertID
+            WHERE cm.ConcertID = @ConcertID
+              AND (c.OrganizerUserID = @ActorUserID OR EXISTS (
+                    SELECT 1
+                    FROM dbo.UserRoleAssignment ura
+                    JOIN dbo.Role r ON r.RoleID = ura.RoleID
+                    JOIN dbo.UserAccount ua ON ua.UserID = ura.UserID
+                    WHERE ura.UserID = @ActorUserID AND ura.AssignmentStatus = 'Active'
+                      AND r.RoleName = 'Admin' AND ua.AccountStatus = 'Active'));
+            ", new { ActorUserID = actorUserId, ConcertID = concertId });
     }
 
     public async Task<int> CreateConcertMapAsync(int actorUserId, int concertId)
@@ -268,16 +299,25 @@ public partial class AdminRepository
         return p.Get<int>("@NewConcertMapID");
     }
 
-    public async Task<IEnumerable<ConcertMapRevisionListItem>> ListConcertMapRevisionsAsync(int concertMapId)
+    public async Task<IEnumerable<ConcertMapRevisionListItem>> ListConcertMapRevisionsAsync(int actorUserId, int concertMapId)
     {
         using var conn = await _factory.OpenAsync();
         return await conn.QueryAsync<ConcertMapRevisionListItem>(@"
-            SELECT ConcertMapRevisionID, ConcertMapID, SourceVenueTemplateVersionID, RevisionNumber,
-                   RevisionStatus, SnapshotTimestamp, LockedTimestamp
-            FROM dbo.ConcertMapRevision
-            WHERE ConcertMapID = @ConcertMapID
+            SELECT rev.ConcertMapRevisionID, rev.ConcertMapID, rev.SourceVenueTemplateVersionID, rev.RevisionNumber,
+                   rev.RevisionStatus, rev.SnapshotTimestamp, rev.LockedTimestamp
+            FROM dbo.ConcertMapRevision rev
+            JOIN dbo.ConcertMap cm ON cm.ConcertMapID = rev.ConcertMapID
+            JOIN dbo.Concert c ON c.ConcertID = cm.ConcertID
+            WHERE rev.ConcertMapID = @ConcertMapID
+              AND (c.OrganizerUserID = @ActorUserID OR EXISTS (
+                    SELECT 1
+                    FROM dbo.UserRoleAssignment ura
+                    JOIN dbo.Role r ON r.RoleID = ura.RoleID
+                    JOIN dbo.UserAccount ua ON ua.UserID = ura.UserID
+                    WHERE ura.UserID = @ActorUserID AND ura.AssignmentStatus = 'Active'
+                      AND r.RoleName = 'Admin' AND ua.AccountStatus = 'Active'))
             ORDER BY RevisionNumber DESC;",
-            new { ConcertMapID = concertMapId });
+            new { ActorUserID = actorUserId, ConcertMapID = concertMapId });
     }
 
     public async Task<int> CreateConcertMapRevisionAsync(int actorUserId, int concertMapId, CreateConcertMapRevisionRequest r)
@@ -299,5 +339,139 @@ public partial class AdminRepository
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@ConcertMapRevisionID", concertMapRevisionId, DbType.Int32);
         await conn.ExecuteAsync("sp_LockConcertMapRevision", p, commandType: CommandType.StoredProcedure);
+    }
+
+    public async Task CancelConcertMapRevisionDraftAsync(int actorUserId, int concertMapRevisionId)
+    {
+        using var conn = await _factory.OpenAsync();
+        var p = new DynamicParameters();
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+        p.Add("@ConcertMapRevisionID", concertMapRevisionId, DbType.Int32);
+        await conn.ExecuteAsync("sp_CancelConcertMapRevisionDraft", p, commandType: CommandType.StoredProcedure);
+    }
+
+    /// <summary>
+    /// Cay Floor -> Section -> Seat cua mot revision, LEFT JOIN EventSeat: ghe
+    /// chua dua vao kho ve van xuat hien (EventSeatID/InventoryStatus/Price la
+    /// NULL) de Admin thay va chon dua vao kho ve — khac han
+    /// GetStagePassSeatMapAsync (khach hang) chi INNER JOIN, chi thay ghe da ban.
+    /// </summary>
+    public async Task<ConcertMapRevisionDetail?> GetConcertMapRevisionDetailAsync(int actorUserId, int concertMapRevisionId)
+    {
+        using var conn = await _factory.OpenAsync();
+        var canRead = await conn.QueryFirstOrDefaultAsync<int?>(@"
+            SELECT TOP (1) 1
+            FROM dbo.ConcertMapRevision rev
+            JOIN dbo.ConcertMap cm ON cm.ConcertMapID = rev.ConcertMapID
+            JOIN dbo.Concert c ON c.ConcertID = cm.ConcertID
+            WHERE rev.ConcertMapRevisionID = @RevisionID
+              AND (c.OrganizerUserID = @ActorUserID OR EXISTS (
+                    SELECT 1
+                    FROM dbo.UserRoleAssignment ura
+                    JOIN dbo.Role r ON r.RoleID = ura.RoleID
+                    JOIN dbo.UserAccount ua ON ua.UserID = ura.UserID
+                    WHERE ura.UserID = @ActorUserID AND ura.AssignmentStatus = 'Active'
+                      AND r.RoleName = 'Admin' AND ua.AccountStatus = 'Active'));",
+            new { ActorUserID = actorUserId, RevisionID = concertMapRevisionId });
+        if (canRead is null) return null;
+
+        const string sql = @"
+            SELECT ConcertMapRevisionID, ConcertMapID, RevisionNumber, RevisionStatus
+            FROM dbo.ConcertMapRevision
+            WHERE ConcertMapRevisionID = @RevisionID;
+
+            SELECT ConcertMapRevisionFloorID, FloorKey, FloorName, FloorOrder, CanvasWidth, CanvasHeight
+            FROM dbo.ConcertMapRevisionFloor
+            WHERE ConcertMapRevisionID = @RevisionID
+            ORDER BY FloorOrder;
+
+            SELECT o.ConcertMapRevisionObjectID, o.ConcertMapRevisionFloorID, o.ObjectType, o.Label, o.GeometryJson, o.ZIndex
+            FROM dbo.ConcertMapRevisionObject o
+            JOIN dbo.ConcertMapRevisionFloor f ON f.ConcertMapRevisionFloorID = o.ConcertMapRevisionFloorID
+            WHERE f.ConcertMapRevisionID = @RevisionID;
+
+            SELECT sec.ConcertMapRevisionSectionID, sec.ConcertMapRevisionFloorID, sec.ZoneID, sec.SectionKey, sec.SectionName, sec.GeometryJson
+            FROM dbo.ConcertMapRevisionSection sec
+            JOIN dbo.ConcertMapRevisionFloor f ON f.ConcertMapRevisionFloorID = sec.ConcertMapRevisionFloorID
+            WHERE f.ConcertMapRevisionID = @RevisionID;
+
+            SELECT cs.ConcertMapRevisionSeatID, cs.ConcertMapRevisionSectionID, cs.SeatID, cs.SeatKey, cs.RowLabel, cs.SeatNumber,
+                   cs.GeometryJson, cs.IsAccessible, cs.IsCompanion,
+                   cs.EventSeatID, es.InventoryStatus, tc.CategoryName, es.SalePrice AS Price
+            FROM dbo.ConcertMapRevisionSeat cs
+            JOIN dbo.ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID = cs.ConcertMapRevisionSectionID
+            JOIN dbo.ConcertMapRevisionFloor f ON f.ConcertMapRevisionFloorID = sec.ConcertMapRevisionFloorID
+            LEFT JOIN dbo.EventSeat es ON es.EventSeatID = cs.EventSeatID
+            LEFT JOIN dbo.TicketCategory tc ON tc.ConcertID = es.ConcertID AND tc.TicketCategoryID = es.TicketCategoryID
+            WHERE f.ConcertMapRevisionID = @RevisionID;";
+
+        using var grid = await conn.QueryMultipleAsync(sql, new { RevisionID = concertMapRevisionId });
+
+        var revision = await grid.ReadSingleOrDefaultAsync<ConcertMapRevisionListItemHead>();
+        if (revision is null) return null;
+
+        var floors = (await grid.ReadAsync<CmrFloorRow>()).ToList();
+        var objects = (await grid.ReadAsync<ConcertMapRevisionObjectItem>()).ToList();
+        var sections = (await grid.ReadAsync<CmrSectionRow>()).ToList();
+        var seats = (await grid.ReadAsync<ConcertMapRevisionSeatItem>()).ToList();
+
+        var seatsBySection = seats.ToLookup(x => x.ConcertMapRevisionSectionID);
+        var sectionsByFloor = sections.ToLookup(x => x.ConcertMapRevisionFloorID);
+        var objectsByFloor = objects.ToLookup(x => x.ConcertMapRevisionFloorID);
+
+        var floorDetails = floors.Select(f => new ConcertMapRevisionFloorDetail(
+            f.ConcertMapRevisionFloorID, f.FloorKey, f.FloorName, f.FloorOrder, f.CanvasWidth, f.CanvasHeight,
+            objectsByFloor[f.ConcertMapRevisionFloorID].ToList(),
+            sectionsByFloor[f.ConcertMapRevisionFloorID]
+                .Select(s => new ConcertMapRevisionSectionDetail(
+                    s.ConcertMapRevisionSectionID, s.ZoneID, s.SectionKey, s.SectionName, s.GeometryJson,
+                    seatsBySection[s.ConcertMapRevisionSectionID].ToList()))
+                .ToList()))
+            .ToList();
+
+        return new ConcertMapRevisionDetail(
+            revision.ConcertMapRevisionID, revision.ConcertMapID, revision.RevisionNumber, revision.RevisionStatus,
+            floorDetails);
+    }
+
+    public async Task<int> AddEventSeatsFromMapRevisionAsync(int actorUserId, int concertMapRevisionId, AddEventSeatsFromMapRevisionRequest r)
+    {
+        using var conn = await _factory.OpenAsync();
+        var p = new DynamicParameters();
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+        p.Add("@ConcertMapRevisionID", concertMapRevisionId, DbType.Int32);
+        p.Add("@TicketCategoryID", r.TicketCategoryId, DbType.Int32);
+        p.Add("@ConcertMapRevisionSeatIDs", string.Join(",", r.ConcertMapRevisionSeatIds), DbType.String, size: -1);
+        await conn.ExecuteAsync("sp_AddEventSeatsFromMapRevision", p, commandType: CommandType.StoredProcedure);
+        return r.ConcertMapRevisionSeatIds.Count;
+    }
+
+    // Kieu trung gian chi dung cho viec doc cac tap ket qua o GetConcertMapRevisionDetailAsync.
+    private sealed class ConcertMapRevisionListItemHead
+    {
+        public int ConcertMapRevisionID { get; set; }
+        public int ConcertMapID { get; set; }
+        public int RevisionNumber { get; set; }
+        public string RevisionStatus { get; set; } = "";
+    }
+
+    private sealed class CmrFloorRow
+    {
+        public int ConcertMapRevisionFloorID { get; set; }
+        public string FloorKey { get; set; } = "";
+        public string? FloorName { get; set; }
+        public int FloorOrder { get; set; }
+        public int CanvasWidth { get; set; }
+        public int CanvasHeight { get; set; }
+    }
+
+    private sealed class CmrSectionRow
+    {
+        public int ConcertMapRevisionSectionID { get; set; }
+        public int ConcertMapRevisionFloorID { get; set; }
+        public int ZoneID { get; set; }
+        public string SectionKey { get; set; } = "";
+        public string? SectionName { get; set; }
+        public string GeometryJson { get; set; } = "";
     }
 }

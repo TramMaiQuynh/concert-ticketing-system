@@ -2,7 +2,6 @@
 -- 07_Test_SP_CreateBooking.sql
 -- Test sp_CreateBooking (@SeatList = NVARCHAR(MAX) csv).
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

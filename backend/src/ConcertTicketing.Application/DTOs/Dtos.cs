@@ -67,7 +67,6 @@ public record SeatDto(
     int SeatID,
     string SeatNumber,
     string? SectionName,
-    string? Row,
     // TicketCategoryID là bắt buộc cho luồng Waitlist: JoinWaitlistRequest yêu cầu
     // @TicketCategoryId (BR40a — Waitlist gắn với MỘT hạng vé, không phải cả Concert),
     // trong khi trước đây client chỉ nhận được CategoryName. Không có ID này thì endpoint
@@ -354,22 +353,8 @@ public record UpdateConcertStatusRequest(string Status);
 
 public record CreateVenueRequest(string VenueName, string? Address);
 
-/// <summary>
-/// Tao khu. Cac tham so hinh hoc deu tuy chon — dia diem chua khai bao so do van
-/// tao khu binh thuong, giao dien tu rot ve che do liet ke theo nhom.
-/// </summary>
-public record CreateZoneRequest(
-    string ZoneCode,
-    string? ZoneName,
-    // Hien tai chi ho tro 'Seated' (ban theo tung ghe).
-    string? ZoneType = null,
-    int? ZoneLevel = null,          // tang/khan dai, 1 = tang tret
-    int? ZoneX = null,
-    int? ZoneY = null,
-    int? ZoneWidth = null,
-    int? ZoneHeight = null,
-    decimal? ZoneRotation = null,   // do, de xoay khu huong ve san khau
-    int? ZoneCapacity = null);      // Du phong cho mo hinh inventory khac trong tuong lai.
+/// <summary>Khu vật lý thuộc một venue; hình học chỉ thuộc template version.</summary>
+public record CreateZoneRequest(string ZoneCode, string? ZoneName);
 
 public record CreateSeatRequest(
     string SeatCode,
@@ -425,46 +410,22 @@ public record IdResponse(int Id);
 // Dia diem va so do cua no do Admin dung mot lan; organizer cac lan sau chi chon
 // lai. De chon duoc thi phai THAY duoc — do la muc dich cua nhung DTO nay.
 
-/// <summary>
-/// Mot dia diem trong danh muc, kem nhung gi organizer can de quyet dinh.
-///
-/// HasSeatMap la truong quan trong nhat o day: dia diem chua khai bao toa do van
-/// ban ve binh thuong, nhung giao dien se rot ve che do liet ke theo khu thay vi
-/// ve so do. Noi truoc dieu do luc chon con hon de organizer phat hien sau khi
-/// da mo ban.
-/// </summary>
+/// <summary>Một địa điểm trong danh mục để chọn khi tạo concert.</summary>
 public record VenueListItem(
     int VenueID,
     string VenueName,
     string? Address,
     string VenueStatus,
-    bool HasSeatMap,
     int ZoneCount,
-    int SeatCount,
-    // Hinh hoc — de man quan tri ve duoc ban xem truoc. Go toa do ma khong nhin
-    // thay ket qua thi khong ai sap dat duoc mot khan phong.
-    int? MapWidth,
-    int? MapHeight,
-    int? StageX,
-    int? StageY,
-    int? StageWidth,
-    int? StageHeight);
+    int SeatCount);
 
-/// <summary>Mot khu trong danh muc dia diem — de organizer xem truoc bo cuc.</summary>
+/// <summary>Một khu vật lý của địa điểm.</summary>
 public record VenueZoneListItem(
     int ZoneID,
     string ZoneCode,
     string? ZoneName,
-    string ZoneType,
     string ZoneStatus,
-    int? ZoneLevel,
-    int? ZoneCapacity,
-    int SeatCount,
-    int? ZoneX,
-    int? ZoneY,
-    int? ZoneWidth,
-    int? ZoneHeight,
-    decimal? ZoneRotation);
+    int SeatCount);
 
 public record ArtistListItem(
     int ArtistID,
@@ -597,71 +558,84 @@ public record AuditRecordItem(
 // lai cung mot du lieu hang tram lan va van khong bieu dien duoc khu ve dung —
 // loai khu KHONG co ghe nao.
 
+/// <summary>
+/// Sơ đồ chỗ ngồi — dựng DUY NHẤT từ revision StagePass đã Locked (docs/stagepass-architecture.md
+/// D.3/D.6). KHÔNG có nguồn thứ hai: venue dùng Zone/Seat thuần không sinh ra SeatMapDto
+/// (`GetSeatMapAsync` trả null → endpoint 404 → giao diện khách báo "sơ đồ đang được hoàn thiện").
+/// Hệ quả vận hành: muốn khách chọn được ghế thì concert BẮT BUỘC có revision Locked.
+///
+/// `GeometryJson` LUÔN là quy ước v1 (rect hoặc polygon, xem TemplateSection.sql). SeatMap.jsx
+/// không cần biết dữ liệu tới từ đâu vì chỉ có một nguồn.
+/// </summary>
 public record SeatMapDto(
     int ConcertID,
     string VenueName,
     string? Address,
-    int? MapWidth,
-    int? MapHeight,
-    int? StageX,
-    int? StageY,
-    int? StageWidth,
-    int? StageHeight,
-    List<SeatMapZoneDto> Zones);
+    IReadOnlyList<SeatMapFloorDto> Floors);
 
 /// <summary>
-/// Mot khu o MUC TONG QUAN — chi hinh hoc va so lieu tong hop, KHONG co ghe.
+/// Một tầng của sơ đồ. Mỗi tầng có canvas RIÊNG (`ConcertMapRevisionFloor.CanvasWidth/Height`),
+/// đúng như tác giả dựng ở StagePass Studio; `FloorOrder` quyết định thứ tự hiển thị. Không có
+/// trường hợp nhiều tầng dùng chung một canvas — sơ đồ chỉ có một nguồn dữ liệu.
+/// </summary>
+public record SeatMapFloorDto(
+    string FloorKey,
+    string? FloorName,
+    int CanvasWidth,
+    int CanvasHeight,
+    IReadOnlyList<SeatMapObjectDto> Objects,
+    IReadOnlyList<SeatMapZoneDto> Zones);
+
+/// <summary>Vật thể trang trí/định hướng (sân khấu, lối đi…) — không bấm chọn được.</summary>
+public record SeatMapObjectDto(string ObjectType, string? Label, string GeometryJson);
+
+/// <summary>
+/// Một khu ở MỨC TỔNG QUAN — chỉ hình học và số liệu tổng hợp, KHÔNG có ghế.
 ///
-/// Day la diem mau chot ve hieu nang. Do thuc te tren he thong nay: 234 byte moi
-/// ghe. Tra ca ghe cua mot arena 20.000 cho la 4,5 MB moi lan mo trang; san van
-/// dong 60.000 cho la 13 MB. Khong dung duoc.
+/// Đây là điểm mấu chốt về hiệu năng. Đo thực tế trên hệ thống này: 234 byte mỗi
+/// ghế. Trả cả ghế của một arena 20.000 chỗ là 4,5 MB mỗi lần mở trang; sân vận
+/// động 60.000 chỗ là 13 MB. Không dùng được.
 ///
-/// Nguoi mua cung khong can tung ghe o buoc dau: ho chon KHU truoc (dua vao gia va
-/// vi tri so voi san khau), roi moi chon ghe trong khu do. Dung hai muc vua khop
-/// hanh vi that, vua giu payload buoc dau o vai KB du dia diem lon co nao.
+/// Người mua cũng không cần từng ghế ở bước đầu: họ chọn KHU trước (dựa vào giá và
+/// vị trí so với sân khấu), rồi mới chọn ghế trong khu đó. Dùng hai mức vừa khớp
+/// hành vi thật, vừa giữ payload bước đầu ở vài KB dù địa điểm lớn cỡ nào.
 /// </summary>
 public record SeatMapZoneDto(
     int ZoneID,
     string ZoneCode,
     string? ZoneName,
-    string ZoneType,
-    int? ZoneLevel,
-    int? ZoneX,
-    int? ZoneY,
-    int? ZoneWidth,
-    int? ZoneHeight,
-    decimal? ZoneRotation,
-    int? ZoneCapacity,
+    string GeometryJson,
     // Tong hop thay cho danh sach ghe.
     int SeatCount,
     int AvailableCount,
     decimal? MinPrice,
     decimal? MaxPrice);
 
-/// <summary>Chi tiet mot khu: hinh hoc cua chinh no cong toan bo ghe ben trong.</summary>
+/// <summary>Chi tiết một khu: hình học của chính nó cộng toàn bộ ghế bên trong.</summary>
 public record SeatMapZoneDetailDto(
     int ZoneID,
     string ZoneCode,
     string? ZoneName,
-    string ZoneType,
-    int? ZoneLevel,
-    int? ZoneX,
-    int? ZoneY,
-    int? ZoneWidth,
-    int? ZoneHeight,
-    decimal? ZoneRotation,
-    int? ZoneCapacity,
-    List<SeatMapSeatDto> Seats);
+    string GeometryJson,
+    IReadOnlyList<SeatMapSeatDto> Seats);
 
 public record SeatMapSeatDto(
     int SeatID,              // EventSeatID — dung de dat ve
     string SeatNumber,       // ma ghe day du, dinh danh cho khach
     string? RowLabel,
     int? ColumnNumber,
+    string? GeometryJson,    // chi khac NULL khi ghe StagePass nam tren hang cong/ban tron (xem TemplateSeat.sql)
     int TicketCategoryID,
     string CategoryName,
     string InventoryStatus,
-    decimal Price);
+    decimal Price,
+    // Vi tri xe lan va ghe companion. Nguon: TemplateSeat.IsAccessible/IsCompanion
+    // duoc sao chep nguyen ven sang ConcertMapRevisionSeat khi snapshot. Truoc day
+    // hai cot nay chi duoc SELECT o duong doc cua Admin (AdminRepository.StagePass)
+    // — khach hang khong bao gio nhan duoc chung, nen so do ban ve khong the hien
+    // vi tri accessible du du lieu da nam san trong database.
+    bool IsAccessible,
+    bool IsCompanion);
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────
 
@@ -712,18 +686,7 @@ public record UpdateVenueRequest(
 public record UpdateZoneRequest(
     string? ZoneName = null,
     string? ZoneDescription = null,
-    string? ZoneStatus = null,          // Active | Retired
-    string? ZoneType = null,            // Hien tai chi Seated
-    int? ZoneLevel = null,
-    int? ZoneX = null,
-    int? ZoneY = null,
-    int? ZoneWidth = null,
-    int? ZoneHeight = null,
-    decimal? ZoneRotation = null,
-    int? ZoneCapacity = null,
-    // ClearGeometry chỉ dành cho trình biên tập sơ đồ. NULL ở các trường hình
-    // học của một PATCH thông thường vẫn có nghĩa "giữ nguyên".
-    bool ClearGeometry = false);
+    string? ZoneStatus = null);          // Active | Retired
 
 public record UpdateSeatRequest(
     string? SeatLabel = null,
@@ -731,29 +694,6 @@ public record UpdateSeatRequest(
     string? SeatRowLabel = null,
     int? SeatColumnNumber = null);
 
-/// <summary>
-/// Khai bao mat phang toa do va vi tri san khau cua mot dia diem (FR11a).
-///
-/// Don vi la so nguyen TRU TUONG, khong phai met hay pixel: giao dien co gian
-/// toan bo so do vao khung hinh dang co, nen cung mot so do dung duoc tren dien
-/// thoai lan man hinh lon ma khong can du lieu do dac thuc dia.
-///
-/// San khau la DIEM TIEU CU — thu bien mot dam hinh chu nhat thanh so do co
-/// nghia, vi khong co no thi khong noi duoc cho ngoi nao gan san khau hon.
-/// </summary>
-public record ConfigureVenueMapRequest(
-    int? MapWidth = null,
-    int? MapHeight = null,
-    int? StageX = null,
-    int? StageY = null,
-    int? StageWidth = null,
-    int? StageHeight = null,
-    // NULL vẫn giữ nguyên để hỗ trợ cập nhật từng phần; cờ này xóa trọn bộ bốn
-    // giá trị sân khấu, không bao giờ để lại một hình chữ nhật nửa vời.
-    bool ClearStage = false,
-    // Tat map va quay ve che do danh sach. SP dong thoi xoa Stage vi san khau
-    // khong the ton tai khi khong con he toa do cua Venue.
-    bool ClearMap = false);
 
 // ── Fair Access / Waitlist configuration (FR64a, BR43, BR45b, BR47, BR47b) ────
 
@@ -823,6 +763,13 @@ public record VenueTemplateVersionListItem(
     DateTime CreatedTimestamp,
     DateTime? PublishedTimestamp);
 
+/// <summary>Published template version available to the owner of one concert.</summary>
+public record ConcertPublishedTemplateVersionItem(
+    int VenueTemplateVersionID,
+    int VenueTemplateID,
+    string TemplateName,
+    int VersionNumber);
+
 // ── Cay hinh hoc day du cua mot VenueTemplateVersion — doc mot lan qua
 //    QueryMultipleAsync (cung nguyen tac "ca nhieu tang trong mot round-trip"
 //    da dung cho GetSeatMapAsync), roi ghep lai o tang C# thay vi N+1 query. ──
@@ -849,6 +796,7 @@ public record TemplateSeatItem(
 public record TemplateSectionItem(
     int TemplateSectionID,
     int TemplateFloorID,
+    int ZoneID,
     string SectionKey,
     string? SectionName,
     string GeometryJson);
@@ -864,6 +812,7 @@ public record TemplateFloorItem(
 
 public record TemplateSectionDetail(
     int TemplateSectionID,
+    int ZoneID,
     string SectionKey,
     string? SectionName,
     string GeometryJson,
@@ -905,6 +854,7 @@ public record ConfigureTemplateObjectRequest(
 
 public record ConfigureTemplateSectionRequest(
     int? TemplateSectionID,
+    int ZoneID,
     string SectionKey,
     string? SectionName,
     string GeometryJson);
@@ -933,3 +883,69 @@ public record ConcertMapRevisionListItem(
     string RevisionStatus,
     DateTime SnapshotTimestamp,
     DateTime? LockedTimestamp);
+
+// ── Cau noi ConcertMapRevisionSeat <-> EventSeat (sp_AddEventSeatsFromMapRevision) ──
+//
+// Xem comment sp_AddEventSeatsFromMapRevision.sql va ConcertMapRevisionSeat.sql:
+// day la SP "duoc hua truoc" lap day cot EventSeatID con thieu.
+
+public record AddEventSeatsFromMapRevisionRequest(int TicketCategoryId, List<int> ConcertMapRevisionSeatIds);
+
+/// <summary>
+/// Ghe trong cay chi tiet mot revision — dung cho Admin duyet truoc khi chon dua
+/// vao kho ve. EventSeatID/InventoryStatus/CategoryName/Price la NULL khi ghe
+/// CHUA duoc dua vao kho ve (chua goi sp_AddEventSeatsFromMapRevision cho ghe do).
+/// </summary>
+public record ConcertMapRevisionSeatItem(
+    int ConcertMapRevisionSeatID,
+    int ConcertMapRevisionSectionID,
+    int SeatID,
+    string SeatKey,
+    string? RowLabel,
+    int? SeatNumber,
+    string? GeometryJson,
+    bool IsAccessible,
+    bool IsCompanion,
+    int? EventSeatID,
+    string? InventoryStatus,
+    string? CategoryName,
+    decimal? Price);
+
+public record ConcertMapRevisionObjectItem(
+    int ConcertMapRevisionObjectID,
+    int ConcertMapRevisionFloorID,
+    string ObjectType,
+    string? Label,
+    string GeometryJson,
+    int ZIndex);
+
+public record ConcertMapRevisionSectionDetail(
+    int ConcertMapRevisionSectionID,
+    int ZoneID,
+    string SectionKey,
+    string? SectionName,
+    string GeometryJson,
+    IReadOnlyList<ConcertMapRevisionSeatItem> Seats);
+
+public record ConcertMapRevisionFloorDetail(
+    int ConcertMapRevisionFloorID,
+    string FloorKey,
+    string? FloorName,
+    int FloorOrder,
+    int CanvasWidth,
+    int CanvasHeight,
+    IReadOnlyList<ConcertMapRevisionObjectItem> Objects,
+    IReadOnlyList<ConcertMapRevisionSectionDetail> Sections);
+
+public record ConcertMapRevisionDetail(
+    int ConcertMapRevisionID,
+    int ConcertMapID,
+    int RevisionNumber,
+    string RevisionStatus,
+    IReadOnlyList<ConcertMapRevisionFloorDetail> Floors);
+
+// So do StagePass phia khach hang KHONG con DTO rieng — hop nhat vao
+// SeatMapDto/SeatMapZoneDto/SeatMapZoneDetailDto/SeatMapSeatDto o tren
+// (docs/stagepass-architecture.md D.3/D.6). GetSeatMapAsync trong
+// ConcertRepository.cs la noi duy nhat dung cac DTO nay, va no chi doc tu
+// revision StagePass da Locked.

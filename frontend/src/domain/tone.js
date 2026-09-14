@@ -91,7 +91,8 @@ export function checkinTone(result) {
 // ── StagePass (VenueTemplate/ConcertMapRevision) ────────────────────────────
 export const TEMPLATE_STATUS_TONE = { Active: 'green', Archived: 'neutral' };
 export const VERSION_STATUS_TONE = { Draft: 'amber', Published: 'green', Retired: 'neutral' };
-export const REVISION_STATUS_TONE = { Draft: 'amber', Locked: 'green', Replaced: 'neutral' };
+// Không có 'Replaced': CHK_CMR_Status chỉ cho ('Draft','Locked') — xem enums.js.
+export const REVISION_STATUS_TONE = { Draft: 'amber', Locked: 'green' };
 
 /**
  * Màu bìa sự kiện, sinh từ ID.
@@ -118,10 +119,12 @@ export const REVISION_STATUS_TONE = { Draft: 'amber', Locked: 'green', Replaced:
 export function coverGradient(id) {
   // Không có ảnh bìa trong dữ liệu, nên dùng một poster trung tính thay vì
   // gradient nhiều màu. ID chỉ thay đổi độ sáng rất nhẹ để các card vẫn có nhịp riêng.
+  // Hue 16° khớp với màu chủ đạo (#A87E6F) — poster trung tính nhưng vẫn ấm,
+  // đồng bộ với phần còn lại của giao diện thay vì lệch tông xám-lạnh.
   const shift = Math.abs(Number(id) || 0) % 4;
   const top = 19 + shift;
   const bottom = 10 + shift;
-  return `linear-gradient(135deg, hsl(240 7% ${top}%) 0%, hsl(240 9% ${bottom}%) 100%)`;
+  return `linear-gradient(135deg, hsl(16 10% ${top}%) 0%, hsl(16 13% ${bottom}%) 100%)`;
 }
 
 /**

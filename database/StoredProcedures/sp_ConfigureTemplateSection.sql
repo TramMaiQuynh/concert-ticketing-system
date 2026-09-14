@@ -16,6 +16,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_ConfigureTemplateSection
 (
     @ActorUserID      INT,
     @TemplateFloorID  INT,
+    @ZoneID           INT,
     @SectionKey       VARCHAR(64),
     @SectionName      NVARCHAR(255) = NULL,
     @GeometryJson     NVARCHAR(MAX),
@@ -40,10 +41,12 @@ BEGIN
         -- van chen vao va Publish thanh cong giua chung, khien Section moi van
         -- duoc them vao mot version DA Published — pha vo bat bien "Published
         -- la bat bien".
-        DECLARE @VersionStatus VARCHAR(32), @CanvasWidth INT, @CanvasHeight INT;
-        SELECT @VersionStatus = vtv.VersionStatus, @CanvasWidth = f.CanvasWidth, @CanvasHeight = f.CanvasHeight
+        DECLARE @VersionStatus VARCHAR(32), @CanvasWidth INT, @CanvasHeight INT, @TemplateVenueID INT, @VenueTemplateVersionID INT;
+        SELECT @VersionStatus = vtv.VersionStatus, @CanvasWidth = f.CanvasWidth, @CanvasHeight = f.CanvasHeight,
+               @TemplateVenueID = vt.VenueID, @VenueTemplateVersionID = vtv.VenueTemplateVersionID
         FROM TemplateFloor f WITH (UPDLOCK, HOLDLOCK)
         JOIN VenueTemplateVersion vtv WITH (UPDLOCK, HOLDLOCK) ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
+        JOIN VenueTemplate vt ON vt.VenueTemplateID = vtv.VenueTemplateID
         WHERE f.TemplateFloorID = @TemplateFloorID;
 
         IF @VersionStatus IS NULL
@@ -51,6 +54,30 @@ BEGIN
 
         IF @VersionStatus <> 'Draft'
             THROW 60083, 'sp_ConfigureTemplateSection: Chi sua duoc Section cua version dang Draft.', 1;
+
+        -- Section la hinh chieu cua CHINH MOT Zone vat ly. Rang buoc nay ngan
+        -- viec ve mot khu cua venue khac, hoac lien ket den khu da retired.
+        IF NOT EXISTS (
+            SELECT 1
+            FROM Zone z WITH (UPDLOCK, HOLDLOCK)
+            WHERE z.ZoneID = @ZoneID
+              AND z.VenueID = @TemplateVenueID
+              AND z.ZoneStatus = 'Active'
+        )
+            THROW 60095, 'sp_ConfigureTemplateSection: Zone khong ton tai, khong thuoc Venue cua template, hoac da Retired.', 1;
+
+        -- Mot Zone chi co mot Section trong mot version. Neu can ve nhiều manh
+        -- cua cung khu, mo rong GeometryJson thanh multi-path trong mot Section;
+        -- khong tao them identity Section de tranh lap ghe/inventory.
+        IF EXISTS (
+            SELECT 1
+            FROM TemplateSection other
+            JOIN TemplateFloor otherFloor ON otherFloor.TemplateFloorID = other.TemplateFloorID
+            WHERE otherFloor.VenueTemplateVersionID = @VenueTemplateVersionID
+              AND other.ZoneID = @ZoneID
+              AND other.TemplateSectionID <> ISNULL(@TemplateSectionID, -1)
+        )
+            THROW 60096, 'sp_ConfigureTemplateSection: Zone da duoc gan cho mot Section khac trong version nay.', 1;
 
         IF ISNULL(@SectionKey, '') = ''
             THROW 60084, 'sp_ConfigureTemplateSection: SectionKey khong duoc de trong.', 1;
@@ -88,8 +115,8 @@ BEGIN
             IF EXISTS (SELECT 1 FROM TemplateSection WHERE TemplateFloorID = @TemplateFloorID AND SectionKey = @SectionKey)
                 THROW 60090, 'sp_ConfigureTemplateSection: SectionKey da ton tai trong Floor nay.', 1;
 
-            INSERT INTO TemplateSection (TemplateFloorID, SectionKey, SectionName, GeometryJson)
-            VALUES (@TemplateFloorID, @SectionKey, @SectionName, @GeometryJson);
+            INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, SectionName, GeometryJson)
+            VALUES (@TemplateFloorID, @ZoneID, @SectionKey, @SectionName, @GeometryJson);
 
             SET @TemplateSectionID = SCOPE_IDENTITY();
 
@@ -105,8 +132,20 @@ BEGIN
             IF EXISTS (SELECT 1 FROM TemplateSection WHERE TemplateFloorID = @TemplateFloorID AND SectionKey = @SectionKey AND TemplateSectionID <> @TemplateSectionID)
                 THROW 60090, 'sp_ConfigureTemplateSection: SectionKey da ton tai trong Floor nay.', 1;
 
+            -- Khong duoc doi ZoneID cua mot Section DA CO GHE: moi TemplateSeat con
+            -- (them qua sp_ConfigureTemplateSeat) da duoc xac nhan thuoc DUNG ZoneID
+            -- CU cua Section tai thoi diem tao (loi 60112 neu khong khop) — doi ZoneID
+            -- sau do se de lai cac ghe do tro toi mot Zone ma chung khong con thuoc ve,
+            -- ma khong co dau hieu gi bao. Vi du that: Section tro Zone VIP chua Seat
+            -- VIP-01, doi Section sang Zone Balcony — Seat VIP-01 van "nam trong" mot
+            -- Section gio dai dien cho Balcony. Section rong (chua co TemplateSeat)
+            -- van doi ZoneID tu do duoc, dung 1 Zone / 1 Section moi phia tren.
+            IF EXISTS (SELECT 1 FROM TemplateSeat WHERE TemplateSectionID = @TemplateSectionID)
+               AND @ZoneID <> (SELECT ZoneID FROM TemplateSection WHERE TemplateSectionID = @TemplateSectionID)
+                THROW 60098, 'sp_ConfigureTemplateSection: Khong the doi Zone cua Section da co ghe — xoa ghe truoc hoac giu nguyen Zone.', 1;
+
             UPDATE TemplateSection
-            SET SectionKey = @SectionKey, SectionName = @SectionName, GeometryJson = @GeometryJson
+            SET ZoneID = @ZoneID, SectionKey = @SectionKey, SectionName = @SectionName, GeometryJson = @GeometryJson
             WHERE TemplateSectionID = @TemplateSectionID;
 
             INSERT INTO AuditRecord (ActorUserID, EventType, EntityType, EntityID, Action, EventTimestamp, NewValue)

@@ -19,15 +19,54 @@ BEGIN
 
         -- 1. Published -> OnSale
         -- Dieu kien: SaleStartDatetime <= NOW, SaleEndDatetime > NOW (hoac NULL)
+        --
+        -- Truoc ban sua nay, dieu kien o day CHI kiem BR10 (co EventSeat) — mot ban
+        -- sao doc lap, khong dong bo voi luat StagePass ma sp_UpdateConcertStatus
+        -- (duong chuyen trang thai THU CONG) da thi hanh: neu Concert da tao
+        -- ConcertMap, phai co revision Locked va MOI EventSeat phai khop voi
+        -- ConcertMapRevisionSeat cua revision do. Job dinh ky nay (chuyen trang thai
+        -- TU DONG theo gio) bo qua het dieu do — mot Concert co ConcertMap do dang
+        -- (chua Lock, hoac Lock nhung con EventSeat le ngoai revision) van tu dong
+        -- len OnSale dung luc SaleStartDatetime toi, bo qua chinh rao chan vua duoc
+        -- dung cho duong thu cong. Day la mot bai toan batch (nhieu Concert mot luc),
+        -- nen khong THROW loi cho ca lo — chi LOC BO Concert khong dat dieu kien
+        -- StagePass khoi danh sach chuyen trang thai; Concert do o lai Published,
+        -- lan chay ke tiep cua job se thu lai.
         CREATE TABLE #ToOnSale (ConcertID INT NOT NULL);
         INSERT INTO #ToOnSale (ConcertID)
-        SELECT ConcertID
-        FROM Concert
-        WHERE ConcertStatus = 'Published'
-          AND SaleStartDatetime <= @Now
-          AND SaleEndDatetime IS NOT NULL
+        SELECT c.ConcertID
+        FROM Concert c
+        WHERE c.ConcertStatus = 'Published'
+          AND c.SaleStartDatetime <= @Now
+          AND c.SaleEndDatetime IS NOT NULL
           -- Dam bao thoa man BR10: da co EventSeat
-          AND EXISTS (SELECT 1 FROM EventSeat WHERE ConcertID = Concert.ConcertID);
+          AND EXISTS (SELECT 1 FROM EventSeat WHERE ConcertID = c.ConcertID)
+          -- StagePass (neu co dung): phai co revision Locked, va MOI EventSeat cua
+          -- Concert phai khop voi ConcertMapRevisionSeat cua dung revision do. Cung
+          -- dieu kien voi sp_UpdateConcertStatus, chi khac o day la LOC thay vi THROW.
+          AND (
+              NOT EXISTS (SELECT 1 FROM ConcertMap cm WHERE cm.ConcertID = c.ConcertID)
+              OR EXISTS (
+                  SELECT 1
+                  FROM ConcertMap cm
+                  JOIN ConcertMapRevision cmr ON cmr.ConcertMapID = cm.ConcertMapID AND cmr.RevisionStatus = 'Locked'
+                  WHERE cm.ConcertID = c.ConcertID
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM EventSeat es
+                        WHERE es.ConcertID = c.ConcertID
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM ConcertMapRevisionSeat cs
+                              JOIN ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID = cs.ConcertMapRevisionSectionID
+                              JOIN ConcertMapRevisionFloor   fl  ON fl.ConcertMapRevisionFloorID   = sec.ConcertMapRevisionFloorID
+                              WHERE fl.ConcertMapRevisionID = cmr.ConcertMapRevisionID
+                                AND cs.EventSeatID = es.EventSeatID
+                                AND cs.SeatID = es.SeatID
+                          )
+                    )
+              )
+          );
 
         IF EXISTS (SELECT 1 FROM #ToOnSale)
         BEGIN

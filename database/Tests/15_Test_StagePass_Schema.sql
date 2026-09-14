@@ -13,7 +13,6 @@
 -- Dung du lieu mock co san (01_SetupMockData.sql): test_admin, test_org, mot
 -- Concert OnSale, mot Seat da co vi tri.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -31,6 +30,7 @@ SET @SQL = N'
     DECLARE @ven  INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @cid  INT = (SELECT TOP 1 ConcertID FROM Concert);
     DECLARE @s1   INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn   INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts1 INT;
     DECLARE @cm INT, @cmr INT, @cmrf INT, @cmrs INT;
 
@@ -44,8 +44,8 @@ SET @SQL = N'
     SET @fl = SCOPE_IDENTITY();
     INSERT INTO TemplateObject (TemplateFloorID, ObjectType, GeometryJson)
     VALUES (@fl, ''Stage'', N''{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}'');
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -61,8 +61,8 @@ SET @SQL = N'
     SET @cmrf = SCOPE_IDENTITY();
     INSERT INTO ConcertMapRevisionObject (ConcertMapRevisionFloorID, ObjectType, GeometryJson)
     VALUES (@cmrf, ''Stage'', N''{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}'');
-    INSERT INTO ConcertMapRevisionSection (ConcertMapRevisionFloorID, SourceTemplateSectionID, SectionKey, GeometryJson)
-    VALUES (@cmrf, @sec, ''VIP'', N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'');
+    INSERT INTO ConcertMapRevisionSection (ConcertMapRevisionFloorID, SourceTemplateSectionID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@cmrf, @sec, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}'');
     SET @cmrs = SCOPE_IDENTITY();
     -- Hai dong EventSeatID = NULL trong CUNG mot Section: day chinh la kich ban
     -- da phat hien bug UQ_CMRSeat_EventSeat (SQL Server coi hai NULL la trung
@@ -111,6 +111,7 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     INSERT INTO VenueTemplate (VenueID, TemplateName) VALUES (@ven, N''REG GridDup'');
     SET @vt = SCOPE_IDENTITY();
@@ -120,8 +121,8 @@ SET @SQL = N'
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''A1'', N''A'', 1);
@@ -136,6 +137,7 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     INSERT INTO VenueTemplate (VenueID, TemplateName) VALUES (@ven, N''REG RowHalf'');
     SET @vt = SCOPE_IDENTITY();
@@ -145,8 +147,8 @@ SET @SQL = N'
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''A1'', N''A'', NULL);';
@@ -158,6 +160,7 @@ EXEC test.sp_RunTest @Suite,'TemplateSeat_RowWithoutNumber_Fail','ERROR',NULL,@S
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @zn  INT = (SELECT TOP 1 ZoneID FROM Zone WHERE VenueID=@ven);
     DECLARE @vt INT, @vtv INT, @fl INT;
     INSERT INTO VenueTemplate (VenueID, TemplateName) VALUES (@ven, N''REG BadJson'');
     SET @vt = SCOPE_IDENTITY();
@@ -167,8 +170,8 @@ SET @SQL = N'
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''BAD'', N''{not valid json'');';
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''BAD'', N''{not valid json'');';
 EXEC test.sp_RunTest @Suite,'TemplateSection_InvalidGeometryJson_Fail','ERROR',NULL,@SQL;
 
 -- ============================================================
@@ -240,6 +243,7 @@ SET @SQL = N'
          @CategoryName=N''Thuong'', @CategoryDescription=NULL, @BasePrice=100000,
          @TicketCategoryID=@cat OUTPUT;
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat WHERE SeatID NOT IN (SELECT SeatID FROM EventSeat WHERE ConcertID=@cid));
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @cm INT, @cmr INT, @cmrs INT;
 
     INSERT INTO VenueTemplate (VenueID, TemplateName) VALUES (@ven, N''REG DupEventSeat'');
@@ -250,8 +254,8 @@ SET @SQL = N'
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
 
     INSERT INTO ConcertMap (ConcertID) VALUES (@cid);
@@ -262,8 +266,8 @@ SET @SQL = N'
     INSERT INTO ConcertMapRevisionFloor (ConcertMapRevisionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@cmr, ''ground'', 1, 1000, 800);
     DECLARE @cmrf INT = SCOPE_IDENTITY();
-    INSERT INTO ConcertMapRevisionSection (ConcertMapRevisionFloorID, SectionKey, GeometryJson)
-    VALUES (@cmrf, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO ConcertMapRevisionSection (ConcertMapRevisionFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@cmrf, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @cmrs = SCOPE_IDENTITY();
 
     EXEC dbo.sp_AddEventSeats @ActorUserID=@org, @ConcertID=@cid, @TicketCategoryID=@cat, @SeatIDs=@s1;

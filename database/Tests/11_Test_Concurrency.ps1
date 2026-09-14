@@ -15,7 +15,6 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 # Prepare data: Make sure EventSeat 5 is Available
 $prepSql = "
-USE ConcertTicketingDB;
 DECLARE @esid INT = (SELECT TOP 1 EventSeatID FROM EventSeat);
 UPDATE EventSeat SET InventoryStatus = 'Available' WHERE EventSeatID = @esid;
 "

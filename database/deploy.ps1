@@ -20,7 +20,7 @@
     Neu $true: xoa database cu truoc khi tao lai (DEPLOY SACH).
     Neu $false (mac dinh): CHI dung cho lan deploy DAU TIEN len mot database
     RONG (chua ton tai hoac chua co bang nao). Day KHONG phai che do "chay lai
-    an toan" hay migration: 28/28 script trong Tables\ la CREATE TABLE tran,
+    an toan" hay migration: moi script trong Tables\ la CREATE TABLE tran,
     khong co guard IF NOT EXISTS, vi mot guard nhu vay se AM THAM bo qua moi
     thay doi lược đồ thay vi ap dung chung -> lược đồ sinh ra "thanh cong" ma
     khong con dung voi file trong repo, con nguy hiem hon la bao loi ro rang.
@@ -28,7 +28,7 @@
     dau (Phase 0) voi thong bao ro rang, thay vi chet giua chung o Phase 1
     bang mot loi SQL Server kho hieu. Muon trien khai lai len mot database da
     ton tai: dung -DropExisting $true (XOA TOAN BO du lieu hien co) - deploy.ps1
-    chua co duong migration bao toan du lieu (xem README-DEMO.md).
+    chua co duong migration bao toan du lieu.
 
 .EXAMPLE
     # Windows Auth, LAN DAU TIEN tren mot server/database RONG:
@@ -394,7 +394,7 @@ Invoke-SqlFile "$fnDir\fn_TemplateGeometryOverlaps.sql"       # Goi fn_TemplateG
 # ngoai tru TRG_StateTransition chua nhieu trigger tren
 # nhieu bang -> chay truoc.
 # ============================================================
-Write-Phase "PHASE 4: TRIGGERS (22 file, 33 trigger object) + ghim thu tu khai hoa"
+Write-Phase "PHASE 4: TRIGGERS (24 file, 34 trigger object) + ghim thu tu khai hoa"
 
 $trgDir = Join-Path $DbRoot "Triggers"
 
@@ -405,6 +405,7 @@ Invoke-SqlFile "$trgDir\TRG_StateTransition.sql"
 # Referential integrity triggers
 Invoke-SqlFile "$trgDir\TRG_SeatVenueConsistency.sql"
 Invoke-SqlFile "$trgDir\TRG_EventSeatVenue.sql"
+Invoke-SqlFile "$trgDir\TRG_CMRSeat_EventSeatConsistency.sql"  # bo sung: EventSeatID cua map-seat phai khop Concert/SeatID
 Invoke-SqlFile "$trgDir\TRG_ConcertVenueChangeGuard.sql"   # bo sung: chan doi VenueID khi Concert co EventSeat
 Invoke-SqlFile "$trgDir\TRG_SeatVenueChangeGuard.sql"      # bo sung: chan doi VenueID khi Seat co EventSeat
 Invoke-SqlFile "$trgDir\TRG_AllocationConcert.sql"
@@ -441,7 +442,7 @@ Invoke-SqlFile "$trgDir\TRG_FiringOrder.sql"
 # sp_ApplyPromotion       <- goi fn_CalculateFinalAmount
 # Cac SP khac khong phu thuoc nhau.
 # ============================================================
-Write-Phase "PHASE 5: STORED PROCEDURES (60 SP)"
+Write-Phase "PHASE 5: STORED PROCEDURES (61 SP)"
 $spStart = $script:DeployedFileCount
 
 $spDir = Join-Path $DbRoot "StoredProcedures"
@@ -497,6 +498,8 @@ Invoke-SqlFile "$spDir\sp_DeleteTemplateSeat.sql"
 Invoke-SqlFile "$spDir\sp_CreateConcertMap.sql"
 Invoke-SqlFile "$spDir\sp_CreateConcertMapRevision.sql"
 Invoke-SqlFile "$spDir\sp_LockConcertMapRevision.sql"
+Invoke-SqlFile "$spDir\sp_CancelConcertMapRevisionDraft.sql"  # Huy Draft de mo lai Draft khac (60217 chi chan khi con Draft mo)
+Invoke-SqlFile "$spDir\sp_AddEventSeatsFromMapRevision.sql"  # Cau noi ConcertMapRevisionSeat <-> EventSeat
 
 # --- Customer self-service SPs ---
 Invoke-SqlFile "$spDir\sp_JoinWaitlist.sql"

@@ -2,7 +2,6 @@
 -- 08_Test_SP_ConfirmPayment.sql
 -- Test sp_ConfirmPayment (@BookingID, @PaymentID, @ProviderRef).
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

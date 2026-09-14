@@ -4,7 +4,6 @@
 -- Luu y: Moi lan goi sp_RunTest se chay trong BEGIN TRAN / ROLLBACK
 --        rieng de khong lam nhiem du lieu.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

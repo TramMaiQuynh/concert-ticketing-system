@@ -1,9 +1,10 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../api/client';
 import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useConcertOptions, invalidateConcerts } from '../../lib/concertOptions';
 import { useVenues, useArtists } from '../../lib/adminCatalog';
 import { Field, Select, Check, Panel, Banner, IdPicker, MultiIdPicker, IdPill, useAction } from '../../components/form';
+import { Button, PageHeader } from '../../components/ui';
 import { toApiDateTime } from '../../lib/format';
 import {
   ConcertStatus, CONCERT_STATUS_LABEL, CategoryStatus, QueueStatus, WaitlistStatus,
@@ -14,11 +15,11 @@ import {
 export default function Concerts() {
   return (
     <>
+      <PageHeader title="Concert" subtitle="Vòng đời, hạng vé và kho ghế của từng sự kiện." />
       <CreateConcert />
       <UpdateConcert />
       <ConcertStatusSection />
       <CategorySection />
-      <EventSeatSection />
       <ConcertMapSection />
       <QueueSection />
       <WaitlistSection />
@@ -149,16 +150,16 @@ function CreateConcert() {
 
         <div className="field-grid" style={{ marginTop: '16px' }}>
           <Field label="Chính sách hủy (mô tả)">
-            <textarea value={f.cancellationPolicy} onChange={(e) => set('cancellationPolicy')(e.target.value)} />
+            <textarea value={f.cancellationPolicy} onChange={(e) => set('cancellationPolicy')(e.target.value)} maxLength={500} />
           </Field>
           <Field label="Chính sách hoàn tiền (mô tả)">
-            <textarea value={f.refundPolicy} onChange={(e) => set('refundPolicy')(e.target.value)} />
+            <textarea value={f.refundPolicy} onChange={(e) => set('refundPolicy')(e.target.value)} maxLength={500} />
           </Field>
         </div>
 
-        <button className="btn-primary" style={{ marginTop: '20px' }} disabled={act.busy || !ready}>
-          {act.busy ? 'Đang tạo…' : 'Tạo concert'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!ready} style={{ marginTop: '20px' }}>
+          Tạo concert
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -308,13 +309,17 @@ function UpdateConcert() {
         </div>
 
         <div className="field-grid" style={{ marginTop: '16px' }}>
-          <Field label="Chính sách hủy"><textarea value={f.cancellationPolicy} onChange={(e) => set('cancellationPolicy')(e.target.value)} /></Field>
-          <Field label="Chính sách hoàn tiền"><textarea value={f.refundPolicy} onChange={(e) => set('refundPolicy')(e.target.value)} /></Field>
+          <Field label="Chính sách hủy"><textarea value={f.cancellationPolicy} onChange={(e) => set('cancellationPolicy')(e.target.value)} maxLength={500} /></Field>
+          <Field label="Chính sách hoàn tiền"><textarea value={f.refundPolicy} onChange={(e) => set('refundPolicy')(e.target.value)} maxLength={500} /></Field>
         </div>
 
-        <button className="btn-primary" style={{ marginTop: '20px' }} disabled={act.busy || !id || artistLoadState === 'loading' || artistLoadState === 'error' || (artistListChanged && f.artistIds.length === 0)}>
-          {act.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
-        </button>
+        <Button
+          type="submit" variant="primary" loading={act.busy}
+          disabled={!id || artistLoadState === 'loading' || artistLoadState === 'error' || (artistListChanged && f.artistIds.length === 0)}
+          style={{ marginTop: '20px' }}
+        >
+          Lưu thay đổi
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -376,13 +381,12 @@ function ConcertStatusSection() {
             đóng hàng đợi — thao tác này không đảo ngược được.
           </div>
         )}
-        <button
-          className={status === ConcertStatus.Cancelled ? 'btn-danger' : 'btn-primary'}
-          style={{ marginTop: '16px' }}
-          disabled={act.busy || !id}
+        <Button
+          type="submit" variant={status === ConcertStatus.Cancelled ? 'danger' : 'primary'}
+          loading={act.busy} disabled={!id} style={{ marginTop: '16px' }}
         >
-          {act.busy ? 'Đang chuyển…' : 'Chuyển trạng thái'}
-        </button>
+          Chuyển trạng thái
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -458,11 +462,11 @@ function CategorySection() {
           </Field>
         </div>
         <div style={{ marginTop: '16px' }}>
-          <Field label="Mô tả"><input value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
+          <Field label="Mô tả"><input value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={500} /></Field>
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !concertId || !name.trim() || price === ''}>
-          {act.busy ? 'Đang lưu…' : categoryId ? 'Cập nhật hạng vé' : 'Tạo hạng vé'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!concertId || !name.trim() || price === ''} style={{ marginTop: '16px' }}>
+          {categoryId ? 'Cập nhật hạng vé' : 'Tạo hạng vé'}
+        </Button>
         <Banner state={act.state} />
       </form>
       {concertCategories.length > 0 && (
@@ -474,114 +478,16 @@ function CategorySection() {
   );
 }
 
-/* ── Đưa ghế vào kho vé ──────────────────────────────────────────────────── */
-
-function EventSeatSection() {
-  const { options } = useConcertOptions();
-  const seats = useAdminCatalog('seat');
-  const categories = useAdminCatalog('category');
-  const act = useAction();
-
-  const [concertId, setConcertId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [seatIds, setSeatIds] = useState('');
-  const venueId = options.find((item) => item.id === Number(concertId))?.raw.venueID;
-  const availableSeats = seats.items.filter((item) =>
-    item.raw.venueID === venueId && item.raw.seatStatus === 'Active');
-  const availableCategories = categories.items.filter((item) =>
-    item.raw.concertID === Number(concertId) && item.raw.categoryStatus === 'Active');
-
-  const parsed = seatIds
-    .split(/[,\s]+/)
-    .map((x) => Number(x.trim()))
-    .filter((x) => Number.isInteger(x) && x > 0);
-  const unique = [...new Set(parsed)];
-  const hasDuplicate = unique.length !== parsed.length;
-
-  return (
-    <Panel
-      title="Đưa ghế vào kho vé (EventSeat)"
-      tone="inventory"
-      subtitle="Đây là bước biến ghế của địa điểm thành vé bán được: mỗi ghế gắn với một hạng vé và nhận giá từ hạng vé đó. Chưa làm bước này thì sơ đồ ghế của concert trống trơn."
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          act.run(
-            () => api.post(`/admin/concerts/${Number(concertId)}/event-seats`, {
-              ticketCategoryId: Number(categoryId),
-              seatIds: unique,
-            }),
-            `Đã đưa ${unique.length} ghế vào kho vé của concert #${concertId}.`,
-          );
-        }}
-      >
-        <div className="field-grid">
-          <IdPicker label="Concert" items={options} value={concertId} onChange={(id) => { setConcertId(id); setCategoryId(''); setSeatIds(''); }} />
-          <IdPicker label="Hạng vé" items={availableCategories} value={categoryId} onChange={setCategoryId} />
-        </div>
-
-        <div style={{ marginTop: '16px' }}>
-          <Field
-            label="Danh sách ID ghế"
-            hint="Ngăn cách bằng dấu phẩy hoặc khoảng trắng. Trùng lặp sẽ tự động bị loại."
-            required
-          >
-            <textarea
-              value={seatIds}
-              onChange={(e) => setSeatIds(e.target.value)}
-              placeholder="12, 13, 14, 15…"
-            />
-          </Field>
-        </div>
-
-        {availableSeats.length > 0 && (
-          <div style={{ marginTop: '12px' }}>
-            <div className="field-hint" style={{ marginBottom: '8px' }}>
-              Ghế của địa điểm đã chọn — bấm để thêm vào danh sách:
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              <button
-                type="button" className="btn-outline"
-                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
-                onClick={() => setSeatIds(availableSeats.map((s) => s.id).join(', '))}
-              >
-                Chọn tất cả ({availableSeats.length})
-              </button>
-              <Field label="Chọn ghế" hint="Giữ Ctrl hoặc Shift để chọn nhiều ghế.">
-                <select multiple size={10} value={unique.map(String)}
-                  onChange={(event) => setSeatIds(Array.from(event.target.selectedOptions, (option) => option.value).join(', '))}>
-                  {availableSeats.map((seat) => <option key={seat.id} value={String(seat.id)}>#{seat.id} · {seat.name}</option>)}
-                </select>
-              </Field>
-            </div>
-          </div>
-        )}
-
-        <div className="field-hint" style={{ marginTop: '12px' }}>
-          {unique.length > 0
-            ? `Sẽ gửi ${unique.length} ghế.${hasDuplicate ? ' (đã loại bỏ ID trùng)' : ''}`
-            : 'Chưa có ID ghế hợp lệ nào.'}
-        </div>
-
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !concertId || !categoryId || unique.length === 0}>
-          {act.busy ? 'Đang thêm…' : 'Đưa ghế vào kho vé'}
-        </button>
-        <Banner state={act.state} />
-      </form>
-    </Panel>
-  );
-}
-
 /* ── Sơ đồ ghế StagePass (ConcertMap) ────────────────────────────────────── */
 
 /**
  * Lớp hình học StagePass (VenueTemplate → snapshot bất biến theo Concert) —
  * TÁCH BIỆT với "Đưa ghế vào kho vé" ở trên (EventSeat vẫn là nguồn sự thật
- * duy nhất về giá/tồn kho). Panel này chỉ quản lý vòng đời ConcertMap: tạo →
- * chụp snapshot từ một VenueTemplateVersion đã Công bố → khoá để dùng bán vé.
- * Gán ghế thật vào từng ô của sơ đồ (sp_AddEventSeats tích hợp với
- * ConcertMapRevisionSeat) là việc của D.5 tiếp theo, chưa nằm trong panel này.
+ * duy nhất về giá/tồn kho). Panel này quản lý vòng đời ConcertMap: tạo → chụp
+ * snapshot từ một VenueTemplateVersion đã Công bố → khoá để dùng bán vé — và,
+ * khi revision đã Khoá, gán ghế thật vào từng ô của sơ đồ
+ * (sp_AddEventSeatsFromMapRevision, cầu nối ConcertMapRevisionSeat <-> EventSeat)
+ * qua <LockedRevisionEventSeats/> bên dưới.
  */
 function ConcertMapSection() {
   const { options } = useConcertOptions();
@@ -590,12 +496,8 @@ function ConcertMapSection() {
   const [map, setMap] = useState(null);
   const [loadingMap, setLoadingMap] = useState(false);
   const [revisions, setRevisions] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [templateId, setTemplateId] = useState('');
   const [versions, setVersions] = useState([]);
   const [sourceVersionId, setSourceVersionId] = useState('');
-
-  const venueId = options.find((o) => String(o.id) === String(concertId))?.raw.venueID;
 
   const loadMap = async (cid) => {
     if (!cid) { setMap(null); setRevisions([]); return; }
@@ -623,19 +525,14 @@ function ConcertMapSection() {
   useEffect(() => { loadMap(concertId); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [concertId]);
 
   useEffect(() => {
-    setTemplateId(''); setVersions([]); setSourceVersionId('');
-    if (!venueId) { setTemplates([]); return; }
-    api.get(`/admin/venues/${venueId}/templates`).then((res) => setTemplates(Array.isArray(res.data) ? res.data : []));
-  }, [venueId]);
-
-  useEffect(() => {
-    setSourceVersionId('');
-    if (!templateId) { setVersions([]); return; }
-    api.get(`/admin/templates/${templateId}/versions`)
-      .then((res) => setVersions((Array.isArray(res.data) ? res.data : []).filter((v) => v.versionStatus === 'Published')));
-  }, [templateId]);
+    setVersions([]); setSourceVersionId('');
+    if (!concertId) return;
+    api.get(`/admin/concerts/${concertId}/published-template-versions`)
+      .then((res) => setVersions(Array.isArray(res.data) ? res.data : []));
+  }, [concertId]);
 
   const hasOpenDraft = revisions.some((r) => r.revisionStatus === 'Draft');
+  const lockedRevision = revisions.find((r) => r.revisionStatus === 'Locked');
 
   return (
     <Panel
@@ -648,22 +545,21 @@ function ConcertMapSection() {
       {concertId && (loadingMap ? <p className="field-hint">Đang tải…</p> : (
         <div style={{ marginTop: '16px' }}>
           {!map ? (
-            <button
-              className="btn-primary"
-              disabled={act.busy}
+            <Button
+              type="button" variant="primary" loading={act.busy}
               onClick={() => act.run(async () => {
                 await api.post(`/admin/concerts/${Number(concertId)}/map`);
                 await loadMap(concertId);
               }, 'Đã tạo ConcertMap.')}
             >
-              {act.busy ? 'Đang tạo…' : 'Tạo ConcertMap cho Concert này'}
-            </button>
+              Tạo ConcertMap cho Concert này
+            </Button>
           ) : (
             <>
               <p className="field-hint">ConcertMap #{map.concertMapID}.</p>
 
               {revisions.length > 0 && (
-                <table className="data" style={{ marginTop: '8px', marginBottom: '12px' }}>
+                <table className="table" style={{ marginTop: '8px', marginBottom: '12px' }}>
                   <thead><tr><th>Revision</th><th>Trạng thái</th><th /></tr></thead>
                   <tbody>
                     {revisions.map((r) => (
@@ -672,16 +568,32 @@ function ConcertMapSection() {
                         <td>{ADMIN_STATUS_LABEL[r.revisionStatus] ?? r.revisionStatus}</td>
                         <td>
                           {r.revisionStatus === 'Draft' && (
-                            <button
-                              type="button" className="btn-outline"
-                              disabled={act.busy}
-                              onClick={() => act.run(async () => {
-                                await api.post(`/admin/concert-map-revisions/${r.concertMapRevisionID}/lock`);
-                                await loadMap(concertId);
-                              }, 'Đã khoá — sẵn sàng dùng sơ đồ này.')}
-                            >
-                              Khoá (Lock)
-                            </button>
+                            <div className="row gap-1">
+                              <Button
+                                type="button" variant="secondary" size="sm" loading={act.busy}
+                                onClick={() => act.run(async () => {
+                                  await api.post(`/admin/concert-map-revisions/${r.concertMapRevisionID}/lock`);
+                                  await loadMap(concertId);
+                                }, 'Đã khoá — sẵn sàng dùng sơ đồ này.')}
+                              >
+                                Khoá (Lock)
+                              </Button>
+                              {/* Huỷ nháp = xoá hẳn revision nháp, không đánh dấu trạng thái
+                                  (xem sp_CancelConcertMapRevisionDraft.sql). Thiếu nút này thì
+                                  một lần chụp snapshot nhầm sẽ bị 60217 chặn vĩnh viễn: không huỷ
+                                  được Draft, không tạo được Draft mới, mà Lock thì không thay thế
+                                  được revision đã Locked. */}
+                              <Button
+                                type="button" variant="danger-quiet" size="sm" loading={act.busy}
+                                onClick={() => act.run(async () => {
+                                  if (!window.confirm('Huỷ bản nháp sơ đồ này? Không thể hoàn tác.')) return;
+                                  await api.delete(`/admin/concert-map-revisions/${r.concertMapRevisionID}`);
+                                  await loadMap(concertId);
+                                }, 'Đã huỷ bản nháp — có thể chụp lại snapshot.')}
+                              >
+                                Huỷ nháp
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -690,34 +602,30 @@ function ConcertMapSection() {
                 </table>
               )}
 
+              {lockedRevision && (
+                <LockedRevisionEventSeats key={lockedRevision.concertMapRevisionID} concertId={concertId} revision={lockedRevision} />
+              )}
+
               {!hasOpenDraft && (
                 <div className="field-grid">
-                  <Field label="Mẫu sơ đồ">
-                    <Select
-                      value={templateId} onChange={setTemplateId}
-                      options={templates.map((t) => String(t.venueTemplateID))}
-                      labels={Object.fromEntries(templates.map((t) => [String(t.venueTemplateID), t.templateName]))}
-                      allowEmpty emptyLabel="— chọn mẫu —"
-                    />
-                  </Field>
-                  <Field label="Version đã công bố" hint={templateId && versions.length === 0 ? 'Mẫu này chưa có version nào được công bố.' : undefined}>
+                  <Field label="Mẫu sơ đồ / Version đã công bố" hint={versions.length === 0 ? 'Venue này chưa có mẫu đang hoạt động với version đã công bố.' : undefined}>
                     <Select
                       value={sourceVersionId} onChange={setSourceVersionId}
                       options={versions.map((v) => String(v.venueTemplateVersionID))}
-                      labels={Object.fromEntries(versions.map((v) => [String(v.venueTemplateVersionID), `v${v.versionNumber}`]))}
-                      allowEmpty emptyLabel="— chọn version —"
+                      labels={Object.fromEntries(versions.map((v) => [String(v.venueTemplateVersionID), `${v.templateName} · v${v.versionNumber}`]))}
+                      allowEmpty emptyLabel="— chọn mẫu/version —"
                     />
                   </Field>
-                  <button
-                    className="btn-primary" style={{ marginTop: '20px' }}
-                    disabled={act.busy || !sourceVersionId}
+                  <Button
+                    type="button" variant="primary" loading={act.busy} style={{ marginTop: '20px' }}
+                    disabled={!sourceVersionId}
                     onClick={() => act.run(async () => {
                       await api.post(`/admin/concert-maps/${map.concertMapID}/revisions`, { sourceVenueTemplateVersionID: Number(sourceVersionId) });
                       await loadMap(concertId);
                     }, 'Đã chụp snapshot — kiểm tra rồi bấm Khoá để dùng cho việc bán vé.')}
                   >
-                    {act.busy ? 'Đang chụp…' : 'Chụp snapshot (tạo Revision)'}
-                  </button>
+                    Chụp snapshot (tạo Revision)
+                  </Button>
                 </div>
               )}
             </>
@@ -726,6 +634,111 @@ function ConcertMapSection() {
       ))}
       <Banner state={act.state} />
     </Panel>
+  );
+}
+
+/**
+ * Đưa ghế của MỘT revision đã Khoá vào kho vé (sp_AddEventSeatsFromMapRevision).
+ *
+ * Chỉ hiện ghế CHƯA có EventSeatID — ghế đã vào kho vé rồi thì SP sẽ từ chối
+ * (lỗi 60248, trùng), nên lọc trước ở giao diện để danh sách chọn luôn hợp lệ.
+ * Cùng khuôn UX với "Đưa ghế vào kho vé (EventSeat)" ở trên (textarea CSV +
+ * multi-select + nút "Chọn tất cả"), chỉ khác nguồn ghế là ConcertMapRevisionSeatID
+ * của MỘT revision thay vì SeatID thô theo Zone.
+ */
+function LockedRevisionEventSeats({ concertId, revision }) {
+  const categories = useAdminCatalog('category');
+  const availableCategories = categories.items.filter((item) =>
+    item.raw.concertID === Number(concertId) && item.raw.categoryStatus === CategoryStatus.Active);
+  const act = useAction();
+  const [detail, setDetail] = useState(null);
+  const [categoryId, setCategoryId] = useState('');
+  const [seatIds, setSeatIds] = useState('');
+
+  const load = useCallback(async () => {
+    const res = await api.get(`/admin/concert-map-revisions/${revision.concertMapRevisionID}`);
+    setDetail(res.data);
+  }, [revision.concertMapRevisionID]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const allSeats = useMemo(() => {
+    if (!detail) return [];
+    return detail.floors.flatMap((f) => f.sections.flatMap((s) => s.seats.map((seat) => ({ ...seat, sectionLabel: s.sectionName ?? s.sectionKey }))));
+  }, [detail]);
+  const unlinkedSeats = useMemo(
+    () => allSeats.filter((s) => s.eventSeatID == null)
+      .map((s) => ({ id: s.concertMapRevisionSeatID, name: `${s.sectionLabel} · ${s.seatKey}` })),
+    [allSeats],
+  );
+
+  const unique = useMemo(() => [...new Set(
+    seatIds.split(/[,\s]+/).map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0),
+  )], [seatIds]);
+
+  if (!detail) return <p className="field-hint" style={{ marginTop: '16px' }}>Đang tải danh sách ghế của revision…</p>;
+
+  return (
+    <div style={{ marginTop: '8px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div className="field-hint" style={{ marginBottom: '12px' }}>
+        Revision #{revision.revisionNumber} (đã khoá) — {allSeats.length - unlinkedSeats.length}/{allSeats.length} ghế đã vào kho vé.
+      </div>
+
+      {unlinkedSeats.length === 0 ? (
+        <p className="field-hint">Toàn bộ ghế của revision này đã ở trong kho vé.</p>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            act.run(async () => {
+              await api.post(`/admin/concert-map-revisions/${revision.concertMapRevisionID}/event-seats`, {
+                ticketCategoryId: Number(categoryId),
+                concertMapRevisionSeatIds: unique,
+              });
+              setSeatIds('');
+              await load();
+            }, `Đã đưa ${unique.length} ghế vào kho vé.`);
+          }}
+        >
+          <IdPicker label="Hạng vé" items={availableCategories} value={categoryId} onChange={setCategoryId} />
+
+          <div style={{ marginTop: '16px' }}>
+            <Field label="Danh sách ghế cần đưa vào kho vé" hint="Ngăn cách bằng dấu phẩy hoặc khoảng trắng. Trùng lặp sẽ tự động bị loại." required>
+              <textarea value={seatIds} onChange={(e) => setSeatIds(e.target.value)} placeholder="12, 13, 14…" />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: '12px' }}>
+            <div className="field-hint" style={{ marginBottom: '8px' }}>
+              Ghế chưa vào kho vé của revision này — bấm để thêm vào danh sách:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <Button
+                type="button" variant="secondary" size="sm"
+                onClick={() => setSeatIds(unlinkedSeats.map((s) => s.id).join(', '))}
+              >
+                Chọn tất cả ({unlinkedSeats.length})
+              </Button>
+              <Field label="Chọn ghế" hint="Giữ Ctrl hoặc Shift để chọn nhiều ghế.">
+                <select multiple size={8} value={unique.map(String)}
+                  onChange={(event) => setSeatIds(Array.from(event.target.selectedOptions, (option) => option.value).join(', '))}>
+                  {unlinkedSeats.map((seat) => <option key={seat.id} value={String(seat.id)}>#{seat.id} · {seat.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          <div className="field-hint" style={{ marginTop: '12px' }}>
+            {unique.length > 0 ? `Sẽ gửi ${unique.length} ghế.` : 'Chưa chọn ghế nào.'}
+          </div>
+
+          <Button type="submit" variant="primary" loading={act.busy} disabled={!categoryId || unique.length === 0} style={{ marginTop: '16px' }}>
+            Đưa ghế vào kho vé
+          </Button>
+          <Banner state={act.state} />
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -798,9 +811,9 @@ function QueueSection() {
             hint="Bật thì bỏ qua giá trị riêng ở trên và lấy theo cấu hình toàn hệ thống."
           />
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !id}>
-          {act.busy ? 'Đang lưu…' : 'Lưu cấu hình hàng đợi'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!id} style={{ marginTop: '16px' }}>
+          Lưu cấu hình hàng đợi
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -856,9 +869,9 @@ function WaitlistSection() {
                     options={Object.values(WaitlistStatus)} labels={ADMIN_STATUS_LABEL} />
           </Field>
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !id}>
-          {act.busy ? 'Đang lưu…' : 'Lưu cấu hình danh sách chờ'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!id} style={{ marginTop: '16px' }}>
+          Lưu cấu hình danh sách chờ
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -903,22 +916,22 @@ function SeatAvailabilitySection() {
       <div className="field-grid">
         <IdPicker label="Concert" items={options} value={concertId} onChange={setConcertId} />
         <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-          <button type="button" className="btn-outline" onClick={load} disabled={!concertId || loading}>
-            {loading ? 'Đang tải…' : 'Nạp sơ đồ ghế'}
-          </button>
+          <Button type="button" variant="secondary" loading={loading} onClick={load} disabled={!concertId}>
+            Nạp sơ đồ ghế
+          </Button>
         </div>
       </div>
 
       {seats.length > 0 && (
-        <div className="table-wrap" style={{ marginTop: '20px', maxHeight: '300px', overflowY: 'auto' }}>
-          <table className="data">
+        <div className="scroll-x" style={{ marginTop: '20px', maxHeight: '300px', overflowY: 'auto' }}>
+          <table className="table">
             <thead>
               <tr><th>ID</th><th>Ghế</th><th>Khu</th><th>Hạng</th><th>Trạng thái</th><th /></tr>
             </thead>
             <tbody>
               {seats.map((s) => (
                 <tr key={s.seatID}>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{s.seatID}</td>
+                  <td className="tabular">{s.seatID}</td>
                   <td>{s.seatNumber}</td>
                   <td>{s.sectionName}</td>
                   <td>{s.categoryName}</td>
@@ -926,16 +939,15 @@ function SeatAvailabilitySection() {
                     {s.inventoryStatus}
                   </td>
                   <td>
-                    <button
-                      type="button" className="btn-outline"
-                      style={{ padding: '3px 10px', fontSize: '0.75rem' }}
+                    <Button
+                      type="button" variant="secondary" size="sm"
                       onClick={() => {
                         setEventSeatId(String(s.seatID));
                         setUnavailable(s.inventoryStatus === InventoryStatus.Available);
                       }}
                     >
                       Chọn
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -973,13 +985,12 @@ function SeatAvailabilitySection() {
             </Field>
           </div>
         )}
-        <button
-          className={unavailable ? 'btn-danger' : 'btn-primary'}
-          style={{ marginTop: '16px' }}
-          disabled={act.busy || !eventSeatId || (unavailable && !reason.trim())}
+        <Button
+          type="submit" variant={unavailable ? 'danger' : 'primary'}
+          loading={act.busy} disabled={!eventSeatId || (unavailable && !reason.trim())} style={{ marginTop: '16px' }}
         >
-          {act.busy ? 'Đang xử lý…' : unavailable ? 'Khoá ghế' : 'Mở lại ghế'}
-        </button>
+          {unavailable ? 'Khoá ghế' : 'Mở lại ghế'}
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>

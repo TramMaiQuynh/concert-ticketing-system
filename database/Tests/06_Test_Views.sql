@@ -2,7 +2,6 @@
 -- 06_Test_Views.sql
 -- Test 6 Views: khong loi khi chay, tra ve ket qua.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

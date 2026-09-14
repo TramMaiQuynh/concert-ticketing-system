@@ -65,11 +65,17 @@
   --border-subtle:    var(--zinc-100);
   --border-strong:    var(--zinc-300);
 
-  --accent:           var(--zinc-1000);
-  --accent-hover:     var(--zinc-800);
-  --accent-subtle:    var(--zinc-100);
+  /* Màu chủ đạo — dùng NGUYÊN VĂN qua cả hai theme để giữ nhận diện thương hiệu
+     nhất quán (Apple, các thương hiệu cao cấp không đổi hue của brand color theo
+     theme, chỉ đổi các tông xung quanh nó). Các bậc đậm/nhạt đi kèm để dùng cho
+     hover, nền mờ, viền và chữ trên nền sáng mà vẫn giữ đúng sắc thái. */
+  --accent:           #A87E6F;
+  --accent-hover:     #8F6B5E;
+  --accent-subtle:    #F8F5F3;
+  --accent-border:    #E4D2CB;
+  --accent-text:      #7A5A4D;
 
-  --focus-ring:       var(--blue-solid);
+  --focus-ring:       var(--accent-hover);
 
   /* ── Khoảng cách — thang 4px ────────────────────────────────────────────
      Chỉ dùng các bậc này. Nhịp đều là thứ phân biệt sản phẩm được thiết kế
@@ -156,7 +162,7 @@
      tầm mắt.                                                                */
   --container:     1180px;
   --container-narrow: 720px;
-  --nav-height:    60px;
+  --nav-height:    76px;
 
   color-scheme: light;
 }
@@ -172,28 +178,32 @@
       sáng (#ECFDF5) đặt lên nền tối sẽ chói và sai tương phản.
    ============================================================================ */
 :root[data-theme='dark'] {
-  --surface:         var(--zinc-950);
-  --surface-raised:  var(--zinc-900);
-  --surface-sunken:  #0B0B0E;
-  --surface-hover:   var(--zinc-850);
-  --surface-active:  var(--zinc-800);
+  /* #020306 đúng như yêu cầu — gần đen tuyệt đối nhưng không phải #000, vẫn còn
+     đủ biên độ để phân lớp bề mặt (raised/hover/active) phía trên nó. */
+  --surface:         #020306;
+  --surface-raised:  #0C0A0B;
+  --surface-sunken:  #000000;
+  --surface-hover:   #161314;
+  --surface-active:  #211C1E;
   --surface-inverse: var(--zinc-0);
 
-  --text:            #FAFAFA;
-  --text-secondary:  var(--zinc-400);
-  --text-muted:      var(--zinc-500);
-  --text-inverse:    var(--zinc-1000);
-  --text-on-accent:  var(--zinc-1000);
+  --text:            #F7F3F1;
+  --text-secondary:  #A79C96;
+  --text-muted:      #766D68;
+  --text-inverse:    #0A0908;
+  --text-on-accent:  #FFFFFF;
 
-  --border:          #2A2A30;
-  --border-subtle:   #212126;
-  --border-strong:   #3A3A42;
+  --border:          #241F1D;
+  --border-subtle:   #171413;
+  --border-strong:   #332B28;
 
-  --accent:          #FAFAFA;
-  --accent-hover:    var(--zinc-200);
-  --accent-subtle:   var(--zinc-800);
+  --accent:          #A87E6F;
+  --accent-hover:    #B59185;
+  --accent-subtle:   #191415;
+  --accent-border:   #4A362F;
+  --accent-text:     #CBA398;
 
-  --focus-ring:      #60A5FA;
+  --focus-ring:      var(--accent-hover);
 
   --green-bg:  #052E22;  --green-border:  #10593F;  --green-text:  #4ADE80;  --green-solid:  #10B981;
   --amber-bg:  #2E1F05;  --amber-border:  #664213;  --amber-text:  #FBBF24;  --amber-solid:  #F59E0B;
@@ -215,28 +225,30 @@
    chọn tường minh của họ luôn thắng cài đặt máy. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']):not([data-theme='dark']) {
-    --surface:         var(--zinc-950);
-    --surface-raised:  var(--zinc-900);
-    --surface-sunken:  #0B0B0E;
-    --surface-hover:   var(--zinc-850);
-    --surface-active:  var(--zinc-800);
+    --surface:         #020306;
+    --surface-raised:  #0C0A0B;
+    --surface-sunken:  #000000;
+    --surface-hover:   #161314;
+    --surface-active:  #211C1E;
     --surface-inverse: var(--zinc-0);
 
-    --text:            #FAFAFA;
-    --text-secondary:  var(--zinc-400);
-    --text-muted:      var(--zinc-500);
-    --text-inverse:    var(--zinc-1000);
-    --text-on-accent:  var(--zinc-1000);
+    --text:            #F7F3F1;
+    --text-secondary:  #A79C96;
+    --text-muted:      #766D68;
+    --text-inverse:    #0A0908;
+    --text-on-accent:  #FFFFFF;
 
-    --border:          #2A2A30;
-    --border-subtle:   #212126;
-    --border-strong:   #3A3A42;
+    --border:          #241F1D;
+    --border-subtle:   #171413;
+    --border-strong:   #332B28;
 
-    --accent:          #FAFAFA;
-    --accent-hover:    var(--zinc-200);
-    --accent-subtle:   var(--zinc-800);
+    --accent:          #A87E6F;
+    --accent-hover:    #B59185;
+    --accent-subtle:   #191415;
+    --accent-border:   #4A362F;
+    --accent-text:     #CBA398;
 
-    --focus-ring:      #60A5FA;
+    --focus-ring:      var(--accent-hover);
 
     --green-bg:  #052E22;  --green-border:  #10593F;  --green-text:  #4ADE80;  --green-solid:  #10B981;
     --amber-bg:  #2E1F05;  --amber-border:  #664213;  --amber-text:  #FBBF24;  --amber-solid:  #F59E0B;

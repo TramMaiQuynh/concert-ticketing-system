@@ -3,8 +3,11 @@ import { useAuth } from '../../auth/AuthContext';
 import { Role } from '../../domain/enums';
 import { invalidateCatalog } from '../../lib/adminCatalog';
 import { Button, Card, EmptyState } from '../../components/ui';
+import {
+  IconTicket, IconGrid, IconLayers, IconTag,
+  IconUndo, IconChart, IconDocument, IconUser, IconScan,
+} from '../../components/ui/icons';
 import Catalog from './Catalog';
-import VenueMap from './VenueMap';
 import VenueTemplates from './VenueTemplates';
 import Concerts from './Concerts';
 import Promotions from './Promotions';
@@ -48,21 +51,18 @@ export default function AdminLayout() {
   // lại là cách chuỗi "/admin/concerts/catalog/concerts/concerts/concerts/…"
   // dài vô hạn được sinh ra. Tuyệt đối hoá triệt tiêu toàn bộ sự mập mờ đó.
   const items = [
-    { to: '/admin/concerts', label: 'Concert', desc: 'Vòng đời, hạng vé, kho ghế' },
-    { to: '/admin/catalog', label: 'Danh mục', desc: 'Nghệ sĩ, địa điểm, khu vực, ghế' },
-    // Chỉ Admin: sp_ConfigureVenueMap / sp_CreateZone / sp_CreateSeat đều tự chặn
-    // vai trò khác ở tầng database, nên hiện mục này cho Organizer chỉ dẫn họ vào
-    // một trang chắc chắn trả 403.
-    ...(isAdmin ? [{ to: '/admin/venue-map', label: 'Sơ đồ địa điểm', desc: 'Mặt phẳng, sân khấu, khu, ghế' }] : []),
-    // Chỉ Admin, cùng lý do "Sơ đồ địa điểm" ở trên: mọi sp_ConfigureTemplate*/
-    // sp_CreateVenueTemplate* đều tự chặn vai trò khác ở tầng database (StagePass D.4).
-    ...(isAdmin ? [{ to: '/admin/venue-templates', label: 'Mẫu sơ đồ (Studio)', desc: 'Nhiều tầng, khu đa giác, phiên bản có publish' }] : []),
-    { to: '/admin/promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá' },
-    { to: '/admin/refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn' },
-    { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé, danh sách chờ' },
+    { to: '/admin/concerts', label: 'Concert', desc: 'Vòng đời, hạng vé, kho ghế', icon: IconTicket },
+    { to: '/admin/catalog', label: 'Danh mục', desc: 'Nghệ sĩ, địa điểm, khu vực, ghế', icon: IconGrid },
+    // Chỉ Admin: mọi sp_ConfigureTemplate*/sp_CreateVenueTemplate* đều tự chặn vai
+    // trò khác ở tầng database (StagePass D.4) — bất kể [Authorize] ở controller
+    // rộng hay hẹp.
+    ...(isAdmin ? [{ to: '/admin/venue-templates', label: 'Mẫu sơ đồ', desc: 'Nhiều tầng, khu đa giác, phiên bản có publish', icon: IconLayers }] : []),
+    { to: '/admin/promotions', label: 'Khuyến mãi', desc: 'Chương trình và mã giảm giá', icon: IconTag },
+    { to: '/admin/refunds', label: 'Hoàn tiền', desc: 'Hủy đơn và xác nhận hoàn', icon: IconUndo },
+    { to: '/admin/reports', label: 'Báo cáo', desc: 'Doanh thu, check-in, người giữ vé, danh sách chờ', icon: IconChart },
     // Chỉ Admin: VW_AuditTrail tự trả 0 dòng cho phiên không giữ Role Admin, nên hiện
     // mục này cho Organizer chỉ dẫn họ vào một trang chắc chắn rỗng.
-    ...(isAdmin ? [{ to: '/admin/audit', label: 'Nhật ký', desc: 'Tra cứu lịch sử thay đổi (FR59)' }] : []),
+    ...(isAdmin ? [{ to: '/admin/audit', label: 'Nhật ký', desc: 'Tra cứu lịch sử thay đổi (FR59)', icon: IconDocument }] : []),
     // Cả hai vai trò đều vào được, nhưng thấy khác nhau: Organizer chỉ có khối phân
     // công soát vé cho concert của mình (sp_AddCheckinStaffAssignment mở cho Organizer
     // sở hữu), còn cấp vai trò / khóa tài khoản vẫn là việc riêng của Admin. Nhãn đổi
@@ -71,6 +71,7 @@ export default function AdminLayout() {
       to: '/admin/users',
       label: isAdmin ? 'Người dùng' : 'Soát vé',
       desc: isAdmin ? 'Vai trò, khóa tài khoản, soát vé' : 'Phân công nhân viên soát vé',
+      icon: isAdmin ? IconUser : IconScan,
     },
   ];
 
@@ -82,8 +83,11 @@ export default function AdminLayout() {
         <nav className="admin__nav" aria-label="Khu quản trị">
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} className={({ isActive }) => (isActive ? 'active' : '')}>
-              {it.label}
-              <small>{it.desc}</small>
+              <it.icon size={16} />
+              <span>
+                {it.label}
+                <small>{it.desc}</small>
+              </span>
             </NavLink>
           ))}
         </nav>
@@ -115,10 +119,6 @@ export default function AdminLayout() {
           <Route index element={<Navigate to="/admin/concerts" replace />} />
           <Route path="concerts" element={<Concerts />} />
           <Route path="catalog" element={<Catalog isAdmin={isAdmin} />} />
-          <Route
-            path="venue-map"
-            element={isAdmin ? <VenueMap /> : <Navigate to="/admin/concerts" replace />}
-          />
           <Route
             path="venue-templates"
             element={isAdmin ? <VenueTemplates /> : <Navigate to="/admin/concerts" replace />}

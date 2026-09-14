@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useConcertOptions } from '../../lib/concertOptions';
 import { Field, Select, Check, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
+import { Button, PageHeader } from '../../components/ui';
 import { toApiDateTime } from '../../lib/format';
 import {
   DiscountType, DISCOUNT_TYPE_LABEL, PromotionStatus, DiscountCodeStatus, ADMIN_STATUS_LABEL,
@@ -22,6 +23,7 @@ import {
 export default function Promotions() {
   return (
     <>
+      <PageHeader title="Khuyến mãi" subtitle="Chương trình giảm giá theo concert và mã giảm giá khách gõ ở trang thanh toán." />
       <CreatePromotion />
       <PromotionStatusSection />
       <CreateDiscountCode />
@@ -129,12 +131,12 @@ function CreatePromotion() {
           />
         </div>
 
-        <button
-          className="btn-primary" style={{ marginTop: '20px' }}
-          disabled={act.busy || !concertId || !f.promotionName.trim() || !f.discountValue || !f.startDatetime || !f.endDatetime}
+        <Button
+          type="submit" variant="primary" loading={act.busy} style={{ marginTop: '20px' }}
+          disabled={!concertId || !f.promotionName.trim() || !f.discountValue || !f.startDatetime || !f.endDatetime}
         >
-          {act.busy ? 'Đang tạo…' : 'Tạo khuyến mãi'}
-        </button>
+          Tạo khuyến mãi
+        </Button>
         <Banner state={act.state} />
       </form>
 
@@ -177,9 +179,9 @@ function PromotionStatusSection() {
                     options={Object.values(PromotionStatus)} labels={ADMIN_STATUS_LABEL} />
           </Field>
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !id}>
-          {act.busy ? 'Đang lưu…' : 'Đổi trạng thái'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!id} style={{ marginTop: '16px' }}>
+          Đổi trạng thái
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -244,9 +246,9 @@ function CreateDiscountCode() {
             <input type="number" min="1" value={perCustomer} onChange={(e) => setPerCustomer(e.target.value)} />
           </Field>
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !promotionId || !code.trim()}>
-          {act.busy ? 'Đang tạo…' : 'Tạo mã giảm giá'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!promotionId || !code.trim()} style={{ marginTop: '16px' }}>
+          Tạo mã giảm giá
+        </Button>
         <Banner state={act.state} />
       </form>
 
@@ -289,9 +291,9 @@ function DiscountCodeStatusSection() {
                     options={Object.values(DiscountCodeStatus)} labels={ADMIN_STATUS_LABEL} />
           </Field>
         </div>
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !id}>
-          {act.busy ? 'Đang lưu…' : 'Đổi trạng thái'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!id} style={{ marginTop: '16px' }}>
+          Đổi trạng thái
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>

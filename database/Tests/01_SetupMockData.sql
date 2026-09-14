@@ -3,7 +3,6 @@
 -- Xoa het data cu, seeding du lieu test sach.
 -- Schema khop voi deploy.ps1 thuc te.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -26,6 +25,37 @@ DELETE FROM Refund;
 DELETE FROM Payment;
 DELETE FROM BookingEventSeatAllocation;
 DELETE FROM Booking;
+
+-- ── Lop StagePass + phan bo Waitlist (con cua EventSeat/Seat/Zone/Venue/UserAccount) ──
+--
+-- CUNG MOT CAI BAY da duoc ghi lai cho ConcertArtist ben duoi, lap lai voi 13 bang
+-- them vao SAU khi file nay duoc viet. Khong co khoi nay thi:
+--   - DELETE Venue bi FK_VenueTemplate_Venue chan (loi 547)
+--   - DELETE UserAccount bi FK_VTV_Author chan (VenueTemplateVersion.AuthorUserID)
+--   - DELETE WaitlistEntry/EventSeat bi FK cua WaitlistEntryEventSeatAllocation chan
+-- ... keo theo INSERT 'test_admin' trung khoa o duoi, va TOAN BO bo test chay tren
+-- du lieu ban con sot cua lan truoc. Voi -b cua sqlcmd (Run-All-Tests.ps1) thi con
+-- te hon: sqlcmd abort ngay tai day, KHONG test nao duoc chay, nhung bao cao chi noi
+-- "SQL Tests failed" nen rat de tuong nham la co test nghiep vu bi hong.
+-- Da kiem chung: chay bo test hai lan lien tiep tren cung mot database tai hien
+-- chinh xac ba loi 547/2627 o tren.
+--
+-- Thu tu: con truoc cha, va TAT CA phai dung truoc DELETE EventSeat/Seat/Zone/
+-- Concert/Venue/UserAccount ben duoi.
+DELETE FROM ConcertMapRevisionSeat;
+DELETE FROM ConcertMapRevisionObject;
+DELETE FROM ConcertMapRevisionSection;
+DELETE FROM ConcertMapRevisionFloor;
+DELETE FROM ConcertMapRevision;
+DELETE FROM ConcertMap;
+DELETE FROM TemplateSeat;
+DELETE FROM TemplateObject;
+DELETE FROM TemplateSection;
+DELETE FROM TemplateFloor;
+DELETE FROM VenueTemplateVersion;
+DELETE FROM VenueTemplate;
+DELETE FROM WaitlistEntryEventSeatAllocation;
+
 DELETE FROM DiscountCode;
 DELETE FROM Promotion;
 DELETE FROM QueueEntry;

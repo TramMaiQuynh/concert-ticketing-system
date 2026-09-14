@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from '../../api/client';
 import { useConcertOptions } from '../../lib/concertOptions';
 import { Field, Select, Panel, Banner, useAction } from '../../components/form';
+import { Button, Pill, PageHeader } from '../../components/ui';
 import {
   ASSIGNABLE_ROLES, RoleAction, UserStatus, AssignmentStatus, RoleStatus, ADMIN_STATUS_LABEL,
 } from '../../domain/enums';
@@ -27,6 +28,12 @@ import {
 export default function Users({ isAdmin }) {
   return (
     <>
+      <PageHeader
+        title={isAdmin ? 'Người dùng' : 'Soát vé'}
+        subtitle={isAdmin
+          ? 'Vai trò, khóa tài khoản và phân công nhân viên soát vé.'
+          : 'Phân công nhân viên soát vé cho concert bạn tổ chức.'}
+      />
       {isAdmin && (
         <>
           <RoleSection />
@@ -87,13 +94,12 @@ function RoleSection() {
           </div>
         )}
 
-        <button
-          className={action === RoleAction.Revoke ? 'btn-danger' : 'btn-primary'}
-          style={{ marginTop: '16px' }}
-          disabled={act.busy || !userId}
+        <Button
+          type="submit" variant={action === RoleAction.Revoke ? 'danger' : 'primary'}
+          loading={act.busy} disabled={!userId} style={{ marginTop: '16px' }}
         >
-          {act.busy ? 'Đang xử lý…' : action === RoleAction.Grant ? 'Cấp vai trò' : 'Thu hồi vai trò'}
-        </button>
+          {action === RoleAction.Grant ? 'Cấp vai trò' : 'Thu hồi vai trò'}
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -156,13 +162,12 @@ function RoleStatusSection() {
           </div>
         )}
 
-        <button
-          className={status === RoleStatus.Inactive ? 'btn-danger' : 'btn-primary'}
-          style={{ marginTop: '16px' }}
-          disabled={act.busy}
+        <Button
+          type="submit" variant={status === RoleStatus.Inactive ? 'danger' : 'primary'}
+          loading={act.busy} style={{ marginTop: '16px' }}
         >
-          {act.busy ? 'Đang xử lý…' : status === RoleStatus.Inactive ? 'Đóng phân công' : 'Mở phân công'}
-        </button>
+          {status === RoleStatus.Inactive ? 'Đóng phân công' : 'Mở phân công'}
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -200,13 +205,12 @@ function UserStatusSection() {
                     options={Object.values(UserStatus)} labels={ADMIN_STATUS_LABEL} />
           </Field>
         </div>
-        <button
-          className={status === UserStatus.Active ? 'btn-primary' : 'btn-danger'}
-          style={{ marginTop: '16px' }}
-          disabled={act.busy || !userId}
+        <Button
+          type="submit" variant={status === UserStatus.Active ? 'primary' : 'danger'}
+          loading={act.busy} disabled={!userId} style={{ marginTop: '16px' }}
         >
-          {act.busy ? 'Đang lưu…' : 'Đổi trạng thái'}
-        </button>
+          Đổi trạng thái
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -279,22 +283,20 @@ function StaffAssignmentSection({ isAdmin }) {
                 "concert của tôi". Với Organizer, "Chọn tất cả" gần như chắc chắn kéo theo
                 concert của người khác và làm cả yêu cầu bị từ chối. */}
             {isAdmin && (
-              <button
-                type="button" className="btn-outline"
-                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+              <Button
+                type="button" variant="secondary" size="sm"
                 onClick={() => setConcertIds(merged.map((c) => c.id).join(', '))}
               >
                 Chọn tất cả ({merged.length})
-              </button>
+              </Button>
             )}
             {merged.slice(0, 20).map((c) => (
-              <button
-                key={c.id} type="button" className="id-pill"
-                style={{ cursor: 'pointer' }}
+              <Pill
+                key={c.id} as="button" type="button"
                 onClick={() => setConcertIds((v) => (v.trim() ? `${v.trim()}, ${c.id}` : String(c.id)))}
               >
                 #{c.id} · {c.name}
-              </button>
+              </Pill>
             ))}
           </div>
         )}
@@ -303,9 +305,9 @@ function StaffAssignmentSection({ isAdmin }) {
           {unique.length > 0 ? `Sẽ gửi ${unique.length} concert.` : 'Chưa chọn concert nào.'}
         </div>
 
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !staffId || unique.length === 0}>
-          {act.busy ? 'Đang lưu…' : 'Lưu phân công'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!staffId || unique.length === 0} style={{ marginTop: '16px' }}>
+          Lưu phân công
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>

@@ -46,6 +46,54 @@ BEGIN
             IF NOT EXISTS (SELECT 1 FROM EventSeat WHERE ConcertID = @ConcertID)
                 THROW 58023, 'sp_UpdateConcertStatus (BR10): Concert chua co EventSeat (ticket inventory) - khong the mo ban.', 1;
 
+            -- StagePass la TUY CHON: Zone/Seat/EventSeat thuan (khong tao ConcertMap)
+            -- van la mot duong hop le, day du tai lieu — khach roi ve che do "danh
+            -- sach khu" phang (Venue.sql, GetLegacySeatMapAsync). Chi khi Concert nay
+            -- DA tao ConcertMap (tuc da chon dung StagePass) thi moi bat buoc co snapshot
+            -- Locked va EventSeat khop voi no; Concert khong StagePass bo qua toan bo
+            -- khoi nay. Truoc day khoi nay khong co dieu kien bao ngoai nen MOI Concert
+            -- (ke ca thuan Zone/Seat) deu bi chan OnSale vi ConcertMapID luon NULL —
+            -- da kiem chung bang doc code truc tiep, khong the mo ban duoc.
+            IF EXISTS (SELECT 1 FROM ConcertMap WHERE ConcertID = @ConcertID)
+            BEGIN
+                DECLARE @ConcertMapID INT = (SELECT ConcertMapID FROM ConcertMap WHERE ConcertID = @ConcertID);
+
+                DECLARE @LockedRevisionID INT = (
+                    SELECT ConcertMapRevisionID FROM ConcertMapRevision
+                    WHERE ConcertMapID = @ConcertMapID AND RevisionStatus = 'Locked'
+                );
+                IF @LockedRevisionID IS NULL
+                    THROW 58061, 'sp_UpdateConcertStatus (StagePass): ConcertMap chua co revision Locked.', 1;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM EventSeat es
+                    WHERE es.ConcertID = @ConcertID
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM ConcertMapRevisionSeat cs
+                          JOIN ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID = cs.ConcertMapRevisionSectionID
+                          JOIN ConcertMapRevisionFloor fl ON fl.ConcertMapRevisionFloorID = sec.ConcertMapRevisionFloorID
+                          WHERE fl.ConcertMapRevisionID = @LockedRevisionID
+                            AND cs.EventSeatID = es.EventSeatID
+                            AND cs.SeatID = es.SeatID
+                      )
+                )
+                    THROW 58062, 'sp_UpdateConcertStatus (StagePass): Co EventSeat khong thuoc revision Locked cua Concert.', 1;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM ConcertMapRevisionSeat cs
+                    JOIN ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID = cs.ConcertMapRevisionSectionID
+                    JOIN ConcertMapRevisionFloor fl ON fl.ConcertMapRevisionFloorID = sec.ConcertMapRevisionFloorID
+                    LEFT JOIN EventSeat es ON es.EventSeatID = cs.EventSeatID
+                    WHERE fl.ConcertMapRevisionID = @LockedRevisionID
+                      AND cs.EventSeatID IS NOT NULL
+                      AND (es.ConcertID <> @ConcertID OR es.SeatID <> cs.SeatID)
+                )
+                    THROW 58063, 'sp_UpdateConcertStatus (StagePass): Lien ket EventSeat va map-seat khong nhat quan.', 1;
+            END
+
             DECLARE @SaleStart DATETIME2(7), @SaleEnd DATETIME2(7);
             SELECT @SaleStart = SaleStartDatetime, @SaleEnd = SaleEndDatetime
             FROM   Concert WHERE ConcertID = @ConcertID;

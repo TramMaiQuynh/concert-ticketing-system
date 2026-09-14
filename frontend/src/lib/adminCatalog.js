@@ -3,7 +3,7 @@ import api, { onAuthChange, getAccessToken } from '../api/client';
 import { createCatalogStore, fetchCatalogPages } from './catalogStore';
 
 const definitions = {
-  venue: ['venues', 'venueID', (v) => v.venueName + ' · ' + v.venueStatus + (v.hasSeatMap ? ' · có sơ đồ' : ' · CHƯA có sơ đồ')],
+  venue: ['venues', 'venueID', (v) => v.venueName + ' · ' + v.venueStatus],
   artist: ['artists', 'artistID', (a) => a.artistName + ' · ' + a.artistStatus],
   concert: ['concerts', 'concertID', (c) => c.concertName + ' · ' + c.concertStatus],
   zone: ['zones', 'zoneID', (z) => (z.zoneName || z.zoneCode) + ' · ' + z.venueName + ' · ' + z.zoneStatus],

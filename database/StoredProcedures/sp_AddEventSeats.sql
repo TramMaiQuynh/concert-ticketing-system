@@ -30,6 +30,11 @@ BEGIN
         IF @ConcertStatus NOT IN ('Draft', 'Published')
             THROW 58218, 'sp_AddEventSeats (BP3): Chi them EventSeat khi Concert o trang thai Draft hoac Published.', 1;
 
+        -- StagePass co inventory command rieng de gan EventSeat voi map-seat
+        -- snapshot. Raw SeatID o day khong duoc phep chen vao concert da chon map.
+        IF EXISTS (SELECT 1 FROM ConcertMap WHERE ConcertID = @ConcertID)
+            THROW 58221, 'sp_AddEventSeats: Concert dung StagePass; hay them inventory tu ConcertMapRevision da khoa.', 1;
+
         IF NOT (
             @ActorUserID = @OrganizerUserID
             OR EXISTS (SELECT 1 FROM UserRoleAssignment ura JOIN Role r ON r.RoleID = ura.RoleID
@@ -47,10 +52,19 @@ BEGIN
         IF @SalePrice IS NULL
             THROW 58213, 'sp_AddEventSeats: TicketCategory khong thuoc Concert hoac khong Active.', 1;
 
-        -- Parse CSV
+        -- Parse CSV — TRY_CONVERT thay vi CAST tho: mot phan tu khong phai so (vd
+        -- "1,abc") truoc day lam CAST nem loi chuyen doi SQL tho (Msg 245), roi
+        -- tang middleware khong nhan dien duoc ma loi nen tra ve 500 chung chung
+        -- thay vi loi nghiep vu 400 ro rang.
+        IF EXISTS (
+            SELECT 1 FROM STRING_SPLIT(@SeatIDs, ',')
+            WHERE LTRIM(RTRIM(value)) <> '' AND TRY_CONVERT(INT, value) IS NULL
+        )
+            THROW 58222, 'sp_AddEventSeats: Danh sach SeatID chua gia tri khong phai so nguyen.', 1;
+
         DECLARE @SeatRequests TABLE (SeatID INT NOT NULL PRIMARY KEY);
         INSERT INTO @SeatRequests (SeatID)
-        SELECT DISTINCT CAST(value AS INT)
+        SELECT DISTINCT TRY_CONVERT(INT, value)
         FROM STRING_SPLIT(@SeatIDs, ',')
         WHERE LTRIM(RTRIM(value)) <> '';
 

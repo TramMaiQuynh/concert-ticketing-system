@@ -365,30 +365,6 @@ public partial class AdminController : ControllerBase
     // vật lý; ngừng sử dụng phải đi qua trạng thái. Trước đây ba trạng thái
     // Inactive/Retired tồn tại trong lược đồ nhưng không có endpoint nào đặt được.
 
-    /// <summary>
-    /// Khai báo mặt phẳng toạ độ và vị trí sân khấu của địa điểm (FR11a).
-    ///
-    /// Đây là bước biến một danh sách khu thành một sơ đồ có nghĩa: không có mặt
-    /// phẳng và sân khấu thì không thể nói chỗ ngồi nào gần sân khấu hơn chỗ nào,
-    /// mà đó lại chính là yếu tố quyết định giá trị một chiếc vé.
-    ///
-    /// Đơn vị là số nguyên trừu tượng — giao diện co giãn sơ đồ vào khung hình
-    /// đang có, nên không cần dữ liệu đo đạc thực địa.
-    /// </summary>
-    [HttpPut("venues/{venueId:int}/map")]
-    [Authorize(Roles = "Admin")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> ConfigureVenueMap(int venueId, [FromBody] ConfigureVenueMapRequest request)
-    {
-        var actor = GetActorUserId();
-        await _admin.ConfigureVenueMapAsync(actor, venueId, request);
-        return NoContent();
-    }
-
     /// <summary>Cập nhật Venue; VenueStatus = 'Inactive' để ngừng sử dụng.</summary>
     [HttpPut("venues/{venueId:int}")]
     [Authorize(Roles = "Admin")]

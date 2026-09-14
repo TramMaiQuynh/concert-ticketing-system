@@ -1,12 +1,12 @@
-<#
+﻿<#
 .SYNOPSIS
     Dang ky tai khoan admin bootstrap va gan role Admin.
 
 .DESCRIPTION
-    Chay MOT LAN sau khi backend da khoi dong, ngay sau setup-demo.ps1.
+    Chay MOT LAN sau khi backend da khoi dong, tuc sau scripts/setup.ps1.
 
-    Ly do can script rieng thay vi lam trong setup-demo.ps1:
-      setup-demo.ps1 chi deploy database + build -- backend chua chay luc do,
+    Ly do can script rieng thay vi lam trong setup.ps1:
+      setup.ps1 chi deploy database + build -- backend chua chay luc do,
       nen khong goi API duoc. Script nay chay sau khi backend da len.
 
     Bai toan "con ga qua trung":
@@ -26,15 +26,24 @@
 .PARAMETER AdminUsername
     Ten tai khoan admin. Mac dinh admin
 
+.PARAMETER AdminEmail
+    Email cua tai khoan admin. KHONG co gia tri mac dinh: email la du lieu that
+    cua nguoi quan tri, va mot dia chi bia (vd. @demo.local) se nam lai vinh vien
+    trong UserAccount. Neu bo qua, script se hoi.
+
 .PARAMETER AdminPassword
-    Mat khau. Mac dinh Demo@12345
+    Mat khau. KHONG co gia tri mac dinh: mat khau mac dinh viet trong script la
+    mat khau cua moi ban sao cua repository. Neu bo qua, script se hoi bang
+    Read-Host -AsSecureString (khong hien tren man hinh, khong luu ra file).
+    Phai dat dung quy dinh cua RegisterValidator: >= 8 ky tu, co chu hoa va chu so.
 #>
 param(
     [string]$ApiBaseUrl     = "http://localhost:5295/api",
     [string]$ServerInstance = ".\SQLEXPRESS",
     [string]$DatabaseName   = "ConcertTicketingDB",
     [string]$AdminUsername  = "admin",
-    [string]$AdminPassword  = "Demo@12345"
+    [string]$AdminEmail     = "",
+    [string]$AdminPassword  = ""
 )
 
 Set-StrictMode -Version Latest
@@ -44,6 +53,39 @@ $PSDefaultParameterValues['Invoke-WebRequest:UseBasicParsing'] = $true
 function Write-Step($msg) { Write-Host "  -> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "     $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "     $msg" -ForegroundColor Yellow }
+
+# -- 0. Thu thap thong tin dang nhap ------------------------------------------
+# Khong co gia tri mac dinh cho email va mat khau. Ly do:
+#   - Mat khau mac dinh trong script nghia la MOI ban sao cua repository deu co
+#     cung mot mat khau cho tai khoan quan tri cao nhat he thong.
+#   - Email bia (@demo.local) se ton tai vinh vien trong UserAccount vi khong co
+#     duong sua email trong he thong.
+# Mat khau chi nam trong bien cua tien trinh: khong ghi ra file, khong in ra man
+# hinh, khong truyen qua tham dong lenh (tham dong lenh hien trong lich su shell
+# va trong danh sach tien trinh cua moi nguoi dung tren may).
+
+if (-not $AdminEmail) {
+    Write-Host ""
+    $AdminEmail = (Read-Host "  Email cho tai khoan '$AdminUsername'").Trim()
+}
+if ($AdminEmail -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+    throw "Email '$AdminEmail' khong dung dinh dang. API se tu choi voi 400."
+}
+
+if (-not $AdminPassword) {
+    $secure = Read-Host "  Mat khau cho tai khoan '$AdminUsername' (>= 8 ky tu, co chu hoa va chu so)" -AsSecureString
+    $bstr   = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        $AdminPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+# Kiem tra NGAY tai day, khop dung RegisterValidator. De API tu choi thi thong
+# bao chi la "400 Bad Request" va nguoi chay khong biet dang sai o dau.
+if ($AdminPassword.Length -lt 8)   { throw "Mat khau phai co it nhat 8 ky tu." }
+if ($AdminPassword -cnotmatch '[A-Z]') { throw "Mat khau phai co it nhat 1 chu hoa." }
+if ($AdminPassword -notmatch '[0-9]')  { throw "Mat khau phai co it nhat 1 chu so." }
 
 Write-Host ""
 Write-Host ("=" * 60) -ForegroundColor Cyan
@@ -76,20 +118,34 @@ Write-Ok "API dang chay."
 Write-Step "Dang ky tai khoan '$AdminUsername' qua /auth/register ..."
 $regBody = [ordered]@{
     username    = $AdminUsername
-    email       = "$AdminUsername@demo.local"
+    email       = $AdminEmail
     password    = $AdminPassword
-    displayName = "Quan tri vien"
+    displayName = "Quản trị viên"
 } | ConvertTo-Json
 
 try {
+    # Invoke-RestMethod ma hoa -Body KIEU STRING bang [Text.Encoding]::Default (Windows-1252
+    # tren may nay), KHONG PHAI UTF-8, du -ContentType noi charset=utf-8 hay khong. DisplayName
+    # "Quản trị viên" co dau tieng Viet bi hong byte, ASP.NET Core (System.Text.Json, UTF-8
+    # nghiem ngat) tu choi voi 400 "JSON value could not be converted" NGAY O displayName —
+    # khong lien quan gi den "tai khoan da ton tai". Da tai hien truc tiep va xac nhan bang
+    # curl thu cong. Ep gui BYTE[] UTF-8 thay vi STRING de Invoke-RestMethod gui nguyen
+    # byte, khong tu y ma hoa lai.
+    $regBodyBytes = [System.Text.Encoding]::UTF8.GetBytes($regBody)
     Invoke-RestMethod -Uri "$ApiBaseUrl/auth/register" -Method Post `
-        -ContentType 'application/json' -Body $regBody -TimeoutSec 10 | Out-Null
+        -ContentType 'application/json; charset=utf-8' -Body $regBodyBytes -TimeoutSec 10 | Out-Null
     Write-Ok "Dang ky thanh cong."
 } catch {
     $s = 0
     if ($_.Exception.Response) { $s = [int]$_.Exception.Response.StatusCode }
-    if ($s -eq 409 -or $s -eq 400) {
-        Write-Warn "Tai khoan '$AdminUsername' co the da ton tai -- thu gan role lai."
+    # CHI 409 (Username da ton tai) moi duoc coi la "chay lai tren database da co
+    # tai khoan nay". Truoc day 400 cung duoc coi nhu vay, va do la mot lo hong
+    # that: 400 la loi du lieu dau vao (email sai dinh dang, mat khau yeu...).
+    # Voi cach xu ly cu, mot lan dang ky THAT BAI vi mat khau yeu van di tiep
+    # xuong buoc 3, tim thay mot tai khoan TRUNG TEN da co tu truoc, roi CAP
+    # QUYEN ADMIN cho chinh tai khoan do — bang mot mat khau khong he duoc dat.
+    if ($s -eq 409) {
+        Write-Warn "Tai khoan '$AdminUsername' da ton tai -- dung lai tai khoan do."
     } else {
         throw "Dang ky that bai ($s): $($_.Exception.Message)"
     }
@@ -97,12 +153,21 @@ try {
 
 # -- 3. Lay UserID tu DB (chinh xac hon parse JWT) ----------------------------
 Write-Step "Lay UserID cua '$AdminUsername' tu database ..."
-$uidRaw = & sqlcmd -S $ServerInstance -d $DatabaseName -E -h -1 -W `
-    -Q "SET NOCOUNT ON; SELECT UserID FROM UserAccount WHERE Username='$AdminUsername'" 2>&1
-$userId = ($uidRaw | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1)
-if ($userId) { $userId = $userId.Trim() }
-if (-not $userId) {
-    throw "Khong tim thay UserID cho '$AdminUsername'. Kiem tra dang ky co thanh cong khong."
+# Truy van kem trang thai PasswordHash: tai khoan dich vu nhu 'system' co
+# PasswordHash = NULL (khong the dang nhap — xem SeedData.sql). Gan role Admin
+# cho mot tai khoan nhu vay la tao ra mot tai khoan quan tri khong ai dang nhap
+# duoc, va te hon: no bien 'system' — tai khoan ma moi tien trinh tu dong dung —
+# thanh mot tai khoan co quyen quan tri ngay khi co ai do dat mat khau cho no.
+$uidRaw = & sqlcmd -S $ServerInstance -d $DatabaseName -E -h -1 -W -Q `
+    "SET NOCOUNT ON; SELECT CONVERT(VARCHAR(20), UserID) + '|' + CASE WHEN PasswordHash IS NULL THEN 'NOPWD' ELSE 'HAS' END FROM UserAccount WHERE Username = '$AdminUsername';" 2>&1
+$uidLine = ($uidRaw | Where-Object { $_ -match '\|' } | Select-Object -First 1)
+if (-not $uidLine) {
+    throw "Khong tim thay tai khoan '$AdminUsername' trong UserAccount. Dang ky da that bai?"
+}
+$uidParts = $uidLine.Trim().Split('|')
+$userId   = $uidParts[0].Trim()
+if ($uidParts[1] -ne 'HAS') {
+    throw "Tai khoan '$AdminUsername' khong co mat khau (PasswordHash IS NULL) — khong duoc gan role Admin."
 }
 Write-Ok "UserID = $userId"
 
@@ -156,16 +221,21 @@ try {
 }
 
 # -- 6. Ghi thong tin ra .deploy/ ---------------------------------------------
+# KHONG ghi mat khau. Truoc day file nay co dong note = "Mat khau: ..." — mot
+# mat khau quan tri nam nguyen van trong mot file tren dia, trong thu muc ma
+# nguoi chay rat de copy sang may khac hoac gui kem khi "ban giao". Mat khau chi
+# ton tai trong bien cua tien trinh nay, va chi nguoi vua nhap no biet.
 $root      = Split-Path $PSScriptRoot -Parent
 $deployDir = Join-Path $root ".deploy"
 if (-not (Test-Path $deployDir)) { New-Item -ItemType Directory -Path $deployDir -Force | Out-Null }
 @{
     bootstrappedAt = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss")
     adminUsername  = $AdminUsername
+    adminEmail     = $AdminEmail
     adminUserId    = [int]$userId
-    note           = "Mat khau: $AdminPassword"
+    note           = "Mat khau KHONG duoc luu o day (xem comment trong bootstrap-admin.ps1)."
 } | ConvertTo-Json | Out-File -FilePath (Join-Path $deployDir "bootstrap-info.json") -Encoding utf8
-Write-Ok "Da ghi .deploy/bootstrap-info.json"
+Write-Ok "Da ghi .deploy/bootstrap-info.json (khong chua mat khau)."
 
 Write-Host ""
 Write-Host ("=" * 60) -ForegroundColor Green
@@ -174,8 +244,10 @@ Write-Host ("=" * 60) -ForegroundColor Green
 Write-Host ""
 Write-Host "  Tai khoan admin da san sang:" -ForegroundColor White
 Write-Host "    Username : $AdminUsername" -ForegroundColor White
-Write-Host "    Password : $AdminPassword" -ForegroundColor White
+Write-Host "    Email    : $AdminEmail" -ForegroundColor White
 Write-Host "    Role     : Admin" -ForegroundColor White
+Write-Host ""
+Write-Host "  Mat khau la gia tri ban vua nhap — he thong khong luu lai." -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Mo trinh duyet: http://localhost:5173" -ForegroundColor White
 Write-Host ""

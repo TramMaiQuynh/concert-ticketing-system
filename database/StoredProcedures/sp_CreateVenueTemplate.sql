@@ -24,8 +24,11 @@ BEGIN
                        WHERE ura.UserID = @ActorUserID AND r.RoleName = 'Admin' AND ura.AssignmentStatus = 'Active' AND uaAdm.AccountStatus = 'Active')
             THROW 60001, 'sp_CreateVenueTemplate: Chi Admin duoc tao VenueTemplate.', 1;
 
-        IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID = @VenueID)
+        DECLARE @VenueStatusCheck VARCHAR(32) = (SELECT VenueStatus FROM Venue WHERE VenueID = @VenueID);
+        IF @VenueStatusCheck IS NULL
             THROW 60002, 'sp_CreateVenueTemplate: Venue khong ton tai.', 1;
+        IF @VenueStatusCheck <> 'Active'
+            THROW 60097, 'sp_CreateVenueTemplate: Venue da ngung su dung (Inactive), khong the tao Mau so do moi.', 1;
 
         IF ISNULL(@TemplateName, '') = ''
             THROW 60003, 'sp_CreateVenueTemplate: TemplateName khong duoc de trong.', 1;

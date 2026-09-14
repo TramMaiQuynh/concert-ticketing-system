@@ -41,8 +41,9 @@ BEGIN
         -- Publish thanh cong giua luc SP nay dang o khoang "da doc Draft
         -- nhung chua INSERT xong", khien Seat moi van duoc them vao mot
         -- version DA Published.
-        DECLARE @VersionStatus VARCHAR(32), @VenueTemplateVersionID INT, @TemplateVenueID INT;
-        SELECT @VersionStatus = vtv.VersionStatus, @VenueTemplateVersionID = vtv.VenueTemplateVersionID, @TemplateVenueID = vt.VenueID
+        DECLARE @VersionStatus VARCHAR(32), @VenueTemplateVersionID INT, @TemplateVenueID INT, @TemplateSectionZoneID INT;
+        SELECT @VersionStatus = vtv.VersionStatus, @VenueTemplateVersionID = vtv.VenueTemplateVersionID,
+               @TemplateVenueID = vt.VenueID, @TemplateSectionZoneID = s.ZoneID
         FROM TemplateSection s
         JOIN TemplateFloor f ON f.TemplateFloorID = s.TemplateFloorID
         JOIN VenueTemplateVersion vtv WITH (UPDLOCK, HOLDLOCK) ON vtv.VenueTemplateVersionID = f.VenueTemplateVersionID
@@ -64,9 +65,9 @@ BEGIN
         -- nham ghe cua mot dia diem khac tren template cua dia diem nay.
         IF NOT EXISTS (
             SELECT 1 FROM Seat st JOIN Zone z ON z.ZoneID = st.ZoneID
-            WHERE st.SeatID = @SeatID AND z.VenueID = @TemplateVenueID
+            WHERE st.SeatID = @SeatID AND z.VenueID = @TemplateVenueID AND z.ZoneID = @TemplateSectionZoneID
         )
-            THROW 60111, 'sp_ConfigureTemplateSeat: SeatID khong thuoc dung Venue cua VenueTemplate.', 1;
+            THROW 60112, 'sp_ConfigureTemplateSeat: SeatID phai thuoc dung Zone cua TemplateSection.', 1;
 
         IF ISNULL(@SeatKey, '') = ''
             THROW 60105, 'sp_ConfigureTemplateSeat: SeatKey khong duoc de trong.', 1;

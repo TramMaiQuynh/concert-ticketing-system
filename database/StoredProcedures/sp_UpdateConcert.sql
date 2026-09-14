@@ -34,9 +34,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        DECLARE @CurrentStatus VARCHAR(32), @OrganizerUserID INT;
+        DECLARE @CurrentStatus VARCHAR(32), @OrganizerUserID INT, @CurrentVenueID INT;
 
-        SELECT @CurrentStatus = ConcertStatus, @OrganizerUserID = OrganizerUserID
+        SELECT @CurrentStatus = ConcertStatus, @OrganizerUserID = OrganizerUserID, @CurrentVenueID = VenueID
         FROM Concert WHERE ConcertID = @ConcertID;
 
         IF @CurrentStatus IS NULL
@@ -94,6 +94,27 @@ BEGIN
                 WHERE a.ArtistID IS NULL OR a.ArtistStatus <> 'Active'
             )
                 THROW 58004, 'sp_UpdateConcert: Artist khong ton tai hoac da ngung su dung.', 1;
+        END
+
+        -- Truoc ban sua nay, @VenueID khong duoc kiem tra o dau ca — COALESCE thang
+        -- vao UPDATE. VenueID khong ton tai roi vao FK_Concert_Venue thanh loi SQL
+        -- tho; VenueID Inactive duoc chap nhan im lang; va doi Venue khi Concert da
+        -- co ConcertMap/snapshot StagePass tro toi mot dia diem KHAC lam sai lech
+        -- hoan toan sơ do da chup (Section/Seat cua snapshot van thuoc Venue cu).
+        IF @VenueID IS NOT NULL AND @VenueID <> @CurrentVenueID
+        BEGIN
+            DECLARE @NewVenueStatus VARCHAR(32) = (SELECT VenueStatus FROM Venue WHERE VenueID = @VenueID);
+            IF @NewVenueStatus IS NULL
+                THROW 58026, 'sp_UpdateConcert: Venue moi khong ton tai.', 1;
+            IF @NewVenueStatus <> 'Active'
+                THROW 58027, 'sp_UpdateConcert: Venue moi da ngung su dung (Inactive).', 1;
+
+            -- Cung bat bien ma TRG_ConcertVenueChangeGuard thi hanh cho EventSeat,
+            -- mo rong cho ConcertMap: mot khi da tao ConcertMap (du chua co
+            -- EventSeat nao), doi Venue se lam TemplateSection/TemplateSeat cua
+            -- snapshot (da chup tu VenueTemplate CUA VENUE CU) tro sai dia diem.
+            IF EXISTS (SELECT 1 FROM ConcertMap WHERE ConcertID = @ConcertID)
+                THROW 58028, 'sp_UpdateConcert: Khong the doi Venue khi Concert da tao ConcertMap (StagePass).', 1;
         END
 
         -- Luu gia tri cu de ghi audit. Artist la quan he 1-n, nen audit phai

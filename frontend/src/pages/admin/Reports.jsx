@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from '../../api/client';
 import { useConcertOptions } from '../../lib/concertOptions';
 import { Panel, Banner, IdPicker, useAction } from '../../components/form';
+import { Button, PageHeader, StatGrid, StatTile } from '../../components/ui';
 import { TICKET_STATUS_LABEL, WAITLIST_STATUS_LABEL } from '../../domain/enums';
 import { formatMoney, formatDateTime } from '../../lib/format';
 
@@ -48,6 +49,7 @@ export default function Reports() {
 
   return (
     <>
+      <PageHeader title="Báo cáo" subtitle="Doanh thu, tồn kho, tỷ lệ check-in và danh sách người giữ vé theo từng Concert." />
       <Panel
         title="Báo cáo Concert"
         tone="workflow"
@@ -56,36 +58,36 @@ export default function Reports() {
         <form onSubmit={load}>
           <IdPicker label="Concert" items={concerts} value={concertId} onChange={setConcertId} />
 
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !concertId}>
-            {act.busy ? 'Đang tải…' : 'Xem báo cáo'}
-          </button>
+          <Button type="submit" variant="primary" loading={act.busy} disabled={!concertId} style={{ marginTop: '16px' }}>
+            Xem báo cáo
+          </Button>
           <Banner state={act.state} />
         </form>
       </Panel>
 
       {summary && (
         <Panel title={`${summary.concertName} — Tóm tắt`} subtitle={`${summary.artistName ?? '—'} · ${summary.venueName ?? '—'}`}>
-          <div className="field-grid">
-            <SummaryStat label="Doanh thu (net)" value={formatMoney(summary.totalRevenue)} />
-            <SummaryStat label="Tổng số ghế" value={summary.totalInventorySeats} />
-            <SummaryStat label="Còn trống" value={summary.availableSeats} />
-            <SummaryStat label="Đã đặt" value={summary.bookedSeats} />
-            <SummaryStat label="Đang giữ" value={summary.onHoldSeats} />
-            <SummaryStat label="Đơn đã xác nhận" value={summary.confirmedBookings} />
-            <SummaryStat label="Đơn đã hủy" value={summary.cancelledBookings} />
-            <SummaryStat label="Đơn hết hạn giữ chỗ" value={summary.expiredBookings} />
-          </div>
+          <StatGrid>
+            <StatTile label="Doanh thu (net)" value={formatMoney(summary.totalRevenue)} tone="accent" />
+            <StatTile label="Tổng số ghế" value={summary.totalInventorySeats} />
+            <StatTile label="Còn trống" value={summary.availableSeats} />
+            <StatTile label="Đã đặt" value={summary.bookedSeats} />
+            <StatTile label="Đang giữ" value={summary.onHoldSeats} />
+            <StatTile label="Đơn đã xác nhận" value={summary.confirmedBookings} />
+            <StatTile label="Đơn đã hủy" value={summary.cancelledBookings} />
+            <StatTile label="Đơn hết hạn giữ chỗ" value={summary.expiredBookings} />
+          </StatGrid>
         </Panel>
       )}
 
       {checkin && (
         <Panel title="Check-in">
-          <div className="field-grid">
-            <SummaryStat label="Vé đã phát hành" value={checkin.totalIssuedTickets} />
-            <SummaryStat label="Đã vào cổng" value={checkin.totalCheckedIn} />
-            <SummaryStat label="Chưa vào cổng" value={checkin.pendingEntry} />
-            <SummaryStat label="Tỷ lệ vào cổng" value={`${checkin.checkInRatePct}%`} />
-          </div>
+          <StatGrid>
+            <StatTile label="Vé đã phát hành" value={checkin.totalIssuedTickets} />
+            <StatTile label="Đã vào cổng" value={checkin.totalCheckedIn} />
+            <StatTile label="Chưa vào cổng" value={checkin.pendingEntry} />
+            <StatTile label="Tỷ lệ vào cổng" value={`${checkin.checkInRatePct}%`} tone="accent" />
+          </StatGrid>
         </Panel>
       )}
 
@@ -94,8 +96,8 @@ export default function Reports() {
           {attendees.length === 0 ? (
             <div className="field-hint">Concert này chưa phát hành vé nào (chưa có đơn được xác nhận).</div>
           ) : (
-            <div className="table-wrap">
-              <table className="data">
+            <div className="scroll-x">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Ghế</th><th>Khu</th><th>Hạng vé</th>
@@ -130,8 +132,8 @@ export default function Reports() {
               Chưa có ai đăng ký danh sách chờ cho Concert này (hoặc Concert chưa bật tính năng này).
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data">
+            <div className="scroll-x">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Vị trí</th><th>Khách</th><th>Hạng vé</th><th>Số ghế muốn</th>
@@ -161,16 +163,5 @@ export default function Reports() {
         </Panel>
       )}
     </>
-  );
-}
-
-function SummaryStat({ label, value }) {
-  return (
-    <div>
-      <div className="overline">{label}</div>
-      <div className="tabular" style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-semibold)' }}>
-        {value}
-      </div>
-    </div>
   );
 }

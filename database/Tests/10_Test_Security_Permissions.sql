@@ -2,7 +2,6 @@
 -- 10_Test_Security_Permissions.sql
 -- Test RBAC permissions theo GrantPermissions.sql thực tế.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

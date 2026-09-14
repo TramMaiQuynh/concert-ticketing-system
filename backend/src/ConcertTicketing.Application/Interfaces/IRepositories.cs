@@ -39,14 +39,17 @@ public interface IConcertRepository
     Task<IEnumerable<SeatDto>> GetSeatsAsync(int concertId);
 
     /// <summary>
-    /// Sơ đồ chỗ ngồi: hình học địa điểm + khu + ghế (FR11a).
-    /// Trả về null khi concert không tồn tại hoặc không còn bán vé.
+    /// Sơ đồ chỗ ngồi: hình học địa điểm + khu + ghế (FR11a). MỘT contract duy nhất cho
+    /// cả venue Zone/Seat cũ và venue StagePass (VenueTemplate/ConcertMapRevision) —
+    /// chọn nguồn theo việc Concert có ConcertMapRevision đang Locked hay không (xem
+    /// implementation). Trả về null khi concert không tồn tại hoặc không còn bán vé.
     /// </summary>
     Task<SeatMapDto?> GetSeatMapAsync(int concertId);
 
     /// <summary>
-    /// Chi tiet ghe cua MOT khu (FR11a — muc hai cua so do).
-    /// Tra null khi concert khong con ban ve hoac khu khong thuoc dia diem cua concert.
+    /// Chi tiet ghe cua MOT khu (FR11a — muc hai cua so do), cung nguon-kep voi
+    /// GetSeatMapAsync. Tra null khi concert khong con ban ve hoac khu khong thuoc dia
+    /// diem cua concert.
     /// </summary>
     Task<SeatMapZoneDetailDto?> GetSeatMapZoneAsync(int concertId, int zoneId);
 
@@ -123,7 +126,6 @@ public interface IAdminRepository
     Task UpdateVenueAsync(int actorUserId, int venueId, UpdateVenueRequest request);
     Task UpdateZoneAsync(int actorUserId, int zoneId, UpdateZoneRequest request);
     Task UpdateSeatAsync(int actorUserId, int seatId, UpdateSeatRequest request);
-    Task ConfigureVenueMapAsync(int actorUserId, int venueId, ConfigureVenueMapRequest request); // sp_ConfigureVenueMap
 
     // Cau hinh Fair Access / Waitlist theo tung Concert (FR64a, BR43, BR45b, BR47b)
     Task ConfigureQueueAsync(int actorUserId, int concertId, ConfigureQueueRequest request);
@@ -138,6 +140,7 @@ public interface IAdminRepository
     Task<int> CreateVenueTemplateAsync(int actorUserId, int venueId, CreateVenueTemplateRequest request);
     Task UpdateVenueTemplateAsync(int actorUserId, int venueTemplateId, UpdateVenueTemplateRequest request);
     Task<IEnumerable<VenueTemplateVersionListItem>> ListVenueTemplateVersionsAsync(int venueTemplateId);
+    Task<IEnumerable<ConcertPublishedTemplateVersionItem>> ListPublishedTemplateVersionsForConcertAsync(int actorUserId, int concertId);
     Task<int> CreateVenueTemplateVersionAsync(int actorUserId, int venueTemplateId, CreateVenueTemplateVersionRequest request);
     Task<VenueTemplateVersionDetail?> GetVenueTemplateVersionDetailAsync(int venueTemplateVersionId);
     Task PublishVenueTemplateVersionAsync(int actorUserId, int venueTemplateVersionId);
@@ -151,11 +154,25 @@ public interface IAdminRepository
     Task<int> ConfigureTemplateSeatAsync(int actorUserId, int templateSectionId, ConfigureTemplateSeatRequest request);
     Task DeleteTemplateSeatAsync(int actorUserId, int templateSeatId);
 
-    Task<ConcertMapDto?> GetConcertMapAsync(int concertId);
+    Task<ConcertMapDto?> GetConcertMapAsync(int actorUserId, int concertId);
     Task<int> CreateConcertMapAsync(int actorUserId, int concertId);
-    Task<IEnumerable<ConcertMapRevisionListItem>> ListConcertMapRevisionsAsync(int concertMapId);
+    Task<IEnumerable<ConcertMapRevisionListItem>> ListConcertMapRevisionsAsync(int actorUserId, int concertMapId);
     Task<int> CreateConcertMapRevisionAsync(int actorUserId, int concertMapId, CreateConcertMapRevisionRequest request);
     Task LockConcertMapRevisionAsync(int actorUserId, int concertMapRevisionId);
+
+    /// <summary>
+    /// Huỷ một ConcertMapRevision đang Draft để mở lại được Draft khác. Không có
+    /// đường này thì một lần snapshot nhầm là ngõ cụt vĩnh viễn trong ứng dụng:
+    /// không huỷ được Draft, không tạo được Draft mới (60217), mà Lock thì không
+    /// thay thế được revision Locked (60236/60219).
+    /// </summary>
+    Task CancelConcertMapRevisionDraftAsync(int actorUserId, int concertMapRevisionId);
+
+    /// <summary>Cây Floor→Section→Seat đầy đủ của một revision — kể cả ghế CHƯA vào kho vé (EventSeatID null), để Admin duyệt trước khi thêm.</summary>
+    Task<ConcertMapRevisionDetail?> GetConcertMapRevisionDetailAsync(int actorUserId, int concertMapRevisionId);
+
+    /// <summary>Cầu nối ConcertMapRevisionSeat ↔ EventSeat (sp_AddEventSeatsFromMapRevision). Trả số ghế đã thêm.</summary>
+    Task<int> AddEventSeatsFromMapRevisionAsync(int actorUserId, int concertMapRevisionId, AddEventSeatsFromMapRevisionRequest request);
 }
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

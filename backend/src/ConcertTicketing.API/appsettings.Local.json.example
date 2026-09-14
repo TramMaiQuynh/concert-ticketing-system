@@ -4,7 +4,9 @@
     "appsettings.Local.json nằm trong .gitignore và KHÔNG BAO GIỜ được commit.",
     "Chuỗi kết nối và mật khẩu SQL do database/deploy.ps1 sinh ra và ghi vào",
     ".deploy/db-credentials.json — chép apiServiceConnection sang đây.",
-    "Hoặc chạy scripts/setup-demo.ps1 để tự động toàn bộ bước này."
+    "Hoặc chạy scripts/setup.ps1: script tự sinh file này đầy đủ (chuỗi kết nối,",
+    "JWT secret, payment signature secret, CORS, AllowedHosts) nên không phải",
+    "chép tay. File mẫu này chỉ dùng khi cấu hình bằng tay."
   ],
   "ConnectionStrings": {
     "Default": "<apiServiceConnection tu .deploy/db-credentials.json>"

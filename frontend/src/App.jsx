@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider, ThemeToggle } from './theme/ThemeProvider';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import { Button } from './components/ui';
-import { IconTicket, IconMenu, IconX, IconLogout } from './components/ui/icons';
+import { IconMenu, IconX, IconLogout } from './components/ui/icons';
 import RequireAuth from './components/RequireAuth';
 import { Role } from './domain/enums';
 import Auth from './pages/Auth';
@@ -49,8 +49,12 @@ function Navbar() {
       <header className="nav">
         <div className="nav__inner">
           <Link to="/" className="nav__brand" aria-label="StagePass — trang chủ">
-            <span className="nav__mark"><IconTicket size={15} /></span>
-            StagePass
+            <img src="/logo.png" alt="" className="nav__logo" />
+            {/* Bọc cả cụm chữ trong MỘT span: .nav__brand là flex có `gap`, nên nếu để
+                "Stage" và <span>Pass</span> là hai node con trực tiếp, gap sẽ chèn
+                khoảng trắng giữa hai chữ y như giữa logo và chữ — làm "Stage Pass"
+                tách rời thay vì dính liền "StagePass". */}
+            <span>Stage<span className="nav__brand-accent">Pass</span></span>
           </Link>
 
           <nav className="nav__links" aria-label="Điều hướng chính">
@@ -72,7 +76,7 @@ function Navbar() {
             <ThemeToggle />
             {isAuthenticated ? (
               <>
-                <span className="nav__user-name text-sm text-secondary">
+                <span className="nav__user-name text-secondary">
                   {user?.displayName ?? `#${user?.userId}`}
                 </span>
                 <Button size="sm" variant="ghost" onClick={handleLogout} aria-label="Đăng xuất" title="Đăng xuất">
@@ -80,7 +84,7 @@ function Navbar() {
                 </Button>
               </>
             ) : (
-              <Button size="sm" variant="primary" onClick={() => navigate('/login')}>
+              <Button size="sm" variant="outline-accent" onClick={() => navigate('/login')}>
                 Đăng nhập
               </Button>
             )}

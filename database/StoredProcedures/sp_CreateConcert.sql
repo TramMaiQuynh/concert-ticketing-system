@@ -106,8 +106,11 @@ BEGIN
         )
             THROW 58004, 'sp_CreateConcert: Artist khong ton tai hoac da ngung su dung.', 1;
 
-        IF NOT EXISTS (SELECT 1 FROM Venue WHERE VenueID = @VenueID)
+        DECLARE @VenueStatusCheck VARCHAR(32) = (SELECT VenueStatus FROM Venue WHERE VenueID = @VenueID);
+        IF @VenueStatusCheck IS NULL
             THROW 58005, 'sp_CreateConcert: Venue khong ton tai.', 1;
+        IF @VenueStatusCheck <> 'Active'
+            THROW 58009, 'sp_CreateConcert: Venue da ngung su dung (Inactive), khong the tao Concert moi tai day.', 1;
 
         -- 3b. DR-01 / BR01: Organizer phai la User dang giu Role 'Organizer' Active
         --     (khong chi can tai khoan Active). RBAC §23.7.

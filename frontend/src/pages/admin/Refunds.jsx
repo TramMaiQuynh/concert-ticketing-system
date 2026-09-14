@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from '../../api/client';
 import { useAdminCatalog } from '../../lib/adminCatalog';
 import { Field, Select, Panel, Banner, IdPicker, useAction } from '../../components/form';
+import { Button, PageHeader } from '../../components/ui';
 import { RefundStatus } from '../../domain/enums';
 
 /**
@@ -30,6 +31,7 @@ import { RefundStatus } from '../../domain/enums';
 export default function Refunds() {
   return (
     <>
+      <PageHeader title="Hoàn tiền" subtitle="Hủy đơn thay khách, xác nhận khoản đã hoàn, hoặc đóng yêu cầu không chi trả." />
       <ProcessRefundSection />
       <ConfirmRefundSection />
       <CloseRefundSection />
@@ -78,9 +80,9 @@ function ProcessRefundSection() {
           không phát sinh khoản hoàn nào.
         </div>
 
-        <button className="btn-danger" style={{ marginTop: '16px' }} disabled={act.busy || !bookingId}>
-          {act.busy ? 'Đang xử lý…' : 'Hủy đơn và tạo yêu cầu hoàn'}
-        </button>
+        <Button type="submit" variant="danger" loading={act.busy} disabled={!bookingId} style={{ marginTop: '16px' }}>
+          Hủy đơn và tạo yêu cầu hoàn
+        </Button>
         <Banner state={act.state} />
       </form>
 
@@ -121,9 +123,9 @@ function ConfirmRefundSection() {
           và không cộng dồn số tiền.
         </div>
 
-        <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy || !refundId}>
-          {act.busy ? 'Đang xác nhận…' : 'Xác nhận đã hoàn tiền'}
-        </button>
+        <Button type="submit" variant="primary" loading={act.busy} disabled={!refundId} style={{ marginTop: '16px' }}>
+          Xác nhận đã hoàn tiền
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>
@@ -191,10 +193,10 @@ function CloseRefundSection() {
           được — tiền đã đi rồi.
         </div>
 
-        <button className="btn-danger" style={{ marginTop: '16px' }}
-                disabled={act.busy || !refundId || !reason.trim()}>
-          {act.busy ? 'Đang xử lý…' : 'Kết thúc yêu cầu'}
-        </button>
+        <Button type="submit" variant="danger" loading={act.busy}
+                disabled={!refundId || !reason.trim()} style={{ marginTop: '16px' }}>
+          Kết thúc yêu cầu
+        </Button>
         <Banner state={act.state} />
       </form>
     </Panel>

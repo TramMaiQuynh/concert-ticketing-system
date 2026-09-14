@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { apiError } from '../api/client';
 import { Button, Card, Alert, Field, Input, Tabs } from '../components/ui';
-import { IconTicket, IconArrowRight, IconEye, IconEyeOff } from '../components/ui/icons';
+import { IconArrowRight, IconEye, IconEyeOff } from '../components/ui/icons';
 
 const EMPTY = { username: '', password: '', email: '', displayName: '' };
 
@@ -64,9 +64,6 @@ export default function Auth() {
   return (
     <div className="container" style={{ maxWidth: 420, paddingTop: 'var(--space-10)' }}>
       <div className="stack gap-2" style={{ alignItems: 'center', marginBottom: 'var(--space-8)' }}>
-        <span className="nav__mark" style={{ width: 40, height: 40, borderRadius: 'var(--radius-lg)' }}>
-          <IconTicket size={20} />
-        </span>
         <h1 style={{ fontSize: 'var(--text-2xl)' }}>
           {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
         </h1>

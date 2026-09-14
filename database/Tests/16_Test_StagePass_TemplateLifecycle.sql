@@ -7,7 +7,6 @@
 -- Dung mock co san: test_admin (Admin), test_cust1 (Customer, dung lam actor
 -- KHONG co quyen), mot Venue, it nhat hai Seat.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -99,14 +98,15 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Publish'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -121,14 +121,15 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG PublishTwice'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -146,14 +147,15 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @srcVtv INT, @fl INT, @sec INT, @newVtv INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG CopyFrom'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@srcVtv OUTPUT;
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@srcVtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -178,14 +180,15 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DeleteDraft'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);
@@ -207,14 +210,15 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn  INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DeletePublished'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     INSERT INTO TemplateFloor (VenueTemplateVersionID, FloorKey, FloorOrder, CanvasWidth, CanvasHeight)
     VALUES (@vtv, ''ground'', 1, 1000, 800);
     SET @fl = SCOPE_IDENTITY();
-    INSERT INTO TemplateSection (TemplateFloorID, SectionKey, GeometryJson)
-    VALUES (@fl, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
+    INSERT INTO TemplateSection (TemplateFloorID, ZoneID, SectionKey, GeometryJson)
+    VALUES (@fl, @zn, ''VIP'', N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'');
     SET @sec = SCOPE_IDENTITY();
     INSERT INTO TemplateSeat (TemplateSectionID, SeatID, SeatKey, RowLabel, SeatNumber)
     VALUES (@sec, @s1, ''S1'', N''A'', 1);

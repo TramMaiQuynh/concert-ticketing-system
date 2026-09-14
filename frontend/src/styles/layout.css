@@ -53,29 +53,38 @@
   width: 100%;
   max-width: var(--container);
   margin-inline: auto;
-  padding-inline: var(--space-5);
+  padding-inline: var(--space-6);
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 @media (max-width: 640px) { .nav__inner { padding-inline: var(--space-4); gap: var(--space-3); } }
 
 .nav__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
+  gap: var(--space-3);
+  font-size: var(--text-lg);
   font-weight: var(--weight-bold);
   letter-spacing: -0.03em;
   color: var(--text);
   flex: none;
 }
-.nav__mark {
-  display: grid; place-items: center;
-  width: 26px; height: 26px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--text-on-accent);
+.nav__logo {
+  display: block;
+  height: 42px;
+  width: auto;
+  flex: none;
+  align-self: center;
+}
+
+/* "Pass" trong wordmark — chỉ tô màu ở theme sáng, khớp sắc đỏ của logo. Ở theme
+   tối giữ nguyên màu chữ mặc định: đỏ đậm #9C231A không đủ tương phản trên nền
+   gần đen, và wordmark không cần đổi màu theo theme để vẫn nhận ra thương hiệu. */
+.nav__brand-accent { color: #9C231A; }
+:root[data-theme='dark'] .nav__brand-accent { color: inherit; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) .nav__brand-accent { color: inherit; }
 }
 
 .nav__links { display: flex; align-items: center; gap: var(--space-1); }
@@ -83,12 +92,14 @@
 .nav__link {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
   transition: color var(--duration-fast) var(--ease),
               background-color var(--duration-fast) var(--ease);
 }
+
+.nav__user-name { font-size: var(--text-md); }
 .nav__link:hover { color: var(--text); background: var(--surface-hover); }
 .nav__link.is-active { color: var(--text); background: var(--surface-active); }
 
@@ -123,8 +134,8 @@
 /* ══ KHU QUẢN TRỊ ══════════════════════════════════════════════════════════ */
 .admin {
   display: grid;
-  grid-template-columns: 226px minmax(0, 1fr);
-  gap: var(--space-8);
+  grid-template-columns: 268px minmax(0, 1fr);
+  gap: var(--space-10);
   align-items: start;
 }
 /* min-width: 0 KHÔNG phải thừa. Mặc định `min-width: auto` của grid item nghĩa là
@@ -136,14 +147,14 @@
   position: sticky;
   top: calc(var(--nav-height) + var(--space-6));
   align-self: start;
-  padding: var(--space-4);
+  padding: var(--space-5);
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xs);
 }
 
-.admin__nav { display: flex; flex-direction: column; gap: var(--space-1); }
+.admin__nav { display: flex; flex-direction: column; gap: var(--space-2); }
 
 /* Dưới 900px, thanh bên thành hàng tab cuộn ngang ở trên cùng. Đây là cách duy
    nhất giữ được cả năm mục mà không nuốt mất nửa màn hình.
@@ -170,9 +181,11 @@
 }
 
 .admin__nav a {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
@@ -183,6 +196,8 @@
               color var(--duration-fast) var(--ease),
               border-color var(--duration-fast) var(--ease);
 }
+.admin__nav a svg { flex: none; margin-top: 3px; opacity: 0.85; }
+.admin__nav a.active svg { opacity: 1; }
 .admin__nav a:hover { background: var(--surface-hover); color: var(--text); }
 .admin__nav a.active {
   background: var(--accent-subtle);
@@ -256,6 +271,7 @@
   letter-spacing: var(--tracking-tight);
 }
 .zone__price {
+  font-family: 'Playfair Display', Georgia, serif;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
@@ -388,6 +404,29 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+/* Thumbnail thu nhỏ của .event-cover — dùng trong danh sách (vé của tôi, đơn
+   hàng): cùng gradient sinh từ ConcertID nên một sự kiện giữ đúng một "màu"
+   xuyên suốt mọi trang, không chỉ riêng trang chủ. */
+.ticket-thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.ticket-thumb__glyph {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: rgba(255, 255, 255, 0.92);
+}
+@media (max-width: 480px) {
+  .ticket-thumb { width: 44px; height: 44px; }
+  .ticket-thumb__glyph { font-size: var(--text-md); }
+}
+
 /* ══ ĐỒNG HỒ ĐẾM NGƯỢC ═════════════════════════════════════════════════════ */
 .countdown {
   display: inline-flex;
@@ -446,6 +485,35 @@
   outline-offset: 2px;
 }
 
+/* Minimap nổi (PannableFloorView, SeatMap.jsx) — chỉ hiện khi đã phóng to/lia
+   ra khỏi khung nhìn gốc. `position: absolute` trong `.seatmap-frame` đang
+   `position: relative` một tầng lên (div bọc ngoài PannableFloorView) — xem
+   `style={{ position: 'relative' }}` ở component. */
+.seatmap-minimap-float {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  width: 150px;
+  height: 110px;
+  padding: var(--space-1);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  z-index: 2;
+}
+@media (max-width: 480px) {
+  .seatmap-minimap-float { width: 110px; height: 82px; }
+}
+
+.seatmap-reset-btn {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 2;
+}
+
 /* Dòng thông tin ghế đang trỏ tới. Chiều cao cố định để sơ đồ không nhảy lên
    nhảy xuống mỗi khi con trỏ rời khỏi một ghế. */
 .seatmap-readout {
@@ -495,11 +563,26 @@
   border-radius: var(--radius-lg);
 }
 
-/* Khu bấm được ở mức tổng quan — cho tín hiệu rê chuột như một nút thật. */
-.seatmap-frame [role='button'] rect {
+/* KHU ở mức tổng quan (.seatmap-zone) đổi nền khi rê chuột — nhìn như một nút
+   thật. `path` cùng hàng với `rect`: section StagePass là đa giác tự do (path),
+   zone kiểu cũ là hình chữ nhật (rect) — cùng một tín hiệu tương tác.
+   LƯU Ý: luật này TỪNG bám vào [role='button'] chung, nên nó khớp luôn cả GHẾ ở
+   mức chi tiết và tô đè màu trạng thái của ghế — rê vào một ghế đã bán thì nó
+   trông y hệt ghế còn trống. Bám vào một lớp riêng của khu để không lặp lại. */
+.seatmap-zone rect,
+.seatmap-zone path {
   transition: fill 160ms var(--ease), stroke 160ms var(--ease);
 }
-.seatmap-frame g[role='button']:hover rect {
+.seatmap-zone:hover rect,
+.seatmap-zone:hover path {
   fill: var(--surface-hover);
   stroke: var(--accent);
+}
+
+/* Ghế: rê chuột chỉ làm ĐẬM VIỀN, không đổi màu nền — màu nền là trạng thái
+   thật của ghế (seatColors), không phải hiệu ứng trang trí. */
+.seatmap-seat:hover circle,
+.seatmap-seat:hover path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }

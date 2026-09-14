@@ -102,6 +102,11 @@ public class CreateConcertValidator : AbstractValidator<CreateConcertRequest>
         RuleForEach(x => x.ArtistIds).GreaterThan(0);
         RuleFor(x => x.VenueId).GreaterThan(0);
         RuleFor(x => x.ConcertName).NotEmpty().MaximumLength(255);
+        // Cùng lớp lỗi đã đo ở CreateZoneValidator: cột Concert.CancellationPolicy /
+        // RefundPolicy là nvarchar(500), repository gửi size: 500, và sp_CreateConcert
+        // không có LEN() — không kiểm ở đây thì chính sách dài bị lưu cụt im lặng.
+        RuleFor(x => x.CancellationPolicy).MaximumLength(500).When(x => x.CancellationPolicy is not null);
+        RuleFor(x => x.RefundPolicy).MaximumLength(500).When(x => x.RefundPolicy is not null);
         RuleFor(x => x.StartDatetime).NotEmpty();
         RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
             .WithMessage("EndDatetime phải sau StartDatetime.");
@@ -122,6 +127,10 @@ public class UpdateConcertValidator : AbstractValidator<UpdateConcertRequest>
     public UpdateConcertValidator()
     {
         RuleFor(x => x.ConcertName).MaximumLength(255).When(x => x.ConcertName is not null);
+        // Xem CreateConcertValidator: sp_UpdateConcert cũng không kiểm LEN() trên hai
+        // cột này, và repository cũng gửi size: 500 — nên đường sửa cũng mất chữ im lặng.
+        RuleFor(x => x.CancellationPolicy).MaximumLength(500).When(x => x.CancellationPolicy is not null);
+        RuleFor(x => x.RefundPolicy).MaximumLength(500).When(x => x.RefundPolicy is not null);
         RuleFor(x => x.EndDatetime).GreaterThan(x => x.StartDatetime)
             .When(x => x.EndDatetime is not null && x.StartDatetime is not null)
             .WithMessage("EndDatetime phải sau StartDatetime.");
@@ -148,36 +157,104 @@ public class UpdateConcertStatusValidator : AbstractValidator<UpdateConcertStatu
     }
 }
 
+// Cùng lớp lỗi đã sửa cho Artist: repository gửi tham số với `size` khớp cột (255/500)
+// và ADO.NET cắt chuỗi vượt `size` mà không báo lỗi. Không kiểm ở đây thì tên hoặc
+// địa chỉ quá dài bị lưu cụt im lặng thay vì trả 400.
 public class CreateVenueValidator : AbstractValidator<CreateVenueRequest>
 {
-    public CreateVenueValidator() =>
+    public CreateVenueValidator()
+    {
         RuleFor(x => x.VenueName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.Address)
+            .MaximumLength(500).When(x => x.Address is not null);
+    }
+}
+
+// Tham số NULL = "giữ nguyên giá trị hiện tại" (COALESCE trong sp_UpdateVenue), nên chỉ
+// kiểm độ dài khi thực sự có giá trị được gửi lên.
+//
+// Trước đây UpdateVenueRequest KHÔNG có validator nào — đường cập nhật không kiểm gì cả,
+// nên tên dài hơn 255 hay địa chỉ dài hơn 500 đi thẳng tới repository rồi bị cắt cụt
+// im lặng. Không kiểm lại VenueStatus: CHECK constraint của bảng và 59403 của
+// sp_UpdateVenue đã thi hành — cùng cách UpdateZoneValidator để tầng dữ liệu lo việc đó.
+public class UpdateVenueValidator : AbstractValidator<UpdateVenueRequest>
+{
+    public UpdateVenueValidator()
+    {
+        RuleFor(x => x.VenueName)
+            .NotEmpty().MaximumLength(255).When(x => x.VenueName is not null);
+        RuleFor(x => x.Address)
+            .MaximumLength(500).When(x => x.Address is not null);
+    }
+}
+
+// Artist là danh mục dùng chung (chỉ Admin, §12.6.1) và trước đây là thực thể danh mục
+// DUY NHẤT không có validator — Venue/Zone/Seat đều đã có.
+//
+// Hệ quả không phải lý thuyết: repository truyền tham số với `size` khớp cột (255/500),
+// mà ADO.NET CẮT chuỗi vượt `size` một cách IM LẶNG (đo thực tế: gửi 300 ký tự với
+// size=255 thì server nhận đúng 255, không có lỗi nào). Không kiểm ở đây thì tên hoặc
+// mô tả dài hơn giới hạn bị lưu cụt và người dùng không biết vì sao.
+//
+// Không kiểm lại ArtistStatus: CHECK constraint của bảng và 59113 của sp_UpdateArtist
+// đã thi hành, giống cách UpdateZoneValidator để tầng dữ liệu lo việc đó.
+public class CreateArtistValidator : AbstractValidator<CreateArtistRequest>
+{
+    public CreateArtistValidator()
+    {
+        RuleFor(x => x.ArtistName).NotEmpty().MaximumLength(255);
+        RuleFor(x => x.ArtistDescription)
+            .MaximumLength(500).When(x => x.ArtistDescription is not null);
+    }
+}
+
+// Tham số NULL = "giữ nguyên giá trị hiện tại" (COALESCE trong sp_UpdateArtist), nên
+// chỉ kiểm độ dài khi thực sự có giá trị được gửi lên.
+public class UpdateArtistValidator : AbstractValidator<UpdateArtistRequest>
+{
+    public UpdateArtistValidator()
+    {
+        RuleFor(x => x.ArtistName)
+            .NotEmpty().MaximumLength(255).When(x => x.ArtistName is not null);
+        RuleFor(x => x.ArtistDescription)
+            .MaximumLength(500).When(x => x.ArtistDescription is not null);
+    }
 }
 
 public class CreateZoneValidator : AbstractValidator<CreateZoneRequest>
 {
+    // ── LỚP LỖI ĐO ĐƯỢC: trường văn bản bị chặn bởi bề rộng cột nhưng KHÔNG được
+    //    chặn ở tầng API ────────────────────────────────────────────────────────
+    // Repository gửi các trường dưới đây bằng tham số có `size` ĐÚNG BẰNG bề rộng
+    // cột (SeatLabel size: 255 cho cột nvarchar(255), ZoneName size: 255, ...).
+    // `size` vừa là kích thước tham số vừa là độ dài bị CẮT trên đường truyền,
+    // nên giá trị quá dài được lưu cụt MÀ KHÔNG sinh lỗi nào. Đo trực tiếp bằng
+    // integration test trên database thật:
+    //     tạo ghế với SeatLabel 300 ký tự -> lưu đúng 255 ký tự, không exception
+    //     sửa ghế với SeatLabel 400 ký tự -> lưu đúng 255 ký tự, không exception
+    //
+    // Vì sao KHÔNG sửa bằng cách thêm LEN() vào stored procedure: lúc SP chạy thì
+    // giá trị đã bị cắt còn 255 ký tự, nên `LEN(@SeatLabel) > 255` KHÔNG BAO GIỜ
+    // đúng — đó sẽ là phép kiểm chỉ để trông có vẻ an toàn. (sp_CreateSeatsBatch
+    // kiểm được LEN vì đường hàng loạt gửi nhãn trong JSON NVARCHAR(MAX), không
+    // đi qua tham số có `size`.) Chốt duy nhất có hiệu lực là tầng API; mỗi con
+    // số dưới đây lấy từ sys.columns, không phải ước lượng.
     public CreateZoneValidator()
     {
         RuleFor(x => x.ZoneCode).NotEmpty().MaximumLength(64);
-        RuleFor(x => x.ZoneType)
-            .Must(type => type is null or "Seated")
-            .WithMessage("ZoneType hiện chỉ hỗ trợ 'Seated'.");
-        RuleFor(x => x.ZoneLevel).GreaterThan(0).When(x => x.ZoneLevel is not null);
-        RuleFor(x => x.ZoneCapacity).Null()
-            .WithMessage("Sức chứa khu được tính từ số ghế, không nhập trực tiếp.");
+        RuleFor(x => x.ZoneName).MaximumLength(255).When(x => x.ZoneName is not null);
     }
 }
 
 public class UpdateZoneValidator : AbstractValidator<UpdateZoneRequest>
 {
+    // Chỉ kiểm ĐỘ DÀI. ZoneStatus (59413), ZoneLevel (59833), hình học (59832) và
+    // hai guard 59415/59416 để nguyên cho sp_UpdateZone quyết định — không lặp lại
+    // luật của tầng dữ liệu ở đây.
     public UpdateZoneValidator()
     {
-        RuleFor(x => x.ZoneType)
-            .Must(type => type is null or "Seated")
-            .WithMessage("ZoneType hiện chỉ hỗ trợ 'Seated'.");
-        RuleFor(x => x.ZoneLevel).GreaterThan(0).When(x => x.ZoneLevel is not null);
-        RuleFor(x => x.ZoneCapacity).Null()
-            .WithMessage("Sức chứa khu được tính từ số ghế, không nhập trực tiếp.");
+        RuleFor(x => x.ZoneName).MaximumLength(255).When(x => x.ZoneName is not null);
+        RuleFor(x => x.ZoneDescription).MaximumLength(500).When(x => x.ZoneDescription is not null);
     }
 }
 
@@ -186,8 +263,24 @@ public class CreateSeatValidator : AbstractValidator<CreateSeatRequest>
     public CreateSeatValidator()
     {
         RuleFor(x => x.SeatCode).NotEmpty().MaximumLength(64);
+        // SeatLabel là trường duy nhất của ghế mà KHÔNG tầng nào kiểm: sp_CreateSeat
+        // không có LEN(), DTO không có DataAnnotation, repository gửi size: 255.
+        RuleFor(x => x.SeatLabel).MaximumLength(255).When(x => x.SeatLabel is not null);
         RuleFor(x => x.SeatRowLabel).NotEmpty().MaximumLength(16);
         RuleFor(x => x.SeatColumnNumber).NotNull().GreaterThan(0);
+    }
+}
+
+// Trước bản sửa này KHÔNG có UpdateSeatValidator, nên PUT /admin/seats/{id}
+// không được kiểm gì ở tầng API. Chỉ thêm luật ĐỘ DÀI cho đúng hai trường mà
+// sp_UpdateSeat bỏ qua; SeatStatus (59423), SeatColumnNumber (59822), ô lưới
+// (59824), vị trí bắt buộc (59825) và 59425/59426 vẫn do SP quyết định.
+public class UpdateSeatValidator : AbstractValidator<UpdateSeatRequest>
+{
+    public UpdateSeatValidator()
+    {
+        RuleFor(x => x.SeatLabel).MaximumLength(255).When(x => x.SeatLabel is not null);
+        RuleFor(x => x.SeatRowLabel).MaximumLength(16).When(x => x.SeatRowLabel is not null);
     }
 }
 
@@ -206,6 +299,9 @@ public class ConfigureTicketCategoryValidator : AbstractValidator<ConfigureTicke
     public ConfigureTicketCategoryValidator()
     {
         RuleFor(x => x.CategoryName).NotEmpty().MaximumLength(255);
+        // Xem CreateZoneValidator: TicketCategory.CategoryDescription là nvarchar(500),
+        // repository gửi size: 500, sp_ConfigureTicketCategory không kiểm LEN().
+        RuleFor(x => x.CategoryDescription).MaximumLength(500).When(x => x.CategoryDescription is not null);
         // BasePrice là nguồn sự thật của giá vé (BR10a), cascade xuống EventSeat.SalePrice.
         RuleFor(x => x.BasePrice).GreaterThanOrEqualTo(0);
     }
@@ -240,6 +336,9 @@ public class CreatePromotionValidator : AbstractValidator<CreatePromotionRequest
     public CreatePromotionValidator()
     {
         RuleFor(x => x.PromotionName).NotEmpty().MaximumLength(255);
+        // Xem CreateZoneValidator: Promotion.PromotionDescription là nvarchar(500),
+        // repository gửi size: 500, sp_CreatePromotion không kiểm LEN().
+        RuleFor(x => x.PromotionDescription).MaximumLength(500).When(x => x.PromotionDescription is not null);
         // Miền giá trị CHÍNH THỨC là 'Percentage' và 'Fixed Amount' — đúng theo
         // CHK_Promotion_DiscountType của bảng Promotion và §12.16.1.
         //
@@ -326,5 +425,82 @@ public class AddCheckinStaffAssignmentValidator : AbstractValidator<AddCheckinSt
             .Must(ids => ids.Distinct().Count() == ids.Count)
             .WithMessage("Danh sách Concert không được trùng.");
         RuleForEach(x => x.ConcertIds).GreaterThan(0);
+    }
+}
+
+// ══ StagePass (Mẫu sơ đồ) — CHỈ kiểm ĐỘ DÀI ═══════════════════════════════════
+//
+// Vì sao chỉ độ dài: cả 6 SP StagePass (sp_CreateVenueTemplate, sp_UpdateVenueTemplate,
+// sp_ConfigureTemplateFloor/Object/Section/Seat) ĐỀU KHÔNG kiểm độ dài — đã quét toàn
+// bộ file xác nhận, không file nào có LEN()/DATALENGTH. Ràng buộc thật nằm ở KIỂU CỘT,
+// mà tầng ADO lại CẮT theo `size` khai trong repository TRƯỚC khi gửi đi.
+//
+// Đo bằng integration test thật (không suy luận): gửi FloorKey 100 ký tự vào cột
+// varchar(64) thì DB nhận ĐÚNG 64 ký tự và KHÔNG có lỗi nào — người dùng gõ dài bị mất
+// chữ mà không được báo. Kiểm ở đây trả 400 trước khi dữ liệu kịp bị cắt.
+//
+// Các con số 64/255/32/16 lấy ĐÚNG bằng độ rộng cột trong database, đo bằng sys.columns
+// (varchar tính theo byte, nvarchar chia hai), không phải con số ước lượng:
+//   VenueTemplate.TemplateName  nvarchar(255)
+//   TemplateFloor.FloorKey      varchar(64)   FloorName   nvarchar(255)
+//   TemplateObject.ObjectType   varchar(32)   Label       nvarchar(255)
+//   TemplateSection.SectionKey  varchar(64)   SectionName nvarchar(255)
+//   TemplateSeat.SeatKey        varchar(64)   RowLabel    nvarchar(16)
+//
+// Kiểm luôn cho nhất quán với Artist/Venue: repository khai `size` KHỚP cột ở cả 79 chỗ
+// (đã audit toàn bộ backend: không chỗ nào khai size LỚN HƠN tham số SP, nên không có
+// nguy cơ lỗi 8152 "String or binary data would be truncated" — mà middleware cũng không
+// map 8152, nó sẽ thành HTTP 500).
+//
+// KHÔNG kiểm lại tính hợp lệ/rỗng/trùng: sp_UpdateVenueTemplate đã kiểm TemplateStatus
+// (60007), các SP còn lại đã kiểm rỗng (60044…), trùng (60047/60055/60064…), giới hạn
+// hình học — cùng cách UpdateZoneValidator để tầng dữ liệu lo việc của nó.
+// GeometryJson là NVARCHAR(MAX) nên không cần giới hạn.
+public class CreateVenueTemplateValidator : AbstractValidator<CreateVenueTemplateRequest>
+{
+    public CreateVenueTemplateValidator() => RuleFor(x => x.TemplateName).MaximumLength(255);
+}
+
+// Tham số NULL = "giữ nguyên giá trị hiện tại" (COALESCE trong sp_UpdateVenueTemplate),
+// nên chỉ kiểm khi thực sự có giá trị được gửi lên.
+public class UpdateVenueTemplateValidator : AbstractValidator<UpdateVenueTemplateRequest>
+{
+    public UpdateVenueTemplateValidator() =>
+        RuleFor(x => x.TemplateName).MaximumLength(255).When(x => x.TemplateName is not null);
+}
+
+public class ConfigureTemplateFloorValidator : AbstractValidator<ConfigureTemplateFloorRequest>
+{
+    public ConfigureTemplateFloorValidator()
+    {
+        RuleFor(x => x.FloorKey).MaximumLength(64);
+        RuleFor(x => x.FloorName).MaximumLength(255).When(x => x.FloorName is not null);
+    }
+}
+
+public class ConfigureTemplateObjectValidator : AbstractValidator<ConfigureTemplateObjectRequest>
+{
+    public ConfigureTemplateObjectValidator()
+    {
+        RuleFor(x => x.ObjectType).MaximumLength(32);
+        RuleFor(x => x.Label).MaximumLength(255).When(x => x.Label is not null);
+    }
+}
+
+public class ConfigureTemplateSectionValidator : AbstractValidator<ConfigureTemplateSectionRequest>
+{
+    public ConfigureTemplateSectionValidator()
+    {
+        RuleFor(x => x.SectionKey).MaximumLength(64);
+        RuleFor(x => x.SectionName).MaximumLength(255).When(x => x.SectionName is not null);
+    }
+}
+
+public class ConfigureTemplateSeatValidator : AbstractValidator<ConfigureTemplateSeatRequest>
+{
+    public ConfigureTemplateSeatValidator()
+    {
+        RuleFor(x => x.SeatKey).MaximumLength(64);
+        RuleFor(x => x.RowLabel).MaximumLength(16).When(x => x.RowLabel is not null);
     }
 }

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useCallback, useState, useId, isValidElement, cloneElement } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconAlert, IconInfo, IconX, IconInbox } from './icons';
+import {
+  IconCheck, IconAlert, IconInfo, IconX, IconInbox,
+  IconPlus, IconPencil, IconClock, IconLayers,
+} from './icons';
 
 /**
  * Primitive giao diện.
@@ -13,17 +16,22 @@ import { IconCheck, IconAlert, IconInfo, IconX, IconInbox } from './icons';
 /* ══ NÚT ═══════════════════════════════════════════════════════════════════ */
 
 /**
- * @param {'primary'|'secondary'|'ghost'|'danger'|'danger-quiet'} variant
+ * @param {'primary'|'secondary'|'ghost'|'danger'|'danger-quiet'|'outline-accent'} variant
  * @param {'sm'|'md'|'lg'} size
  * @param {boolean} loading  khoá nút và hiện vòng xoay, GIỮ NGUYÊN bề rộng
+ * @param {'button'|'submit'} type  mặc định 'button' — CHỈ đặt 'submit' khi nút
+ *   này thật sự là nút gửi của một <form>. Nút gửi mặc định của HTML là type
+ *   'submit'; nếu form dựa vào bấm nút hoặc bấm Enter để gọi onSubmit, nút PHẢI
+ *   khai báo type="submit" tường minh — để mặc định 'button' ở đây sẽ làm form
+ *   không gửi được gì cả, một cách im lặng, không có lỗi nào cho biết.
  */
 export function Button({
-  variant = 'secondary', size = 'md', loading = false, block = false,
+  variant = 'secondary', size = 'md', loading = false, block = false, type = 'button',
   icon, iconEnd, children, className = '', disabled, ...rest
 }) {
   return (
     <button
-      type="button"
+      type={type}
       className={[
         'btn', `btn--${variant}`,
         size !== 'md' && `btn--${size}`,
@@ -127,7 +135,7 @@ export function Textarea({ className = '', ...rest }) {
  * giá trị gửi lên máy chủ luôn là chuỗi thô, không bao giờ là nhãn.
  */
 export function Select({
-  value, onChange, options, labels, allowEmpty, emptyLabel = '— giữ nguyên —',
+  value, onChange, options, labels, allowEmpty, emptyLabel = 'Giữ nguyên',
   className = '', ...rest
 }) {
   return (
@@ -174,14 +182,31 @@ const PANEL_CONTEXT = {
   attention: 'Cần xác nhận',
 };
 
+/* Icon đi kèm ngữ cảnh — cùng một bộ nhãn dùng xuyên suốt hơn 30 panel của khu
+   quản trị, nên chỉ cần map ở một chỗ DUY NHẤT này là mọi panel cùng loại nghiệp
+   vụ tự động đồng bộ, không phải sửa từng trang. */
+const PANEL_ICON = {
+  create: IconPlus,
+  edit: IconPencil,
+  workflow: IconClock,
+  inventory: IconLayers,
+  attention: IconAlert,
+};
+
 export function Panel({ title, subtitle, aside, children, footer, tone = 'default' }) {
   const context = PANEL_CONTEXT[tone];
+  const ContextIcon = PANEL_ICON[tone];
   return (
     <section className={`card card--panel card--panel--${tone}`}>
       {(title || aside) && (
         <header className="card__header panel__header">
           <div className="grow">
-            {context && <div className="panel__context">{context}</div>}
+            {context && (
+              <div className="panel__context">
+                {ContextIcon && <ContextIcon size={12} />}
+                {context}
+              </div>
+            )}
             {title && <h3>{title}</h3>}
             {subtitle && <p className="panel__subtitle">{subtitle}</p>}
           </div>
@@ -191,6 +216,25 @@ export function Panel({ title, subtitle, aside, children, footer, tone = 'defaul
       <div className="card__body">{children}</div>
       {footer && <div className="card__footer">{footer}</div>}
     </section>
+  );
+}
+
+/**
+ * Ô số liệu thống kê — thay cho việc nhét trực tiếp cặp "nhãn: giá trị" vào
+ * field-grid (vốn được thiết kế cho biểu mẫu, không phải cho số liệu đọc nhanh).
+ * Con số dùng Playfair Display + tabular nums, cùng quy ước với `.price` — một
+ * bảng tóm tắt doanh thu/tồn kho xứng đáng cùng mức chăm chút như giá vé.
+ */
+export function StatGrid({ children }) {
+  return <div className="stat-grid">{children}</div>;
+}
+
+export function StatTile({ label, value, tone }) {
+  return (
+    <div className="stat-tile">
+      <div className="stat-tile__label">{label}</div>
+      <div className={`stat-tile__value${tone ? ` stat-tile__value--${tone}` : ''}`}>{value}</div>
+    </div>
   );
 }
 

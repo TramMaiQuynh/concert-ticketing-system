@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api, { apiError } from '../api/client';
 import { BookingStatus, BOOKING_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '../domain/enums';
-import { BOOKING_TONE, PAYMENT_TONE } from '../domain/tone';
+import { BOOKING_TONE, PAYMENT_TONE, coverGradient } from '../domain/tone';
 import { formatMoney, formatDateTime, bookingReference } from '../lib/format';
 import {
   Badge, Button, Card, Alert, Skeleton, EmptyState, PageHeader, ConfirmDialog, Input,
@@ -88,8 +88,11 @@ export default function MyBookings() {
         <div className="stack gap-4">
           {Array.from({ length: 3 }, (_, i) => (
             <Card key={i}><div className="card__body row gap-4" style={{ justifyContent: 'space-between' }}>
-              <div className="stack gap-2 grow">
-                <Skeleton w="45%" h={18} /><Skeleton w="30%" h={13} /><Skeleton w={90} h={22} />
+              <div className="row gap-4 grow">
+                <Skeleton w={56} h={56} r="var(--radius-lg)" />
+                <div className="stack gap-2 grow">
+                  <Skeleton w="45%" h={18} /><Skeleton w="30%" h={13} /><Skeleton w={90} h={22} />
+                </div>
               </div>
               <Skeleton w={120} h={38} r="var(--radius-md)" />
             </div></Card>
@@ -148,9 +151,24 @@ export default function MyBookings() {
   );
 }
 
+/* Dải màu bên trái mỗi đơn — tín hiệu quét nhanh trạng thái mà không cần đọc
+   chữ, bổ sung cho badge chứ không thay thế (chữ vẫn là nguồn thông tin chính,
+   xem lý do ở Badge trong components/ui). Tách khỏi coverGradient của thumbnail:
+   thumbnail mang danh tính sự kiện, dải này mang trạng thái đơn hàng — hai tín
+   hiệu khác nhau nên không dùng chung một màu. */
+const STATUS_STRIPE = {
+  green: 'var(--green-solid)',
+  amber: 'var(--amber-solid)',
+  red: 'var(--red-solid)',
+  blue: 'var(--blue-solid)',
+  violet: 'var(--violet-solid)',
+  neutral: 'var(--border-strong)',
+};
+
 function BookingRow({ booking: b, onCancel }) {
   const canCancel = b.bookingStatus === BookingStatus.Confirmed;
   const isPending = b.bookingStatus === BookingStatus.Pending;
+  const stripeColor = STATUS_STRIPE[BOOKING_TONE[b.bookingStatus]] ?? STATUS_STRIPE.neutral;
 
   // Chỉ hiện huy hiệu thanh toán phụ khi Booking đã Cancelled: đây là chỗ DUY
   // NHẤT PaymentStatus mang thông tin mà BookingStatus không nói được — "đã
@@ -162,28 +180,33 @@ function BookingRow({ booking: b, onCancel }) {
   const showPaymentBadge = b.bookingStatus === BookingStatus.Cancelled && b.paymentStatus;
 
   return (
-    <Card>
+    <Card style={{ borderLeft: `3px solid ${stripeColor}` }}>
       <div className="card__body row wrap gap-4" style={{ justifyContent: 'space-between' }}>
-        <div className="grow stack gap-2" style={{ minWidth: 200 }}>
-          <div className="row wrap gap-2">
-            <Badge tone={BOOKING_TONE[b.bookingStatus] ?? 'neutral'}>
-              {BOOKING_STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
-            </Badge>
-            {showPaymentBadge && (
-              <Badge tone={PAYMENT_TONE[b.paymentStatus] ?? 'neutral'}>
-                {PAYMENT_STATUS_LABEL[b.paymentStatus] ?? b.paymentStatus}
-              </Badge>
-            )}
-            <span className="pill tabular">{bookingReference(b.bookingID)}</span>
+        <div className="row gap-4" style={{ flex: '1 1 320px', minWidth: 200 }}>
+          <div className="ticket-thumb" style={{ background: coverGradient(b.concertID) }} aria-hidden>
+            <span className="ticket-thumb__glyph">{(b.concertName ?? '?').charAt(0).toUpperCase()}</span>
           </div>
-          <h3>{b.concertName}</h3>
-          <div className="text-sm text-secondary">
-            Đặt lúc {formatDateTime(b.createdTimestamp)} · {b.seatCount} ghế
+          <div className="grow stack gap-2">
+            <div className="row wrap gap-2">
+              <Badge tone={BOOKING_TONE[b.bookingStatus] ?? 'neutral'}>
+                {BOOKING_STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
+              </Badge>
+              {showPaymentBadge && (
+                <Badge tone={PAYMENT_TONE[b.paymentStatus] ?? 'neutral'}>
+                  {PAYMENT_STATUS_LABEL[b.paymentStatus] ?? b.paymentStatus}
+                </Badge>
+              )}
+              <span className="pill tabular">{bookingReference(b.bookingID)}</span>
+            </div>
+            <h3>{b.concertName}</h3>
+            <div className="text-sm text-secondary">
+              Đặt lúc {formatDateTime(b.createdTimestamp)} · {b.seatCount} ghế
+            </div>
           </div>
         </div>
 
         <div className="stack gap-3" style={{ alignItems: 'flex-end' }}>
-          <div className="tabular" style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)' }}>
+          <div className="price" style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)' }}>
             {formatMoney(b.finalAmount)}
           </div>
           <div className="row wrap gap-2" style={{ justifyContent: 'flex-end' }}>

@@ -1,8 +1,13 @@
 ﻿<#
 .SYNOPSIS
-    Cài đặt toàn bộ hệ thống cho buổi demo, từ đầu đến khi chạy được — một lệnh.
+    Cài đặt hệ thống từ đầu đến khi chạy được — một lệnh.
 
 .DESCRIPTION
+    Deploy database TRỐNG: chỉ có 4 Role, tài khoản 'system' (cho tiến trình tự
+    động) và 4 khoá SystemConfiguration. KHÔNG có venue, concert hay tài khoản
+    nghiệp vụ nào. Tài khoản Admin đầu tiên do scripts/bootstrap-admin.ps1 tạo,
+    sau khi backend đã chạy.
+
     Trình tự:
       1. Kiểm tra công cụ bắt buộc (sqlcmd, dotnet, npm).
       2. Deploy database sạch; deploy.ps1 SINH mật khẩu ngẫu nhiên cho 5 SQL login
@@ -16,13 +21,20 @@
 
 .PARAMETER SkipDatabase
     Bỏ qua bước deploy database (dùng khi chỉ muốn sinh lại cấu hình).
+
+.PARAMETER ResetDatabase
+    XOÁ HOÀN TOÀN database hiện có rồi tạo lại từ đầu. Mọi dữ liệu đang có sẽ
+    mất. Mặc định là $false: script chỉ deploy lên database TRỐNG, và nếu
+    database đã có lược đồ thì deploy.ps1 sẽ dừng lại với thông báo rõ ràng
+    thay vì âm thầm xoá dữ liệu.
 #>
 param(
     [string]$ServerInstance = ".\SQLEXPRESS",
     [string]$DatabaseName   = "ConcertTicketingDB",
     [string]$ApiUrl         = "http://localhost:5295",
     [string]$FrontendUrl    = "http://localhost:5173",
-    [switch]$SkipDatabase
+    [switch]$SkipDatabase,
+    [switch]$ResetDatabase
 )
 
 Set-StrictMode -Version Latest
@@ -72,13 +84,24 @@ if ($SkipDatabase) {
         throw "Bo qua database nhung khong tim thay .deploy/db-credentials.json. Chay lai khong kem -SkipDatabase."
     }
 } else {
-    Write-Phase "2/5  DEPLOY DATABASE (sach)"
+    Write-Phase "2/5  DEPLOY DATABASE"
     Push-Location $DbDir
     try {
-        & .\deploy.ps1 -ServerInstance $ServerInstance -DatabaseName $DatabaseName -DropExisting $true | Out-Null
+        # -ResetDatabase quyết định deploy.ps1 có được XOÁ database hiện có hay không.
+        # Trước đây chỗ này luôn truyền -DropExisting $true, nên chỉ cần gõ
+        # .\scripts\setup.ps1 là toàn bộ dữ liệu đang có bị xoá mà không có bước
+        # xác nhận nào — đúng cho máy demo, sai hoàn toàn cho môi trường thật.
+        # Mặc định bây giờ: chỉ deploy lên database TRỐNG. Nếu database đã có
+        # lược đồ, deploy.ps1 tự dừng và in ra hai lựa chọn (xoá sạch, hoặc đổi
+        # tên database) thay vì phá dữ liệu.
+        if ($ResetDatabase) {
+            Write-Host "  ResetDatabase = true -> XOA database hien co va tao lai tu dau." -ForegroundColor Yellow
+        }
+        & .\deploy.ps1 -ServerInstance $ServerInstance -DatabaseName $DatabaseName `
+            -DropExisting $ResetDatabase.IsPresent | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "deploy.ps1 that bai." }
     } finally { Pop-Location }
-    Write-Host "  Database da deploy sach." -ForegroundColor Green
+    Write-Host "  Database da deploy." -ForegroundColor Green
 }
 
 $creds = Get-Content (Join-Path $DeployDir "db-credentials.json") -Raw | ConvertFrom-Json
@@ -142,7 +165,14 @@ try {
         Write-Host "  Cai dat phu thuoc frontend..." -ForegroundColor DarkGray
         & npm install --silent | Out-Null
     }
-    & npm run build 2>&1 | Out-Null
+    # KHONG duoc "2>&1 | Out-Null": voi $ErrorActionPreference = "Stop", PowerShell 5.1
+    # boc MOI dong stderr cua tien trinh native thanh mot NativeCommandError va DUNG
+    # LUON script — ke ca khi tien trinh do thoat voi exit code 0. Vite ghi canh bao
+    # "chunk lon hon 500kB" ra stderr dù build THANH CONG, nen dong nay tung khien
+    # script "cham" tai day va khong bao gio in duoc banner "CAI DAT HOAN TAT", du
+    # database/backend/frontend deu da deploy/build xong xuoi. Khong redirect stderr:
+    # de no in thang ra console (nguoi chay van thay), roi tu kiem tra $LASTEXITCODE.
+    & npm run build | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Build frontend that bai." }
     Write-Host "  Frontend [OK]" -ForegroundColor Green
 } finally { Pop-Location }
@@ -188,7 +218,7 @@ Write-Host "  Sau khi backend chay, bootstrap tai khoan admin:"
 Write-Host "                   .\scripts\bootstrap-admin.ps1" -ForegroundColor White
 Write-Host ""
 Write-Host "  Database dang TRONG (chi co tai khoan 'system' va 4 Role)."
-Write-Host "  Moi du lieu nghiep vu duoc tao bang tay tren giao dien - xem README-DEMO.md."
+Write-Host "  Moi du lieu nghiep vu duoc tao bang tay tren giao dien."
 Write-Host ""
 Write-Host "  Giao dien: $FrontendUrl"
 Write-Host ""

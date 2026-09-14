@@ -116,9 +116,22 @@ BEGIN
         END
         ELSE
         BEGIN
-            -- Luong binh thuong
+            -- Luong binh thuong. TRY_CONVERT thay vi CAST tho, cung ly do da sua o
+            -- sp_AddEventSeats.sql — API that (CreateBookingValidator, List<int>)
+            -- da chan gia tri khong phai so truoc khi toi day, nhung SP van la
+            -- be mat cong khai (goi truc tiep qua sqlcmd/cong cu quan tri khong
+            -- di qua validator do), nen van can tra loi nghiep vu ro rang.
+            IF EXISTS (
+                SELECT 1 FROM STRING_SPLIT(@SeatList, ',')
+                WHERE LTRIM(RTRIM(value)) <> '' AND TRY_CONVERT(INT, value) IS NULL
+            )
+            BEGIN
+                ROLLBACK TRANSACTION;
+                THROW 51008, 'sp_CreateBooking: Danh sach EventSeat chua gia tri khong phai so nguyen.', 1;
+            END
+
             INSERT INTO #SeatRequests (EventSeatID)
-            SELECT CAST(value AS INT)
+            SELECT TRY_CONVERT(INT, value)
             FROM   STRING_SPLIT(@SeatList, ',')
             WHERE  LTRIM(RTRIM(value)) <> '';
         END

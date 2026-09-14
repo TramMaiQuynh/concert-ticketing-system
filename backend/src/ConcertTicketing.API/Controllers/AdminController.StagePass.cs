@@ -16,6 +16,7 @@ public partial class AdminController
     // ── VenueTemplate ────────────────────────────────────────────────────────
 
     [HttpGet("venues/{venueId:int}/templates")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<VenueTemplateListItem>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListVenueTemplates(int venueId, [FromQuery] bool includeArchived = false)
         => Ok(await _admin.ListVenueTemplatesAsync(venueId, includeArchived));
@@ -39,9 +40,16 @@ public partial class AdminController
     // ── VenueTemplateVersion ─────────────────────────────────────────────────
 
     [HttpGet("templates/{templateId:int}/versions")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<VenueTemplateVersionListItem>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListVenueTemplateVersions(int templateId)
         => Ok(await _admin.ListVenueTemplateVersionsAsync(templateId));
+
+    /// <summary>Published versions for the selected concert's venue, scoped to its owner or an Admin.</summary>
+    [HttpGet("concerts/{concertId:int}/published-template-versions")]
+    [ProducesResponseType(typeof(IEnumerable<ConcertPublishedTemplateVersionItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListPublishedTemplateVersionsForConcert(int concertId)
+        => Ok(await _admin.ListPublishedTemplateVersionsForConcertAsync(GetActorUserId(), concertId));
 
     [HttpPost("templates/{templateId:int}/versions")]
     [Authorize(Roles = "Admin")]
@@ -53,6 +61,7 @@ public partial class AdminController
 
     /// <summary>Cây hình học đầy đủ (Floor → Object/Section → Seat) của một version — nền cho Studio editor.</summary>
     [HttpGet("template-versions/{versionId:int}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(VenueTemplateVersionDetail), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetVenueTemplateVersion(int versionId)
@@ -202,7 +211,7 @@ public partial class AdminController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetConcertMap(int concertId)
     {
-        var map = await _admin.GetConcertMapAsync(concertId);
+        var map = await _admin.GetConcertMapAsync(GetActorUserId(), concertId);
         return map is null ? NotFound() : Ok(map);
     }
 
@@ -216,7 +225,7 @@ public partial class AdminController
     [HttpGet("concert-maps/{mapId:int}/revisions")]
     [ProducesResponseType(typeof(IEnumerable<ConcertMapRevisionListItem>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListConcertMapRevisions(int mapId)
-        => Ok(await _admin.ListConcertMapRevisionsAsync(mapId));
+        => Ok(await _admin.ListConcertMapRevisionsAsync(GetActorUserId(), mapId));
 
     [HttpPost("concert-maps/{mapId:int}/revisions")]
     public async Task<IActionResult> CreateConcertMapRevision(int mapId, [FromBody] CreateConcertMapRevisionRequest request)
@@ -230,5 +239,40 @@ public partial class AdminController
     {
         await _admin.LockConcertMapRevisionAsync(GetActorUserId(), revisionId);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Huỷ một Draft revision để mở lại Draft khác. Xoá hẳn (không đánh dấu trạng
+    /// thái): Draft chưa từng công bố cho ai, và chỉ Revision Locked mới được gắn
+    /// EventSeat — nên một Draft luôn sạch, không ai tham chiếu. Xem
+    /// sp_CancelConcertMapRevisionDraft.sql.
+    /// </summary>
+    [HttpDelete("concert-map-revisions/{revisionId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelConcertMapRevisionDraft(int revisionId)
+    {
+        await _admin.CancelConcertMapRevisionDraftAsync(GetActorUserId(), revisionId);
+        return NoContent();
+    }
+
+    /// <summary>Cây Floor→Section→Seat đầy đủ của một revision (kể cả ghế chưa vào kho vé) — nền cho bước "đưa ghế vào kho vé".</summary>
+    [HttpGet("concert-map-revisions/{revisionId:int}")]
+    [ProducesResponseType(typeof(ConcertMapRevisionDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConcertMapRevision(int revisionId)
+    {
+        var detail = await _admin.GetConcertMapRevisionDetailAsync(GetActorUserId(), revisionId);
+        return detail is null ? NotFound() : Ok(detail);
+    }
+
+    /// <summary>Cầu nối ConcertMapRevisionSeat ↔ EventSeat: đưa ghế đã chọn của một revision Locked vào kho vé bán.</summary>
+    [HttpPost("concert-map-revisions/{revisionId:int}/event-seats")]
+    public async Task<IActionResult> AddEventSeatsFromMapRevision(int revisionId, [FromBody] AddEventSeatsFromMapRevisionRequest request)
+    {
+        var count = await _admin.AddEventSeatsFromMapRevisionAsync(GetActorUserId(), revisionId, request);
+        return Ok(new { count });
     }
 }

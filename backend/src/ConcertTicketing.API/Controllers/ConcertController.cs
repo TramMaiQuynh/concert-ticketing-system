@@ -58,17 +58,28 @@ public class ConcertController : ControllerBase
     }
 
     /// <summary>
-    /// Sơ đồ chỗ ngồi của concert (FR11a).
+    /// Sơ đồ chỗ ngồi của concert (FR11a) — chỉ đọc từ revision StagePass đã Locked
+    /// (docs/stagepass-architecture.md D.3/D.6; xem <c>ConcertRepository.GetSeatMapAsync</c>).
     ///
-    /// Khác <c>/seats</c> ở chỗ đây là một TÀI LIỆU HÌNH HỌC lồng nhau — địa điểm,
-    /// khu, ghế — chứ không phải danh sách phẳng. Nó cho phép giao diện vẽ được vị
-    /// trí thật của chỗ ngồi so với sân khấu, thay vì chỉ liệt kê mã ghế.
+    /// KHÔNG có đường dự phòng đọc từ Zone/Seat cũ. Khi concert chưa có revision
+    /// Locked, <c>GetSeatMapAsync</c> trả null và endpoint này trả 404; giao diện khách
+    /// hiển thị "sơ đồ ghế đang được hoàn thiện". Đó là chủ ý, không phải thiếu sót:
+    /// một đường dự phòng sẽ phơi ra kho vé nằm ngoài sơ đồ mà ban tổ chức đã khoá cho
+    /// concert này.
+    ///
+    /// Hệ quả vận hành (dễ hiểu nhầm): tạo Zone/Seat và nạp EventSeat theo đường cũ
+    /// KHÔNG đủ để bán vé — khách không chọn được ghế nào nếu thiếu revision Locked.
+    /// Xem docs/admin-guide.md, mục 3 và 6.4.
+    ///
+    /// Khác <c>/seats</c> ở chỗ đây là một TÀI LIỆU HÌNH HỌC lồng nhau — tầng, khu,
+    /// ghế — chứ không phải danh sách phẳng. Nó cho phép giao diện vẽ được vị trí
+    /// thật của chỗ ngồi so với sân khấu, thay vì chỉ liệt kê mã ghế.
     ///
     /// Ẩn danh gọi được: khách phải xem được chỗ ngồi trước khi quyết định đăng nhập.
     /// </summary>
     [HttpGet("{id:int}/seatmap")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SeatMapDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeatMap(int id)
     {
@@ -77,7 +88,8 @@ public class ConcertController : ControllerBase
     }
 
     /// <summary>
-    /// Muc hai cua so do: ghe ben trong MOT khu (FR11a).
+    /// Muc hai cua so do: ghe ben trong MOT khu/section (FR11a), cung nguon-kep voi
+    /// GetSeatMap o tren.
     ///
     /// Chi tai khi nguoi dung bam vao khu do. Do la ly do endpoint tong quan
     /// khong mang ghe: 234 byte moi ghe nghia la mot arena 20.000 cho se tra ve
@@ -85,7 +97,7 @@ public class ConcertController : ControllerBase
     /// </summary>
     [HttpGet("{id:int}/seatmap/zones/{zoneId:int}")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SeatMapZoneDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSeatMapZone(int id, int zoneId)
     {

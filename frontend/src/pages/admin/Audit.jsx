@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from '../../api/client';
 import { Field, Select, Panel, Banner, useAction } from '../../components/form';
+import { Button, PageHeader } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 
 /**
@@ -59,6 +60,7 @@ export default function Audit() {
 
   return (
     <>
+    <PageHeader title="Nhật ký kiểm toán" subtitle="Tra cứu lịch sử thay đổi nghiệp vụ (FR59)." />
     <Panel
       title="Tra cứu nhật ký kiểm toán"
       tone="workflow"
@@ -87,9 +89,9 @@ export default function Audit() {
             </Field>
           </div>
 
-          <button className="btn-primary" style={{ marginTop: '16px' }} disabled={act.busy}>
-            {act.busy ? 'Đang tra cứu…' : 'Tra cứu'}
-          </button>
+          <Button type="submit" variant="primary" loading={act.busy} style={{ marginTop: '16px' }}>
+            Tra cứu
+          </Button>
           <Banner state={act.state} />
         </form>
       </Panel>
@@ -106,8 +108,8 @@ export default function Audit() {
                 Máy chủ giới hạn tối đa 500 bản ghi mỗi lần tra cứu — hãy thu hẹp
                 khoảng thời gian nếu cần xem xa hơn.
               </div>
-              <div className="table-wrap">
-                <table className="data">
+              <div className="scroll-x">
+                <table className="table">
                   <thead>
                     <tr>
                       <th>Thời điểm</th><th>Sự kiện</th><th>Đối tượng</th>

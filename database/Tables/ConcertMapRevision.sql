@@ -12,10 +12,11 @@
 --
 -- Draft: đang cấu hình ticket category/inventory, sửa được (nhưng KHÔNG sửa
 --        hình học — hình học đã bất biến từ lúc snapshot).
--- Locked: đã OnSale, là revision DUY NHẤT được API public đọc để bán.
--- Replaced: revision cũ, không còn Locked (chỉ xảy ra khi tạo revision kế tiếp
---        cho cùng Concert — trường hợp hiếm, cần audit riêng, xem
---        docs/stagepass-architecture.md §4.3).
+-- Locked: đã OnSale, là revision DUY NHẤT được API public đọc để bán, và là
+--        VĨNH VIỄN cho ConcertMap này — sp_LockConcertMapRevision từ chối Lock
+--        một revision khác một khi đã có Locked, và sp_CreateConcertMapRevision
+--        từ chối tạo Draft mới nếu Map đã có Locked. Không có đường "thay revision
+--        Locked": EventSeat/Booking/Ticket có thể đã tham chiếu ghế của nó.
 -- ============================================================
 CREATE TABLE ConcertMapRevision (
     ConcertMapRevisionID         INT IDENTITY(1,1) NOT NULL,
@@ -37,10 +38,13 @@ CREATE TABLE ConcertMapRevision (
         REFERENCES VenueTemplateVersion(VenueTemplateVersionID),
     CONSTRAINT UQ_CMR_Map_Number UNIQUE (ConcertMapID, RevisionNumber),
     CONSTRAINT CHK_CMR_RevisionNumber CHECK (RevisionNumber > 0),
-    CONSTRAINT CHK_CMR_Status CHECK (RevisionStatus IN ('Draft', 'Locked', 'Replaced')),
+    -- 'Replaced' da bi go: sp_LockConcertMapRevision khong con duong nao chuyen
+    -- mot revision Locked cu sang trang thai khac khi Lock revision moi — chi hai
+    -- trang thai con dat toi duoc la Draft va Locked.
+    CONSTRAINT CHK_CMR_Status CHECK (RevisionStatus IN ('Draft', 'Locked')),
     CONSTRAINT CHK_CMR_LockedTimestamp CHECK (
             (RevisionStatus = 'Draft' AND LockedTimestamp IS NULL)
-         OR (RevisionStatus IN ('Locked', 'Replaced') AND LockedTimestamp IS NOT NULL)
+         OR (RevisionStatus = 'Locked' AND LockedTimestamp IS NOT NULL)
     )
 );
 GO

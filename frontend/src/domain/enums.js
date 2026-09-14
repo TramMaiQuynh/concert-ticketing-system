@@ -265,7 +265,13 @@ export const RoleAction = { Grant: 'Grant', Revoke: 'Revoke' };
 // ── StagePass (VenueTemplate/ConcertMapRevision) — docs/stagepass-architecture.md D.2/D.4/D.5 ──
 export const TemplateStatus = { Active: 'Active', Archived: 'Archived' };
 export const VersionStatus = { Draft: 'Draft', Published: 'Published', Retired: 'Retired' };
-export const RevisionStatus = { Draft: 'Draft', Locked: 'Locked', Replaced: 'Replaced' };
+// 'Replaced' đã bị gỡ khỏi đây: CHK_CMR_Status trong database CHỈ nhận ('Draft','Locked').
+// Trước đây bản frontend còn khai báo 'Replaced', nhưng database đã cố ý bỏ nó —
+// xem comment trong database/Tables/ConcertMapRevision.sql: "sp_LockConcertMapRevision
+// khong con duong nao chuyen mot revision Locked cu sang trang thai khac khi Lock
+// revision moi — chi hai trang thai con dat toi duoc la Draft va Locked". Khai báo
+// một trạng thái mà tầng dữ liệu không bao giờ sinh ra chỉ tạo cảm giác về độ phủ.
+export const RevisionStatus = { Draft: 'Draft', Locked: 'Locked' };
 
 /** Nhãn tiếng Việt dùng chung cho các trạng thái quản trị. */
 export const ADMIN_STATUS_LABEL = {
@@ -289,7 +295,6 @@ export const ADMIN_STATUS_LABEL = {
   // StagePass — Locked/Draft đã có ở trên, dùng chung.
   Archived: 'Đã lưu trữ',
   Published: 'Đã công bố (bất biến)',
-  Replaced: 'Đã bị thay thế',
 };
 
 /**

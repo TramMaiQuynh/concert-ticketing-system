@@ -39,8 +39,9 @@ BEGIN
         IF @ConcertID IS NULL
             THROW 60211, 'sp_CreateConcertMapRevision: ConcertMap khong ton tai.', 1;
 
-        DECLARE @OrganizerUserID INT, @ConcertVenueID INT;
-        SELECT @OrganizerUserID = OrganizerUserID, @ConcertVenueID = VenueID FROM Concert WHERE ConcertID = @ConcertID;
+        DECLARE @OrganizerUserID INT, @ConcertVenueID INT, @ConcertStatus VARCHAR(32);
+        SELECT @OrganizerUserID = OrganizerUserID, @ConcertVenueID = VenueID, @ConcertStatus = ConcertStatus
+        FROM Concert WHERE ConcertID = @ConcertID;
 
         IF NOT (
             @ActorUserID = @OrganizerUserID
@@ -52,6 +53,9 @@ BEGIN
 
         IF @ConcertVenueID IS NULL
             THROW 60213, 'sp_CreateConcertMapRevision: Concert chua duoc gan Venue.', 1;
+
+        IF @ConcertStatus NOT IN ('Draft', 'Published')
+            THROW 60218, 'sp_CreateConcertMapRevision: Khong the sua snapshot map sau khi Concert da mo ban.', 1;
 
         DECLARE @VersionStatus VARCHAR(32), @TemplateVenueID INT;
         SELECT @VersionStatus = vtv.VersionStatus, @TemplateVenueID = vt.VenueID
@@ -70,6 +74,9 @@ BEGIN
 
         IF EXISTS (SELECT 1 FROM ConcertMapRevision WHERE ConcertMapID = @ConcertMapID AND RevisionStatus = 'Draft')
             THROW 60217, 'sp_CreateConcertMapRevision: Map dang co mot Draft mo. Khoa (Lock) hoac huy Draft hien tai truoc khi tao Draft moi.', 1;
+
+        IF EXISTS (SELECT 1 FROM ConcertMapRevision WHERE ConcertMapID = @ConcertMapID AND RevisionStatus = 'Locked')
+            THROW 60219, 'sp_CreateConcertMapRevision: Concert da co revision Locked; khong thay the map dang duoc cau hinh/ban ve.', 1;
 
         DECLARE @NextRevisionNumber INT =
             ISNULL((SELECT MAX(RevisionNumber) FROM ConcertMapRevision WHERE ConcertMapID = @ConcertMapID), 0) + 1;
@@ -106,14 +113,14 @@ BEGIN
 
         MERGE INTO ConcertMapRevisionSection AS tgt
         USING (
-            SELECT s.TemplateSectionID AS OldID, fm.NewID AS NewFloorID, s.SectionKey, s.SectionName, s.GeometryJson
+            SELECT s.TemplateSectionID AS OldID, fm.NewID AS NewFloorID, s.ZoneID, s.SectionKey, s.SectionName, s.GeometryJson
             FROM TemplateSection s
             JOIN @FloorMap fm ON fm.OldID = s.TemplateFloorID
         ) AS src
         ON 1 = 0
         WHEN NOT MATCHED THEN
-            INSERT (ConcertMapRevisionFloorID, SourceTemplateSectionID, SectionKey, SectionName, GeometryJson)
-            VALUES (src.NewFloorID, src.OldID, src.SectionKey, src.SectionName, src.GeometryJson)
+            INSERT (ConcertMapRevisionFloorID, SourceTemplateSectionID, ZoneID, SectionKey, SectionName, GeometryJson)
+            VALUES (src.NewFloorID, src.OldID, src.ZoneID, src.SectionKey, src.SectionName, src.GeometryJson)
         OUTPUT src.OldID, inserted.ConcertMapRevisionSectionID INTO @SectionMap(OldID, NewID);
 
         MERGE INTO ConcertMapRevisionSeat AS tgt

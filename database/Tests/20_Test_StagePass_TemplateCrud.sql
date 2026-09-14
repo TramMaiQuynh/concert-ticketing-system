@@ -7,7 +7,6 @@
 -- sp_DeleteTemplateSeat. Cung khuon cac file 16/18/19: goi qua SP, moi
 -- test tu dung du lieu cua chinh no.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -72,12 +71,13 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @obj INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelFloor'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
     EXEC dbo.sp_ConfigureTemplateObject @ActorUserID=@adm, @TemplateFloorID=@fl, @ObjectType=N''Stage'', @GeometryJson=N''{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}'', @TemplateObjectID=@obj OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_DeleteTemplateFloor @ActorUserID=@adm, @TemplateFloorID=@fl;
     IF EXISTS (SELECT 1 FROM TemplateFloor WHERE TemplateFloorID=@fl) THROW 59999, ''Floor phai bi xoa'', 1;
@@ -90,11 +90,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelFloorPub'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
     EXEC dbo.sp_DeleteTemplateFloor @ActorUserID=@adm, @TemplateFloorID=@fl;';
@@ -135,12 +136,13 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @obj INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelObjPub'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
     EXEC dbo.sp_ConfigureTemplateObject @ActorUserID=@adm, @TemplateFloorID=@fl, @ObjectType=N''Stage'', @GeometryJson=N''{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}'', @TemplateObjectID=@obj OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":100,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":100,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
     EXEC dbo.sp_DeleteTemplateObject @ActorUserID=@adm, @TemplateObjectID=@obj;';
@@ -153,11 +155,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelSec'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_DeleteTemplateSection @ActorUserID=@adm, @TemplateSectionID=@sec;
     IF EXISTS (SELECT 1 FROM TemplateSection WHERE TemplateSectionID=@sec) THROW 59999, ''Section phai bi xoa'', 1;
@@ -168,11 +171,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelSecPub'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
     EXEC dbo.sp_DeleteTemplateSection @ActorUserID=@adm, @TemplateSectionID=@sec;';
@@ -185,11 +189,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelSeat'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_DeleteTemplateSeat @ActorUserID=@adm, @TemplateSeatID=@ts;
     IF EXISTS (SELECT 1 FROM TemplateSeat WHERE TemplateSeatID=@ts) THROW 59999, ''Seat phai bi xoa'', 1;';
@@ -199,11 +204,12 @@ SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG DelSeatPub'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
     EXEC dbo.sp_DeleteTemplateSeat @ActorUserID=@adm, @TemplateSeatID=@ts;';

@@ -31,9 +31,16 @@ BEGIN
         -- (tang backend) dung chung MOT thong bao "Ten dang nhap hoac mat khau khong
         -- dung" cho moi ly do dang nhap that bai. Chi parse danh sach ConcertID truoc
         -- (thao tac tren chinh dau vao cua nguoi goi, khong lo thong tin gi).
+        -- TRY_CONVERT thay vi CAST tho, cung ly do da sua o sp_AddEventSeats.sql.
+        IF EXISTS (
+            SELECT 1 FROM STRING_SPLIT(@ConcertIDs, ',')
+            WHERE LTRIM(RTRIM(value)) <> '' AND TRY_CONVERT(INT, value) IS NULL
+        )
+            THROW 59006, 'sp_AddCheckinStaffAssignment: Danh sach Concert chua gia tri khong phai so nguyen.', 1;
+
         DECLARE @ConcertIdList TABLE (ConcertID INT NOT NULL PRIMARY KEY);
         INSERT INTO @ConcertIdList (ConcertID)
-        SELECT DISTINCT CAST(value AS INT)
+        SELECT DISTINCT TRY_CONVERT(INT, value)
         FROM STRING_SPLIT(@ConcertIDs, ',')
         WHERE LTRIM(RTRIM(value)) <> '';
 

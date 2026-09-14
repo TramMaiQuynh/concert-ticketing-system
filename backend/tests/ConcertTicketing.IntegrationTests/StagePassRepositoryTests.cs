@@ -64,7 +64,7 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
                 """{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}"""));
 
         var sectionId = await repo.ConfigureTemplateSectionAsync(admin, floorId,
-            new ConfigureTemplateSectionRequest(null, "VIP", "Khu VIP",
+            new ConfigureTemplateSectionRequest(null, zoneId, "VIP", "Khu VIP",
                 """{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}"""));
 
         var templateSeatId = await repo.ConfigureTemplateSeatAsync(admin, sectionId,
@@ -81,7 +81,7 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
             new ConfigureTemplateObjectRequest(objectId, "Stage", "Sân khấu (sửa)",
                 """{"version":1,"shape":"rect","x":300,"y":20,"width":400,"height":60,"rotation":0}"""));
         await repo.ConfigureTemplateSectionAsync(admin, floorId,
-            new ConfigureTemplateSectionRequest(sectionId, "VIP", "Khu VIP (sửa)",
+            new ConfigureTemplateSectionRequest(sectionId, zoneId, "VIP", "Khu VIP (sửa)",
                 """{"version":1,"shape":"rect","x":100,"y":150,"width":300,"height":200,"rotation":0}"""));
         await repo.ConfigureTemplateSeatAsync(admin, sectionId,
             new ConfigureTemplateSeatRequest(templateSeatId, seatId, "S1", "A", 1, GeometryJson: null,
@@ -107,18 +107,28 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
         // ── ConcertMap / ConcertMapRevision ─────────────────────────────────
         var concertId = await s.CreateConcertDraftAsync(organizer, artistId, venueId);
 
-        (await repo.GetConcertMapAsync(concertId)).Should().BeNull();
+        (await repo.GetConcertMapAsync(organizer, concertId)).Should().BeNull();
 
         var mapId = await repo.CreateConcertMapAsync(organizer, concertId);
-        var map = await repo.GetConcertMapAsync(concertId);
+        var map = await repo.GetConcertMapAsync(organizer, concertId);
         map.Should().NotBeNull();
         map!.ConcertMapID.Should().Be(mapId);
+
+        // Organizer khác không được suy đoán map ID để đọc dữ liệu concert này.
+        // instance: 1 bắt buộc — CreateUserAsync sinh username xác định theo
+        // (role, instance) và coi "đã tồn tại" là dùng lại; gọi lại "Organizer"
+        // với instance mặc định (0) như "organizer" ở trên sẽ trả về CHÍNH
+        // UserID đó, khiến assertion "người khác không đọc được" tự nhiên đúng
+        // vì thực ra là cùng một người — không kiểm chứng được gì.
+        var otherOrganizer = await s.CreateUserAsync("Organizer", instance: 1);
+        (await repo.GetConcertMapAsync(otherOrganizer, concertId)).Should().BeNull();
 
         var revisionId = await repo.CreateConcertMapRevisionAsync(organizer, mapId,
             new CreateConcertMapRevisionRequest(versionId));
 
-        var revisions = await repo.ListConcertMapRevisionsAsync(mapId);
+        var revisions = await repo.ListConcertMapRevisionsAsync(organizer, mapId);
         revisions.Should().ContainSingle(r => r.ConcertMapRevisionID == revisionId && r.RevisionStatus == "Draft");
+        (await repo.ListConcertMapRevisionsAsync(otherOrganizer, mapId)).Should().BeEmpty();
 
         // Sao chép sâu phải đúng số lượng: xác nhận qua truy vấn trực tiếp,
         // đúng nguyên tắc đã dùng ở test SQL CreateConcertMapRevision_OK.
@@ -130,7 +140,7 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
             .Should().Be(1);
 
         await repo.LockConcertMapRevisionAsync(organizer, revisionId);
-        var lockedRevision = (await repo.ListConcertMapRevisionsAsync(mapId)).Single();
+        var lockedRevision = (await repo.ListConcertMapRevisionsAsync(organizer, mapId)).Single();
         lockedRevision.RevisionStatus.Should().Be("Locked");
         lockedRevision.LockedTimestamp.Should().NotBeNull();
 
@@ -172,6 +182,7 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
         var s = NewSeeder();
         var admin = await s.CreateUserAsync("Admin");
         var venueId = await s.CreateVenueAsync();
+        var zoneId = await s.CreateZoneAsync(venueId);
         var repo = Repo();
 
         var templateId = await repo.CreateVenueTemplateAsync(admin, venueId, new CreateVenueTemplateRequest(s.VenueName));
@@ -180,7 +191,7 @@ public sealed class StagePassRepositoryTests : IClassFixture<DbFixture>
             new ConfigureTemplateFloorRequest(null, "ground", null, 1, 1000, 800));
 
         var act = () => repo.ConfigureTemplateSectionAsync(admin, floorId,
-            new ConfigureTemplateSectionRequest(null, "LShape", null,
+            new ConfigureTemplateSectionRequest(null, zoneId, "LShape", null,
                 """{"version":1,"shape":"polygon","points":[[0,0],[200,0],[200,100],[100,100],[100,200],[0,200]]}"""));
         await act.Should().ThrowAsync<SqlException>().Where(e => e.Number == 60086);
     }

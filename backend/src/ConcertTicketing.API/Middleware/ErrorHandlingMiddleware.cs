@@ -148,6 +148,7 @@ public class ErrorHandlingMiddleware
             58003 => (HttpStatusCode.BadRequest, "Invalid Purchase Limit", "PurchaseLimit phải lớn hơn 0."),
             58004 => (HttpStatusCode.BadRequest, "Artist Not Found", "Nghệ sĩ không tồn tại."),
             58005 => (HttpStatusCode.BadRequest, "Venue Not Found", "Địa điểm không tồn tại."),
+            58009 => (HttpStatusCode.Conflict, "Venue Inactive", "Địa điểm này đã ngừng sử dụng, không thể tạo Concert mới tại đây."),
             58025 => (HttpStatusCode.BadRequest, "Invalid Artist List", "Cần chọn ít nhất một nghệ sĩ hợp lệ và không trùng lặp."),
             58007 => (HttpStatusCode.BadRequest, "Invalid Sale Window", "SaleEndDatetime phải sau hoặc bằng SaleStartDatetime."),
             58006 => (HttpStatusCode.BadRequest, "Organizer Not Found", "Organizer không tồn tại hoặc không hoạt động."),
@@ -155,6 +156,9 @@ public class ErrorHandlingMiddleware
             58011 => (HttpStatusCode.Conflict, "Concert Not Editable", "Chỉ sửa được Concert ở trạng thái Draft hoặc Published."),
             58012 => (HttpStatusCode.Forbidden, "Concert Not Authorized", "Bạn không có quyền cập nhật Concert này."),
             58013 => (HttpStatusCode.BadRequest, "Invalid Concert Dates", "EndDatetime phải sau StartDatetime."),
+            58026 => (HttpStatusCode.BadRequest, "Venue Not Found", "Địa điểm mới không tồn tại."),
+            58027 => (HttpStatusCode.Conflict, "Venue Inactive", "Địa điểm mới đã ngừng sử dụng."),
+            58028 => (HttpStatusCode.Conflict, "Venue Change Blocked", "Không thể đổi địa điểm khi Concert đã tạo sơ đồ StagePass (ConcertMap)."),
             58020 => (HttpStatusCode.BadRequest, "Invalid Concert Status", "ConcertStatus không hợp lệ."),
             58021 => (HttpStatusCode.NotFound, "Concert Not Found", "Concert không tồn tại."),
             58023 => (HttpStatusCode.UnprocessableEntity, "Inventory Required",
@@ -186,6 +190,7 @@ public class ErrorHandlingMiddleware
             58215 => (HttpStatusCode.BadRequest, "Empty Seat List", "Danh sách ghế không được trống."),
             58216 => (HttpStatusCode.BadRequest, "Seat Not Found", "Có Seat không tồn tại."),
             58217 => (HttpStatusCode.Conflict, "Seat Already In Inventory", "Có Seat đã có trong kho vé của Concert."),
+            58222 => (HttpStatusCode.BadRequest, "Invalid Seat List Format", "Danh sách SeatID chứa giá trị không phải số nguyên."),
             58205 => (HttpStatusCode.BadRequest, "Invalid Base Price", "BasePrice không được âm."),
             58206 => (HttpStatusCode.Conflict, "Concert Not Configurable", "Chỉ cấu hình hạng vé khi Concert ở trạng thái Draft hoặc Published."),
             58218 => (HttpStatusCode.Conflict, "Concert Not Configurable", "Chỉ thêm ghế vào kho vé khi Concert ở trạng thái Draft hoặc Published."),
@@ -239,6 +244,8 @@ public class ErrorHandlingMiddleware
             54013 => (HttpStatusCode.Conflict, "Payment In Progress",
                       "Booking đang có giao dịch thanh toán chờ xử lý. Hủy giao dịch đó trước khi thay đổi khuyến mãi."),
 
+            51008 => (HttpStatusCode.BadRequest, "Invalid Seat List Format", "Danh sách EventSeat chứa giá trị không phải số nguyên."),
+
             // sp_CreateBooking — Fair Access gate (BR46/BR47)
             51007 => (HttpStatusCode.Forbidden, "Queue Admission Required",
                       "Concert đang áp dụng Fair Access. Bạn cần được vào từ hàng đợi (và còn hạn) trước khi đặt vé."),
@@ -260,6 +267,7 @@ public class ErrorHandlingMiddleware
 
             // sp_AddCheckinStaffAssignment (BR39 / FR51)
             59005 => (HttpStatusCode.BadRequest, "Invalid Assignment Status", "AssignmentStatus phải là Active hoặc Revoked."),
+            59006 => (HttpStatusCode.BadRequest, "Invalid Concert List Format", "Danh sách Concert chứa giá trị không phải số nguyên."),
 
             // sp_ProcessQueueAdmission (BR47b)
             59301 => (HttpStatusCode.InternalServerError, "Missing Configuration",
@@ -298,11 +306,15 @@ public class ErrorHandlingMiddleware
             59413 => (HttpStatusCode.BadRequest, "Invalid Zone Status", "ZoneStatus phải là Active hoặc Retired."),
             59415 => (HttpStatusCode.Conflict, "Zone In Use",
                       "Không thể Retire Zone đang có ghế trong kho vé của Concert chưa kết thúc."),
+            59416 => (HttpStatusCode.Conflict, "Zone Referenced By Published Template",
+                      "Không thể Retire Zone đang được một Mẫu sơ đồ đã Công bố tham chiếu."),
             59421 => (HttpStatusCode.Forbidden, "Admin Only", "Chỉ Admin được cập nhật Seat."),
             59422 => (HttpStatusCode.NotFound, "Seat Not Found", "Seat không tồn tại."),
             59423 => (HttpStatusCode.BadRequest, "Invalid Seat Status", "SeatStatus phải là Active hoặc Retired."),
             59425 => (HttpStatusCode.Conflict, "Seat In Use",
                       "Không thể Retire Seat đang nằm trong kho vé của Concert chưa kết thúc."),
+            59426 => (HttpStatusCode.Conflict, "Seat Referenced By Published Template",
+                      "Không thể Retire Seat đang được một Mẫu sơ đồ đã Công bố tham chiếu."),
 
             // sp_ConfigureQueue / sp_ConfigureWaitlist (FR64a, BR43, BR45b, BR47b)
             59501 => (HttpStatusCode.NotFound, "Concert Not Found", "Concert không tồn tại."),
@@ -339,8 +351,10 @@ public class ErrorHandlingMiddleware
                       "Sân khấu không được chồng lên khu ghế."),
 
             // sp_CreateZone / sp_UpdateZone — hình học khu
-            59811 => (HttpStatusCode.BadRequest, "Invalid Zone Type",
-                      "Hệ thống hiện chỉ hỗ trợ khu có ghế đánh số (Seated)."),
+            // 59811 (Invalid Zone Type) đã bị gỡ: nội dung TRÙNG với 59831. Cả
+            // sp_CreateZone lẫn sp_UpdateZone nay đều ném 59831 cho khu không phải
+            // Seated, với đúng thông điệp cũ của 59811 ("He thong hien chi ho tro khu
+            // co ghe danh so (Seated)") — không còn đường nào ném 59811 nữa.
             59812 => (HttpStatusCode.BadRequest, "Incomplete Zone Box",
                       "Vị trí khu phải có đủ X, Y, Width, Height."),
             59813 => (HttpStatusCode.BadRequest, "Invalid Zone Size",
@@ -351,20 +365,28 @@ public class ErrorHandlingMiddleware
                       "Khu nằm ngoài mặt phẳng của địa điểm."),
             59816 => (HttpStatusCode.BadRequest, "Invalid Zone Rotation",
                       "Góc xoay phải trong khoảng -360 đến 360 độ."),
-            59817 => (HttpStatusCode.BadRequest, "Missing Zone Capacity",
-                      "Sức chứa không còn được nhập trực tiếp; số ghế quyết định sức chứa khu."),
+            // 59817 (Missing Zone Capacity) đã bị gỡ: một nguồn sự thật duy nhất cho
+            // "sức chứa khu do số ghế quyết định" là 59818, và đó là mã thực sự được
+            // ném (sp_CreateZone dòng 171, sp_UpdateZone dòng 203). Hai mapping cho
+            // cùng một luật là hai nguồn sự thật.
             59818 => (HttpStatusCode.BadRequest, "Capacity Not Applicable",
                       "Sức chứa khu do số ghế quyết định, không nhập trực tiếp."),
-            59819 => (HttpStatusCode.Conflict, "Zone Has Seats",
-                      "Không thể đổi mô hình khu khi khu đã có ghế."),
+            // 59819 (Zone Has Seats) đã bị gỡ: nhánh này chỉ chạy khi ĐỔI MÔ HÌNH khu
+            // (Seated <-> General Admission) trên khu đã có ghế. Hệ thống không mô hình
+            // hoá GA (CHK_Zone_Type chỉ nhận 'Seated'), và cả hai SP từ chối mọi giá trị
+            // khác 'Seated' ngay từ đầu bằng 59831 — nên nhánh "khu đã có ghế" không
+            // bao giờ tới được. Không còn đường nào ném 59819.
 
             // sp_CreateSeat / sp_UpdateSeat — vị trí ghế
             59821 => (HttpStatusCode.BadRequest, "Incomplete Seat Position",
                       "Hàng và số thứ tự trong hàng phải đi cùng nhau."),
             59822 => (HttpStatusCode.BadRequest, "Invalid Seat Column",
                       "Số thứ tự trong hàng phải lớn hơn 0."),
-            59823 => (HttpStatusCode.Conflict, "Seat In General Admission Zone",
-                      "Mỗi ghế phải có một vị trí hàng và cột hợp lệ."),
+            // 59823 (Seat In General Admission Zone) đã bị gỡ: thông điệp của nó là
+            // "ghế phải có hàng và số thứ tự hợp lệ", mà luật đó đã có 59825 (row/cột
+            // phải cùng có) và 59822 (cột phải > 0) — hai mã này mới là mã thực sự được
+            // ném (sp_CreateSeat, sp_CreateSeatsBatch, sp_UpdateSeat). Tên cũ nhắc tới
+            // GA, thứ hệ thống cố ý không mô hình hoá.
             59824 => (HttpStatusCode.Conflict, "Seat Position Taken",
                       "Vị trí này trong khu đã có ghế khác."),
             59825 => (HttpStatusCode.BadRequest, "Missing Seat Position",
@@ -465,6 +487,8 @@ public class ErrorHandlingMiddleware
             50111 or 50112 => (HttpStatusCode.Forbidden, "Session Context Invalid", "Phiên làm việc không hợp lệ. Vui lòng đăng nhập lại."),
             50120 => (HttpStatusCode.BadRequest, "Seat Venue Inconsistent", "Ghế phải thuộc đúng địa điểm của khu vực."),
             50130 or 50131 => (HttpStatusCode.Conflict, "Venue Change Blocked", "Không thể đổi địa điểm khi đã có kho vé tham chiếu."),
+            50132 => (HttpStatusCode.Conflict, "Venue Change Blocked", "Không thể đổi địa điểm khi Concert đã tạo sơ đồ StagePass (ConcertMap)."),
+            50140 => (HttpStatusCode.Conflict, "Map Seat Inventory Inconsistent", "Liên kết giữa sơ đồ StagePass và kho vé không khớp Concert hoặc ghế."),
 
             // Lỗi cấu hình hệ thống (thiếu bản ghi SystemConfiguration bắt buộc — §23.7).
             // Đây thực sự là 500: không phải người gọi làm sai, mà dữ liệu nền chưa đủ.
@@ -483,6 +507,7 @@ public class ErrorHandlingMiddleware
             // sp_CreateVenueTemplate
             60001 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được tạo VenueTemplate."),
             60002 => (HttpStatusCode.BadRequest, "Venue Not Found", "Venue không tồn tại."),
+            60097 => (HttpStatusCode.Conflict, "Venue Inactive", "Địa điểm đã ngừng sử dụng, không thể tạo Mẫu sơ đồ mới."),
             60003 => (HttpStatusCode.BadRequest, "Invalid Template Name", "Tên template không được để trống."),
             60004 => (HttpStatusCode.Conflict, "Duplicate Template Name", "Tên template đã tồn tại trong Venue này."),
             // sp_UpdateVenueTemplate
@@ -561,7 +586,10 @@ public class ErrorHandlingMiddleware
             60108 => (HttpStatusCode.Conflict, "Duplicate Seat Key", "SeatKey đã tồn tại trong Section này."),
             60109 => (HttpStatusCode.Conflict, "Duplicate Grid Slot", "Ô lưới (RowLabel, SeatNumber) này đã có ghế khác trong Section."),
             60110 => (HttpStatusCode.NotFound, "Template Seat Not Found", "TemplateSeatID không thuộc TemplateSection này."),
-            60111 => (HttpStatusCode.BadRequest, "Seat Venue Mismatch", "SeatID không thuộc đúng Venue của VenueTemplate."),
+            // 60111 (Seat Venue Mismatch) đã bị gỡ: sp_ConfigureTemplateSeat nay kiểm tra
+            // điều kiện chặt hơn — Seat phải thuộc đúng ZONE mà Section khai báo, không chỉ
+            // đúng Venue — và gộp cả hai vào một nhánh ném 60112 (xem bên dưới). Không còn
+            // đường nào ném 60111 nữa, giữ lại mapping chỉ tạo ảo giác về độ phủ.
             // sp_DeleteTemplateSeat
             60121 => (HttpStatusCode.Forbidden, "Admin Required", "Chỉ Admin được xoá TemplateSeat."),
             60122 => (HttpStatusCode.NotFound, "Template Seat Not Found", "TemplateSeat không tồn tại."),
@@ -585,6 +613,50 @@ public class ErrorHandlingMiddleware
             60232 => (HttpStatusCode.Forbidden, "Concert Map Not Authorized", "Bạn không có quyền (phải là Organizer của Concert hoặc Admin)."),
             60233 => (HttpStatusCode.Conflict, "Revision Not Draft", "Chỉ Lock được revision đang Draft."),
             60234 => (HttpStatusCode.UnprocessableEntity, "Revision Empty", "Revision chưa có ghế nào (cần ít nhất một Floor/Section/Seat)."),
+            // sp_AddEventSeatsFromMapRevision — cầu nối ConcertMapRevisionSeat <-> EventSeat
+            60241 => (HttpStatusCode.NotFound, "Concert Map Revision Not Found", "ConcertMapRevision không tồn tại."),
+            60242 => (HttpStatusCode.Conflict, "Revision Not Locked", "Chỉ được đưa ghế vào kho vé từ revision đang Locked."),
+            60243 => (HttpStatusCode.Forbidden, "Concert Map Not Authorized", "Bạn không có quyền (phải là Organizer của Concert hoặc Admin)."),
+            60244 => (HttpStatusCode.Conflict, "Concert Not Sellable", "Chỉ thêm EventSeat khi Concert ở trạng thái Draft hoặc Published."),
+            60245 => (HttpStatusCode.UnprocessableEntity, "Ticket Category Invalid", "TicketCategory không thuộc Concert hoặc không Active."),
+            60246 => (HttpStatusCode.BadRequest, "Empty Seat List", "Danh sách ghế rỗng."),
+            60247 => (HttpStatusCode.BadRequest, "Seat Not In Revision", "Có ghế không thuộc revision này."),
+            60248 => (HttpStatusCode.Conflict, "Seat Already Linked", "Có ghế đã được đưa vào kho vé từ trước."),
+            60249 => (HttpStatusCode.UnprocessableEntity, "Seat Or Zone Retired", "Có Seat hoặc Zone đã Retired, không thể đưa vào kho vé."),
+            60250 => (HttpStatusCode.Conflict, "Seat Already In Concert", "Có Seat đã có trong kho vé của Concert này."),
+            60251 => (HttpStatusCode.BadRequest, "Invalid Seat List Format", "Danh sách ghế chứa giá trị không phải số nguyên."),
+
+            // ── StagePass: rào chắn vòng đời (ConcertMap / Revision / Section-Zone) ──
+            // 58060 (Concert Map Required) đã bị gỡ: StagePass là TUỲ CHỌN, Concert dùng
+            // Zone/Seat thuần vẫn mở bán được bình thường, nên sp_UpdateConcertStatus chỉ
+            // kiểm tra snapshot Locked KHI Concert đã tạo ConcertMap — không còn đường nào
+            // ném 58060 nữa.
+            58061 => (HttpStatusCode.UnprocessableEntity, "Concert Map Not Locked",
+                      "Sơ đồ StagePass phải được khoá (Lock) trước khi mở bán."),
+            58062 or 58063 => (HttpStatusCode.UnprocessableEntity, "Concert Map Inventory Incomplete",
+                      "Mọi ghế trong kho vé phải được gắn với sơ đồ StagePass đã khoá trước khi mở bán."),
+            58221 => (HttpStatusCode.Conflict, "StagePass Inventory Required",
+                      "Concert này dùng StagePass — hãy đưa ghế vào kho vé từ sơ đồ đã khoá, không thêm trực tiếp theo Zone."),
+            60204 => (HttpStatusCode.Conflict, "Concert Map Not Configurable",
+                      "Chỉ tạo được sơ đồ cho Concert đang ở trạng thái Draft hoặc Published."),
+            60205 => (HttpStatusCode.Conflict, "Legacy Inventory Exists",
+                      "Concert đã có ghế trong kho vé theo đường Zone/Seat — không thể bật StagePass cho cùng Concert."),
+            60218 or 60219 => (HttpStatusCode.Conflict, "Concert Map Revision Not Configurable",
+                      "Chỉ tạo được bản sơ đồ mới khi Concert ở trạng thái Draft/Published và chưa có bản nào bị khoá."),
+            60235 or 60236 => (HttpStatusCode.Conflict, "Concert Map Cannot Be Locked",
+                      "Mỗi sơ đồ chỉ khoá được đúng một bản, và phải khoá khi Concert còn ở trạng thái Draft hoặc Published."),
+            60237 => (HttpStatusCode.Conflict, "Revision Not Draft",
+                      "Chỉ huỷ được bản sơ đồ đang ở trạng thái nháp; bản đã khoá là sơ đồ đang bán của sự kiện."),
+            60238 => (HttpStatusCode.Conflict, "Revision Has Inventory",
+                      "Bản sơ đồ này đã có ghế được đưa vào kho vé nên không thể huỷ."),
+            60095 => (HttpStatusCode.BadRequest, "Invalid Template Section Zone",
+                      "Khu được chọn phải đang hoạt động và thuộc đúng địa điểm của mẫu sơ đồ."),
+            60096 => (HttpStatusCode.Conflict, "Zone Already Mapped",
+                      "Mỗi khu vật lý chỉ được gán cho một Section trong cùng một phiên bản mẫu sơ đồ."),
+            60098 => (HttpStatusCode.Conflict, "Section Zone Locked",
+                      "Không thể đổi Zone của Section đã có ghế — xoá hết ghế trước hoặc giữ nguyên Zone."),
+            60112 => (HttpStatusCode.BadRequest, "Seat Zone Mismatch",
+                      "Ghế phải thuộc đúng khu vật lý mà Section này đại diện."),
 
             // Duplicate Key (2627 = constraint, 2601 = unique index)
             2627 or 2601 => (HttpStatusCode.Conflict, "Duplicate Entry", "Bản ghi đã tồn tại."),

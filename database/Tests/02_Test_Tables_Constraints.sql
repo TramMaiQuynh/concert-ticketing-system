@@ -2,7 +2,6 @@
 -- 02_Test_Tables_Constraints.sql
 -- Test CHECK constraints va UNIQUE indexes.
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;

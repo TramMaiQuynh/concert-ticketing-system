@@ -5,9 +5,9 @@ import { useAuth } from '../auth/AuthContext';
 import {
   QueueEntryStatus, WaitlistEntryStatus, DiscountType,
   CONCERT_STATUS_LABEL, QUEUE_STATUS_LABEL, WAITLIST_STATUS_LABEL,
-  SEAT_LEGEND, SELECTED_PSEUDO_STATUS, canPurchase, isSeatSelectable, Role,
+  canPurchase, isSeatSelectable, Role,
 } from '../domain/enums';
-import { CONCERT_TONE, QUEUE_TONE, WAITLIST_TONE, coverGradient, seatShortLabel } from '../domain/tone';
+import { CONCERT_TONE, QUEUE_TONE, WAITLIST_TONE, coverGradient } from '../domain/tone';
 import { formatMoney, formatDateTime, formatCountdown, msUntil } from '../lib/format';
 import {
   Badge, Button, Card, Alert, Skeleton, EmptyState, Panel,
@@ -43,14 +43,15 @@ export default function Concert() {
   const [promotions, setPromotions] = useState([]);
 
   /**
-   * So do hinh hoc cua dia diem.
+   * So do hinh hoc cua dia diem — MOT contract duy nhat ca cho venue Zone/Seat cu
+   * lan venue StagePass nhieu tang/khu da giac (backend tu chon nguon, xem
+   * ConcertRepository.GetSeatMapAsync). Tach khoi /seats vi day la hai tai lieu
+   * khac ban chat: /seats la danh sach phang (dung cho gio hang, tinh tien), con
+   * /seatmap la tai lieu hinh hoc long nhau (tang -> khu -> ghe) dung de dat cac
+   * khu va ghe vao dung vi tri.
    *
-   * Tach khoi /seats vi day la hai tai lieu khac ban chat: /seats la danh sach
-   * phang (dung cho gio hang, tinh tien), con /seatmap la tai lieu hinh hoc long
-   * nhau (dia diem -> khu -> ghe) dung de dat cac khu va ghe vao dung vi tri.
-   *
-   * null = dia diem chua khai bao toa do. Khi do giao dien rot ve che do liet ke
-   * theo khu, van dat ve duoc binh thuong.
+   * null = dia diem chua khai bao mat phang nao (Floors rong). Khi do giao dien
+   * rot ve che do liet ke theo khu, van dat ve duoc binh thuong.
    */
   const [seatMap, setSeatMap] = useState(null);
 
@@ -67,7 +68,7 @@ export default function Concert() {
     // Chi dung so do hinh hoc khi dia diem THUC SU da khai bao mat phang.
     // Thieu kiem tra nay se ve ra mot khung rong khong co gi ben trong.
     const m = geo?.data;
-    setSeatMap(m?.mapWidth && m?.mapHeight ? m : null);
+    setSeatMap(m?.floors?.length ? m : null);
   }, [concertId]);
 
   /**
@@ -164,33 +165,6 @@ export default function Concert() {
     () => [...new Map(seats.map((s) => [s.ticketCategoryID, s])).values()],
     [seats],
   );
-
-  /**
-   * Gom ghe theo KHU (Zone).
-   *
-   * Du lieu tra ve la mot mang phang, va bay ca mang do ra thanh mot luoi lien
-   * tuc thi nguoi mua khong doc duoc gi: khong biet ghe nao thuoc khu nao, gia
-   * bao nhieu, cho ngoi o dau. Moi so do ve that deu chia theo khu.
-   *
-   * Giu nguyen thu tu xuat hien dau tien cua tung khu — may chu da ORDER BY
-   * ZoneName, SeatCode, nen thu tu do la co chu dich, khong nen sap lai.
-   */
-  const zones = useMemo(() => {
-    const map = new Map();
-    seats.forEach((s) => {
-      const key = s.sectionName ?? 'Khac';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(s);
-    });
-    return [...map.entries()].map(([name, list]) => ({
-      name,
-      seats: list,
-      available: list.filter(isSeatSelectable).length,
-      // Gia trong mot khu co the khac nhau neu khu duoc chia nhieu hang ve.
-      minPrice: Math.min(...list.map((x) => Number(x.price))),
-      maxPrice: Math.max(...list.map((x) => Number(x.price))),
-    }));
-  }, [seats]);
 
   const toggleSeat = (seat) => {
     setError('');
@@ -476,28 +450,6 @@ export default function Concert() {
 
         {seats.length > 0 && (
           <>
-            {!seatMap && <div className="stage"><span>Sân khấu</span></div>}
-
-            {/* Chú giải màu GHẾ chỉ có nghĩa ở nơi thực sự vẽ ghế. Ở sơ đồ hai
-                mức, mức tổng quan không có ghế nào — chú giải ở đó là nhiễu, nên
-                nó được đặt vào đúng mức chi tiết bên trong SeatMap. */}
-            {!seatMap && (
-            <div className="legend">
-              {SEAT_LEGEND.map((item) => (
-                <span className="legend__item" key={item.status}>
-                  <span
-                    className="legend__swatch"
-                    data-status={item.status}
-                    style={item.status === SELECTED_PSEUDO_STATUS
-                      ? { background: 'var(--accent)', borderColor: 'var(--accent)' }
-                      : undefined}
-                  />
-                  {item.label}
-                </span>
-              ))}
-            </div>
-            )}
-
             {needsAdmission && !admitted && (
               <div style={{ maxWidth: 620, margin: '0 auto var(--space-6)' }}>
                 <Alert tone="info">
@@ -506,10 +458,6 @@ export default function Concert() {
               </div>
             )}
 
-            {/* Địa điểm đã khai báo toạ độ thì vẽ sơ đồ thật — khách thấy được
-                chỗ ngồi nằm ở đâu so với sân khấu. Chưa khai báo thì rơi về danh
-                sách theo khu bên dưới: vẫn đặt vé được, chỉ là không định vị được.
-                Vẽ một sơ đồ từ vị trí bịa ra còn tệ hơn không vẽ. */}
             {seatMap ? (
               <SeatMap
                 map={seatMap}
@@ -519,62 +467,11 @@ export default function Concert() {
                 onToggleSeat={toggleSeat}
               />
             ) : (
-            <div className="zones">
-              {zones.map((zone) => (
-                <section
-                  className="zone"
-                  key={zone.name}
-                  role="group"
-                  aria-label={`Khu ${zone.name}, còn ${zone.available} trên ${zone.seats.length} ghế`}
-                >
-                  <header className="zone__head">
-                    <div className="row gap-2 wrap">
-                      <span className="zone__name">{zone.name}</span>
-                      <span className="text-xs text-muted">
-                        {zone.available}/{zone.seats.length} còn trống
-                      </span>
-                    </div>
-                    <span className="zone__price tabular">
-                      {zone.minPrice === zone.maxPrice
-                        ? formatMoney(zone.minPrice)
-                        : `${formatMoney(zone.minPrice)} – ${formatMoney(zone.maxPrice)}`}
-                    </span>
-                  </header>
-
-                  <div className="seatmap">
-                    {zone.seats.map((seat) => {
-                      const isSelected = selected.includes(seat.seatID);
-                      const selectable = canSelectSeats && isSeatSelectable(seat);
-                      return (
-                        <button
-                          key={seat.seatID}
-                          type="button"
-                          className="seat"
-                          data-status={seat.inventoryStatus}
-                          data-selected={isSelected || undefined}
-                          data-selectable={selectable || undefined}
-                          disabled={!selectable && !isSelected}
-                          aria-pressed={isSelected}
-                          /* Nhãn đầy đủ dùng MÃ GHẾ THẬT, không phải nhãn rút gọn
-                             hiển thị trong ô: người dùng trình đọc màn hình không
-                             thấy được màu lẫn vị trí, nên mã đầy đủ, hạng vé, giá
-                             và trạng thái đều phải nằm trong chữ. */
-                          aria-label={
-                            `Ghế ${seat.seatNumber}, khu ${seat.sectionName ?? '—'}, `
-                            + `hạng ${seat.categoryName}, ${formatMoney(seat.price)}, `
-                            + `${isSeatSelectable(seat) ? 'còn trống' : 'không chọn được'}`
-                          }
-                          title={`${seat.seatNumber} · ${seat.categoryName} · ${formatMoney(seat.price)}`}
-                          onClick={() => toggleSeat(seat)}
-                        >
-                          {seatShortLabel(seat.seatNumber)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
+              <Card>
+                <EmptyState title="Sơ đồ ghế đang được hoàn thiện">
+                  Ban tổ chức chưa công bố sơ đồ StagePass đã khóa cho sự kiện này.
+                </EmptyState>
+              </Card>
             )}
           </>
         )}
@@ -591,7 +488,7 @@ export default function Concert() {
         <div className="actionbar" role="region" aria-label="Tóm tắt lựa chọn">
           <div>
             <div className="overline">{selected.length} ghế đã chọn</div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)' }}>
+            <div className="price" style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)' }}>
               {formatMoney(totalAmount)}
             </div>
           </div>

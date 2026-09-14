@@ -154,3 +154,56 @@ export const IconTrash = make(
     <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13M9 7V4h6v3" />
   </>,
 );
+
+/* ── Bộ icon cho điều hướng khu quản trị ──────────────────────────────────── */
+
+export const IconGrid = make(
+  <>
+    <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+    <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+    <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+    <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+  </>,
+);
+
+export const IconLayers = make(
+  <>
+    <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+    <path d="M3 13l9 5 9-5" />
+  </>,
+);
+
+export const IconTag = make(
+  <>
+    <path d="M12.5 3H6a2 2 0 0 0-2 2v6.5a2 2 0 0 0 .59 1.41l8.5 8.5a2 2 0 0 0 2.82 0l6.5-6.5a2 2 0 0 0 0-2.82l-8.5-8.5A2 2 0 0 0 12.5 3Z" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+  </>,
+);
+
+export const IconUndo = make(
+  <>
+    <path d="M3 12a9 9 0 1 0 3-6.7" />
+    <path d="M3 4v5h5" />
+  </>,
+);
+
+export const IconChart = make(
+  <>
+    <path d="M4 20V10M12 20V4M20 20v-7" />
+    <path d="M2 20h20" />
+  </>,
+);
+
+export const IconPencil = make(
+  <>
+    <path d="M17 3a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    <path d="M15 5l4 4" />
+  </>,
+);
+
+export const IconDocument = make(
+  <>
+    <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+    <path d="M9 12h6M9 16h6M9 8h2" />
+  </>,
+);

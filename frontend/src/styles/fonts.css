@@ -1,0 +1,132 @@
+/* ============================================================================
+   PHÔNG CHỮ — tự lưu trữ (self-hosted), không phụ thuộc Google Fonts CDN.
+
+   Montserrat: phông phụ, dùng cho toàn bộ nội dung thân (body, nút, biểu mẫu,
+   bảng biểu, nhãn) — sans-serif hình học, sạch, rất nhiều độ đậm nên đủ cho
+   mọi cấp bậc chữ trong hệ thống.
+
+   Playfair Display: phông chủ đạo, CHỈ dành cho tiêu đề lớn (h1, h2) và giá
+   tiền nổi bật (.price-display) — serif có tương phản nét cao, tạo cảm giác
+   sang trọng ở kích thước lớn. Dùng cho toàn trang sẽ phản tác dụng: serif
+   tương phản cao khó đọc ở cỡ nhỏ, vì vậy CHỈ áp cho khoảnh khắc "hero".
+
+   `font-display: swap`: hiện chữ bằng phông hệ thống ngay lập tức, hoán qua
+   phông thật khi tải xong — không chặn hiển thị trang (khác hẳn @import
+   Google Fonts cũ, vốn chặn dựng trang cho tới khi tải xong).
+   ============================================================================ */
+
+/* ── Montserrat ─────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-MediumItalic.otf') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-SemiBoldItalic.otf') format('opentype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../font/montserrat/Montserrat-BoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ── Playfair Display ───────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-MediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-SemiBoldItalic.ttf') format('truetype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  src: url('../font/playfair_display/PlayfairDisplay-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}

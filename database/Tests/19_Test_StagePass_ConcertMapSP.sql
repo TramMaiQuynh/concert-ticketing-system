@@ -5,7 +5,6 @@
 -- Cung khuon cac file 16/18: goi qua SP, moi test tu dung du lieu cua
 -- chinh no (sp_RunTest luon ROLLBACK).
 -- ============================================================
-USE ConcertTicketingDB;
 GO
 
 SET QUOTED_IDENTIFIER ON;
@@ -85,12 +84,13 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @s2  INT = (SELECT TOP 1 SeatID FROM Seat WHERE SeatID <> @s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts1 INT, @ts2 INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG CMR OK'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts1 OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s2, @SeatKey=N''S2'', @RowLabel=N''A'', @SeatNumber=2, @TemplateSeatID=@ts2 OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
@@ -161,7 +161,7 @@ SET @SQL = N'
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven2, @TemplateName=N''REG CMR VenueMismatch Template'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zone2, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@seat2, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -216,11 +216,12 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG CMR DraftOpen'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -271,11 +272,12 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Lock OK'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -309,11 +311,12 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Lock Empty'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -342,11 +345,12 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Lock Twice'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -366,21 +370,26 @@ SET @SQL = N'
     EXEC dbo.sp_LockConcertMapRevision @ActorUserID=@org, @ConcertMapRevisionID=@cmr;';
 EXEC test.sp_RunTest @Suite,'LockConcertMapRevision_NotDraft_Fail60233','ERROR',60233,@SQL;
 
--- Tao revision thu hai (tu CUNG version nguon â€” khong bi cam vi
--- OneDraftPerMap chi chan khi con Draft, revision dau da Locked khong con
--- la Draft) roi Lock: revision dau phai chuyen Replaced, revision hai
--- phai la Locked.
+-- LUU Y: test nay tung mong doi tao va Lock duoc mot revision THU HAI sau khi
+-- revision dau da Locked, chuyen revision dau sang trang thai 'Replaced'. Trang
+-- thai 'Replaced' da bi GO KHOI schema (xem CHK_CMR_Status trong
+-- ConcertMapRevision.sql: chi con 'Draft'/'Locked') va sp_CreateConcertMapRevision
+-- gio tu choi thang (60219) viec tao them revision moi khi Map da co mot Locked —
+-- "revision Locked la tai lieu cong khai bat bien, khong co duong thay the" (xem
+-- comment sp_LockConcertMapRevision.sql). Cap nhat test de kiem chung DUNG hanh vi
+-- hien tai: sp_CreateConcertMapRevision phai TU CHOI ngay tu buoc tao cmr2.
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Lock Replace'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -397,13 +406,8 @@ SET @SQL = N'
     DECLARE @cmr1 INT, @cmr2 INT;
     EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr1 OUTPUT;
     EXEC dbo.sp_LockConcertMapRevision @ActorUserID=@org, @ConcertMapRevisionID=@cmr1;
-    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr2 OUTPUT;
-    EXEC dbo.sp_LockConcertMapRevision @ActorUserID=@org, @ConcertMapRevisionID=@cmr2;
-    IF (SELECT RevisionStatus FROM ConcertMapRevision WHERE ConcertMapRevisionID=@cmr1) <> ''Replaced''
-        THROW 59999, ''Revision dau phai chuyen thanh Replaced'', 1;
-    IF (SELECT RevisionStatus FROM ConcertMapRevision WHERE ConcertMapRevisionID=@cmr2) <> ''Locked''
-        THROW 59999, ''Revision hai phai la Locked'', 1;';
-EXEC test.sp_RunTest @Suite,'LockConcertMapRevision_ReplacesOldLocked_OK','SUCCESS',NULL,@SQL;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr2 OUTPUT;';
+EXEC test.sp_RunTest @Suite,'CreateConcertMapRevision_CannotReplaceLocked_Fail60219','ERROR',60219,@SQL;
 
 SET @SQL = N'
     DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
@@ -412,11 +416,12 @@ SET @SQL = N'
     DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
     DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
     DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
     EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Lock NotOwner'', @NewVenueTemplateID=@vt OUTPUT;
     EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
     EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
-    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
     EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
     EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
 
@@ -434,3 +439,187 @@ SET @SQL = N'
     EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr OUTPUT;
     EXEC dbo.sp_LockConcertMapRevision @ActorUserID=@cust, @ConcertMapRevisionID=@cmr;';
 EXEC test.sp_RunTest @Suite,'LockConcertMapRevision_NotOwnerNotAdmin_Fail60232','ERROR',60232,@SQL;
+
+-- ============================================================
+-- sp_CancelConcertMapRevisionDraft
+-- ============================================================
+-- Duong hanh phuc + pham vi xoa: revision cua MOT map khac KHONG bi dung toi.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
+    DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
+    DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Cancel OK'', @NewVenueTemplateID=@vt OUTPUT;
+    EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
+    EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
+
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    DECLARE @StartDT DATETIME2(7) = DATEADD(day, 30, SYSDATETIME());
+    DECLARE @EndDT   DATETIME2(7) = DATEADD(day, 31, SYSDATETIME());
+
+    -- Concert A: se bi huy Draft.
+    DECLARE @cidA INT; DECLARE @cmA INT; DECLARE @cmrA INT;
+    EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
+         @ConcertName=N''REG Cancel A'', @StartDatetime=@StartDT, @EndDatetime=@EndDT,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL, @ActorUserID=@org, @NewConcertID=@cidA OUTPUT;
+    EXEC dbo.sp_CreateConcertMap @ActorUserID=@org, @ConcertID=@cidA, @NewConcertMapID=@cmA OUTPUT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cmA, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmrA OUTPUT;
+
+    -- Concert B: phai con nguyen ven sau khi huy Draft cua A.
+    DECLARE @cidB INT; DECLARE @cmB INT; DECLARE @cmrB INT;
+    EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
+         @ConcertName=N''REG Cancel B'', @StartDatetime=@StartDT, @EndDatetime=@EndDT,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL, @ActorUserID=@org, @NewConcertID=@cidB OUTPUT;
+    EXEC dbo.sp_CreateConcertMap @ActorUserID=@org, @ConcertID=@cidB, @NewConcertMapID=@cmB OUTPUT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cmB, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmrB OUTPUT;
+
+    EXEC dbo.sp_CancelConcertMapRevisionDraft @ActorUserID=@org, @ConcertMapRevisionID=@cmrA;
+
+    -- (1) Revision A va toan bo cay con da bi xoa.
+    IF EXISTS (SELECT 1 FROM ConcertMapRevision WHERE ConcertMapRevisionID=@cmrA)
+        THROW 59999, ''Revision A phai bi xoa'', 1;
+    IF EXISTS (SELECT 1 FROM ConcertMapRevisionFloor WHERE ConcertMapRevisionID=@cmrA)
+        THROW 59999, ''Floor cua A phai bi xoa'', 1;
+    IF EXISTS (SELECT 1 FROM ConcertMapRevisionSeat cs
+               JOIN ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID=cs.ConcertMapRevisionSectionID
+               JOIN ConcertMapRevisionFloor f ON f.ConcertMapRevisionFloorID=sec.ConcertMapRevisionFloorID
+               WHERE f.ConcertMapRevisionID=@cmrA)
+        THROW 59999, ''Seat cua A phai bi xoa'', 1;
+
+    -- (2) Revision B KHONG bi dung toi (xoa dung pham vi).
+    IF NOT EXISTS (SELECT 1 FROM ConcertMapRevision WHERE ConcertMapRevisionID=@cmrB AND RevisionStatus=''Draft'')
+        THROW 59999, ''Revision cua Concert khac khong duoc bi anh huong'', 1;
+
+    -- (3) Vet kiem toan con lai du dong nghiep vu da bi xoa.
+    IF NOT EXISTS (SELECT 1 FROM AuditRecord
+                   WHERE EventType=''CONCERT_MAP_REVISION_DRAFT_CANCELLED'' AND EntityID=CAST(@cmrA AS VARCHAR(64)))
+        THROW 59999, ''Phai co AuditRecord CONCERT_MAP_REVISION_DRAFT_CANCELLED'', 1;';
+EXEC test.sp_RunTest @Suite,'CancelConcertMapRevisionDraft_OK_ScopedAndAudited','SUCCESS',NULL,@SQL;
+
+-- DAY LA DONG LUC CHINH CUA SP: truoc khi co no, mot Draft snapshot nham lam 60217
+-- chan vinh vien (khong huy duoc Draft, khong tao Draft moi duoc, khong thay duoc
+-- revision Locked — 60236/60219/UIX_CMR_OneLockedPerMap). Sau khi huy duoc thi
+-- phai mo lai duoc Draft moi, snapshot day du, va van la Draft.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
+    DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
+    DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Cancel Redo'', @NewVenueTemplateID=@vt OUTPUT;
+    EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
+    EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
+
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    DECLARE @cid INT;
+    DECLARE @StartDT DATETIME2(7) = DATEADD(day, 30, SYSDATETIME());
+    DECLARE @EndDT   DATETIME2(7) = DATEADD(day, 31, SYSDATETIME());
+    EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
+         @ConcertName=N''REG Cancel Redo Concert'', @StartDatetime=@StartDT, @EndDatetime=@EndDT,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL, @ActorUserID=@org, @NewConcertID=@cid OUTPUT;
+    DECLARE @cm INT;
+    EXEC dbo.sp_CreateConcertMap @ActorUserID=@org, @ConcertID=@cid, @NewConcertMapID=@cm OUTPUT;
+
+    DECLARE @cmrOld INT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmrOld OUTPUT;
+
+    -- Snapshot nham -> huy.
+    EXEC dbo.sp_CancelConcertMapRevisionDraft @ActorUserID=@org, @ConcertMapRevisionID=@cmrOld;
+
+    -- Phai TAO DUOC Draft moi. Truoc ban sua, buoc nay nem 60217.
+    DECLARE @cmrNew INT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmrNew OUTPUT;
+    IF @cmrNew IS NULL THROW 59999, ''Phai tao duoc Draft moi sau khi huy Draft cu'', 1;
+    IF @cmrNew = @cmrOld THROW 59999, ''Draft moi phai la revision khac'', 1;
+    IF NOT EXISTS (SELECT 1 FROM ConcertMapRevision WHERE ConcertMapRevisionID=@cmrNew AND RevisionStatus=''Draft'')
+        THROW 59999, ''Draft moi phai dang o trang thai Draft'', 1;
+    IF NOT EXISTS (SELECT 1 FROM ConcertMapRevisionSeat cs
+                   JOIN ConcertMapRevisionSection sec ON sec.ConcertMapRevisionSectionID=cs.ConcertMapRevisionSectionID
+                   JOIN ConcertMapRevisionFloor f ON f.ConcertMapRevisionFloorID=sec.ConcertMapRevisionFloorID
+                   WHERE f.ConcertMapRevisionID=@cmrNew AND cs.EventSeatID IS NULL)
+        THROW 59999, ''Draft moi phai duoc snapshot day du cay va EventSeatID=NULL'', 1;';
+EXEC test.sp_RunTest @Suite,'CancelConcertMapRevisionDraft_ThenCreateNewDraft_OK','SUCCESS',NULL,@SQL;
+
+-- Revision da Locked la ban do dang ban cua Concert — khong huy duoc (60237).
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
+    DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
+    DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Cancel Locked'', @NewVenueTemplateID=@vt OUTPUT;
+    EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
+    EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
+
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    DECLARE @cid INT;
+    DECLARE @StartDT DATETIME2(7) = DATEADD(day, 30, SYSDATETIME());
+    DECLARE @EndDT   DATETIME2(7) = DATEADD(day, 31, SYSDATETIME());
+    EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
+         @ConcertName=N''REG Cancel Locked Concert'', @StartDatetime=@StartDT, @EndDatetime=@EndDT,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL, @ActorUserID=@org, @NewConcertID=@cid OUTPUT;
+    DECLARE @cm INT;
+    EXEC dbo.sp_CreateConcertMap @ActorUserID=@org, @ConcertID=@cid, @NewConcertMapID=@cm OUTPUT;
+    DECLARE @cmr INT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr OUTPUT;
+    EXEC dbo.sp_LockConcertMapRevision @ActorUserID=@org, @ConcertMapRevisionID=@cmr;
+    EXEC dbo.sp_CancelConcertMapRevisionDraft @ActorUserID=@org, @ConcertMapRevisionID=@cmr;';
+EXEC test.sp_RunTest @Suite,'CancelConcertMapRevisionDraft_Locked_Fail60237','ERROR',60237,@SQL;
+
+-- Khach hang (khong phai Organizer so huu, khong phai Admin) khong huy duoc.
+SET @SQL = N'
+    DECLARE @adm INT = (SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    DECLARE @cust INT = (SELECT UserID FROM UserAccount WHERE Username=''test_cust1'');
+    DECLARE @ven INT = (SELECT TOP 1 VenueID FROM Venue);
+    DECLARE @art INT = (SELECT TOP 1 ArtistID FROM Artist);
+    DECLARE @s1  INT = (SELECT TOP 1 SeatID FROM Seat);
+    DECLARE @zn INT = (SELECT ZoneID FROM Seat WHERE SeatID=@s1);
+    DECLARE @vt INT, @vtv INT, @fl INT, @sec INT, @ts INT;
+    EXEC dbo.sp_CreateVenueTemplate @ActorUserID=@adm, @VenueID=@ven, @TemplateName=N''REG Cancel NotOwner'', @NewVenueTemplateID=@vt OUTPUT;
+    EXEC dbo.sp_CreateVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateID=@vt, @NewVenueTemplateVersionID=@vtv OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateFloor @ActorUserID=@adm, @VenueTemplateVersionID=@vtv, @FloorKey=N''ground'', @FloorOrder=1, @CanvasWidth=1000, @CanvasHeight=800, @TemplateFloorID=@fl OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSection @ActorUserID=@adm, @TemplateFloorID=@fl, @ZoneID=@zn, @SectionKey=N''VIP'', @GeometryJson=N''{"version":1,"shape":"rect","x":0,"y":0,"width":100,"height":100,"rotation":0}'', @TemplateSectionID=@sec OUTPUT;
+    EXEC dbo.sp_ConfigureTemplateSeat @ActorUserID=@adm, @TemplateSectionID=@sec, @SeatID=@s1, @SeatKey=N''S1'', @RowLabel=N''A'', @SeatNumber=1, @TemplateSeatID=@ts OUTPUT;
+    EXEC dbo.sp_PublishVenueTemplateVersion @ActorUserID=@adm, @VenueTemplateVersionID=@vtv;
+
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    DECLARE @cid INT;
+    DECLARE @StartDT DATETIME2(7) = DATEADD(day, 30, SYSDATETIME());
+    DECLARE @EndDT   DATETIME2(7) = DATEADD(day, 31, SYSDATETIME());
+    EXEC dbo.sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
+         @ConcertName=N''REG Cancel NotOwner Concert'', @StartDatetime=@StartDT, @EndDatetime=@EndDT,
+         @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4, @TemporaryHoldDuration=900,
+         @CancellationPolicy=NULL, @RefundPolicy=NULL, @ActorUserID=@org, @NewConcertID=@cid OUTPUT;
+    DECLARE @cm INT;
+    EXEC dbo.sp_CreateConcertMap @ActorUserID=@org, @ConcertID=@cid, @NewConcertMapID=@cm OUTPUT;
+    DECLARE @cmr INT;
+    EXEC dbo.sp_CreateConcertMapRevision @ActorUserID=@org, @ConcertMapID=@cm, @SourceVenueTemplateVersionID=@vtv, @NewConcertMapRevisionID=@cmr OUTPUT;
+    EXEC dbo.sp_CancelConcertMapRevisionDraft @ActorUserID=@cust, @ConcertMapRevisionID=@cmr;';
+EXEC test.sp_RunTest @Suite,'CancelConcertMapRevisionDraft_NotOwnerNotAdmin_Fail60232','ERROR',60232,@SQL;
+
+-- Revision khong ton tai (60231).
+SET @SQL = N'
+    DECLARE @org INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
+    EXEC dbo.sp_CancelConcertMapRevisionDraft @ActorUserID=@org, @ConcertMapRevisionID=-1;';
+EXEC test.sp_RunTest @Suite,'CancelConcertMapRevisionDraft_NotExist_Fail60231','ERROR',60231,@SQL;
