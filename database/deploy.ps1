@@ -274,8 +274,15 @@ Invoke-SqlFile -FilePath (Join-Path $DbRoot "Scripts\CreateDatabase.sql") -Datab
 #   Layer 4 (phu thuoc Layer 3): BookingEventSeatAllocation, Refund
 #   Layer 5 (phu thuoc Layer 4): Ticket, BookingPromotionApplication
 #   Layer 6 (phu thuoc Layer 5): CheckIn, AuditRecord
+#
+#   StagePass (them sau Layer 3, phu thuoc sau cung la EventSeat; xem
+#   docs/stagepass-architecture.md): VenueTemplate -> VenueTemplateVersion ->
+#   TemplateFloor -> {TemplateObject, TemplateSection} -> TemplateSeat;
+#   ConcertMap -> ConcertMapRevision -> ConcertMapRevisionFloor ->
+#   {ConcertMapRevisionObject, ConcertMapRevisionSection} -> ConcertMapRevisionSeat.
+#   Bo sung THEM, khong thay the Zone/Seat/EventSeat - hai lop cung ton tai.
 # ============================================================
-Write-Phase "PHASE 1: TABLES (29 bang)"
+Write-Phase "PHASE 1: TABLES (41 bang)"
 $tableStart = $script:DeployedFileCount
 
 $tablesDir = Join-Path $DbRoot "Tables"
@@ -309,6 +316,21 @@ Invoke-SqlFile "$tablesDir\QueueEntry.sql"             # -> Queue, UserAccount
 Invoke-SqlFile "$tablesDir\Payment.sql"                # -> Booking
 Invoke-SqlFile "$tablesDir\DiscountCode.sql"           # -> Promotion
 Invoke-SqlFile "$tablesDir\CheckinStaffAssignment.sql" # -> UserAccount, Concert
+
+# StagePass -- them sau EventSeat (Layer 3) vi ConcertMapRevisionSeat can no.
+# Doc them: docs/stagepass-architecture.md. Khong dung lai bang nao o Layer 4-6.
+Invoke-SqlFile "$tablesDir\VenueTemplate.sql"                # -> Venue
+Invoke-SqlFile "$tablesDir\VenueTemplateVersion.sql"         # -> VenueTemplate, UserAccount
+Invoke-SqlFile "$tablesDir\TemplateFloor.sql"                # -> VenueTemplateVersion
+Invoke-SqlFile "$tablesDir\TemplateObject.sql"               # -> TemplateFloor
+Invoke-SqlFile "$tablesDir\TemplateSection.sql"               # -> TemplateFloor
+Invoke-SqlFile "$tablesDir\TemplateSeat.sql"                  # -> TemplateSection, Seat
+Invoke-SqlFile "$tablesDir\ConcertMap.sql"                    # -> Concert
+Invoke-SqlFile "$tablesDir\ConcertMapRevision.sql"            # -> ConcertMap, VenueTemplateVersion
+Invoke-SqlFile "$tablesDir\ConcertMapRevisionFloor.sql"       # -> ConcertMapRevision
+Invoke-SqlFile "$tablesDir\ConcertMapRevisionObject.sql"      # -> ConcertMapRevisionFloor
+Invoke-SqlFile "$tablesDir\ConcertMapRevisionSection.sql"     # -> ConcertMapRevisionFloor
+Invoke-SqlFile "$tablesDir\ConcertMapRevisionSeat.sql"        # -> ConcertMapRevisionSection, Seat, EventSeat
 
 # Layer 4 -- Phu thuoc Layer 3
 Invoke-SqlFile "$tablesDir\BookingEventSeatAllocation.sql"  # -> Booking, EventSeat
