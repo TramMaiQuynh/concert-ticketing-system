@@ -50,6 +50,7 @@ export default function Reports() {
     <>
       <Panel
         title="Báo cáo Concert"
+        tone="workflow"
         subtitle="Doanh thu, tồn kho, tỷ lệ check-in và danh sách người giữ vé — chỉ trong phạm vi Concert bạn sở hữu (Admin xem được mọi Concert)."
       >
         <form onSubmit={load}>
