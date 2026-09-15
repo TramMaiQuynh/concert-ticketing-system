@@ -68,6 +68,50 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         status.Should().Be("OnSale");
     }
 
+    [Fact(DisplayName = "CreateConcert: lưu nhiều nghệ sĩ theo đúng thứ tự trong một request")]
+    public async Task CreateConcert_MultipleArtists_Succeeds()
+    {
+        var s = NewSeeder();
+        var organizer = await s.CreateUserAsync("Organizer");
+        var firstArtist = await s.CreateArtistAsync();
+        var secondArtist = await s.CreateArtistAsync();
+        var venue = await s.CreateVenueAsync();
+        var start = DateTime.UtcNow.AddDays(30);
+
+        var concertId = await Repo().CreateConcertAsync(organizer, new CreateConcertRequest(
+            [firstArtist, secondArtist], venue, s.ConcertName, start, start.AddHours(3)));
+
+        var first = await _fx.QueryAdminAsync<int>(
+            "SELECT ArtistID FROM ConcertArtist WHERE ConcertID = @id AND ArtistOrder = 1;",
+            new { id = concertId });
+        var second = await _fx.QueryAdminAsync<int>(
+            "SELECT ArtistID FROM ConcertArtist WHERE ConcertID = @id AND ArtistOrder = 2;",
+            new { id = concertId });
+        first.Should().Be(firstArtist);
+        second.Should().Be(secondArtist);
+    }
+
+    [Fact(DisplayName = "UpdateConcert: thay danh sách nghệ sĩ và thứ tự trong một transaction")]
+    public async Task UpdateConcert_MultipleArtists_ReplacesOrderedList()
+    {
+        var s = NewSeeder();
+        var organizer = await s.CreateUserAsync("Organizer");
+        var firstArtist = await s.CreateArtistAsync();
+        var secondArtist = await s.CreateArtistAsync();
+        var venue = await s.CreateVenueAsync();
+        var start = DateTime.UtcNow.AddDays(30);
+        var concertId = await Repo().CreateConcertAsync(organizer, new CreateConcertRequest(
+            firstArtist, venue, s.ConcertName, start, start.AddHours(3)));
+
+        await Repo().UpdateConcertAsync(concertId, organizer,
+            new UpdateConcertRequest(ArtistIds: [secondArtist, firstArtist]));
+
+        var artists = await _fx.QueryAdminListAsync<int>(
+            "SELECT ArtistID FROM ConcertArtist WHERE ConcertID = @id ORDER BY ArtistOrder;",
+            new { id = concertId });
+        artists.Should().Equal(secondArtist, firstArtist);
+    }
+
     [Fact(DisplayName = "UpdateConcertStatus: chuyển không hợp lệ (Draft→OnSale) → SqlException 50001 (HTTP 409)")]
     public async Task UpdateConcertStatus_InvalidTransition_Throws50001()
     {
@@ -123,6 +167,58 @@ public sealed class AdminRepositoryTests : IClassFixture<DbFixture>
         var seatId = await repo.CreateSeatAsync(admin, zoneId,
             new CreateSeatRequest(s.SeatCode, "IT-Seat", SeatRowLabel: "A", SeatColumnNumber: 1));
         seatId.Should().BeGreaterThan(0);
+    }
+
+    [Fact(DisplayName = "CreateSeat: cùng mã dùng được ở Zone khác, trùng trong cùng Zone bị từ chối")]
+    public async Task CreateSeat_CodeIsUniquePerZone()
+    {
+        var s = NewSeeder();
+        var admin = await s.CreateUserAsync("Admin");
+        var repo = Repo();
+        var venueId = await repo.CreateVenueAsync(admin, new CreateVenueRequest(s.VenueName, "IT Address"));
+        var zoneA = await repo.CreateZoneAsync(admin, venueId,
+            new CreateZoneRequest(s.ZoneCode + "A", "Zone A"));
+        var zoneB = await repo.CreateZoneAsync(admin, venueId,
+            new CreateZoneRequest(s.ZoneCode + "B", "Zone B"));
+
+        var seatA = await repo.CreateSeatAsync(admin, zoneA,
+            new CreateSeatRequest("A1", "A1", SeatRowLabel: "A", SeatColumnNumber: 1));
+        var seatB = await repo.CreateSeatAsync(admin, zoneB,
+            new CreateSeatRequest("A1", "A1", SeatRowLabel: "A", SeatColumnNumber: 1));
+        seatA.Should().NotBe(seatB);
+
+        var duplicate = () => repo.CreateSeatAsync(admin, zoneA,
+            new CreateSeatRequest("A1", "A1 duplicate", SeatRowLabel: "B", SeatColumnNumber: 1));
+        await duplicate.Should().ThrowAsync<SqlException>().Where(e => e.Number == 58124);
+    }
+
+    [Fact(DisplayName = "CreateSeatsBatch: tạo toàn bộ lưới trong một transaction; lỗi không để lại ghế dở")]
+    public async Task CreateSeatsBatch_IsAtomic()
+    {
+        var s = NewSeeder();
+        var admin = await s.CreateUserAsync("Admin");
+        var repo = Repo();
+        var venueId = await repo.CreateVenueAsync(admin, new CreateVenueRequest(s.VenueName, "IT Address"));
+        var zoneId = await repo.CreateZoneAsync(admin, venueId, new CreateZoneRequest(s.ZoneCode, "Zone"));
+
+        await repo.CreateSeatsBatchAsync(admin, zoneId, new CreateSeatsBatchRequest(new List<CreateSeatRequest>
+        {
+            new("A1", "A1", "A", 1),
+            new("A2", "A2", "A", 2),
+        }));
+
+        (await _fx.QueryAdminAsync<int>("SELECT COUNT(*) FROM Seat WHERE ZoneID = @id", new { id = zoneId }))
+            .Should().Be(2);
+
+        var duplicate = () => repo.CreateSeatsBatchAsync(admin, zoneId, new CreateSeatsBatchRequest(new List<CreateSeatRequest>
+        {
+            new("B1", "B1", "B", 1),
+            new("A1", "again", "B", 2),
+        }));
+        await duplicate.Should().ThrowAsync<SqlException>().Where(e => e.Number == 58124);
+
+        (await _fx.QueryAdminAsync<int>("SELECT COUNT(*) FROM Seat WHERE ZoneID = @id AND SeatCode = 'B1'", new { id = zoneId }))
+            .Should().Be(0);
     }
 
     [Fact(DisplayName = "CreateVenue: Customer (không phải Admin) → SqlException 58101 (HTTP 403)")]
