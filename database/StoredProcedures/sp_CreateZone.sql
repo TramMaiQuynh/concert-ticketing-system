@@ -10,7 +10,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreateZone
     @ZoneCode       VARCHAR(64),
     @ZoneName       NVARCHAR(255),
     -- ── Hinh hoc (FR11a) — tat ca tuy chon ──────────────────────────────────
-    -- 'Seated' co ghe danh so; 'GeneralAdmission' ban theo suc chua, khong co ghe.
+    -- Phien ban nay chi ho tro khu co ghe danh so (reserved seating).
     @ZoneType       VARCHAR(24)   = 'Seated',
     @ZoneLevel      INT           = NULL,   -- tang/khan dai, 1 = tang tret
     @ZoneX          INT           = NULL,
@@ -18,7 +18,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_CreateZone
     @ZoneWidth      INT           = NULL,
     @ZoneHeight     INT           = NULL,
     @ZoneRotation   DECIMAL(6,2)  = NULL,   -- do, de xoay khu huong ve san khau
-    @ZoneCapacity   INT           = NULL,   -- CHI cho khu ve dung
+    @ZoneCapacity   INT           = NULL,
     @NewZoneID      INT OUTPUT
 )
 AS
@@ -42,8 +42,11 @@ BEGIN
         DECLARE @TargetVenueID INT = @VenueID;
 
         -- ── Kiem tra hinh hoc khu ──────────────────────────────────────────
-        IF @ZoneType IS NOT NULL AND @ZoneType NOT IN ('Seated', 'GeneralAdmission')
-            THROW 59811, 'sp_CreateZone: ZoneType phai la Seated hoac GeneralAdmission.', 1;
+        IF @ZoneType IS NOT NULL AND @ZoneType <> 'Seated'
+            THROW 59831, 'sp_CreateZone: He thong hien chi ho tro khu co ghe danh so (Seated).', 1;
+
+        IF @ZoneLevel IS NOT NULL AND @ZoneLevel <= 0
+            THROW 59833, 'sp_CreateZone: Tang/khan dai phai la so nguyen duong.', 1;
 
         -- Hop bao: hoac khong khai bao gi, hoac du bon gia tri. Mot khu chi biet
         -- X ma khong biet Width thi khong ve duoc, va de lot vao co so du lieu se
@@ -51,6 +54,9 @@ BEGIN
         IF (@ZoneX IS NOT NULL OR @ZoneY IS NOT NULL OR @ZoneWidth IS NOT NULL OR @ZoneHeight IS NOT NULL)
            AND (@ZoneX IS NULL OR @ZoneY IS NULL OR @ZoneWidth IS NULL OR @ZoneHeight IS NULL)
             THROW 59812, 'sp_CreateZone: Vi tri khu phai co du X, Y, Width, Height.', 1;
+
+        IF @ZoneRotation IS NOT NULL AND (@ZoneRotation <= -360 OR @ZoneRotation >= 360)
+            THROW 59816, 'sp_CreateZone: Goc xoay phai trong khoang -360 den 360 do.', 1;
 
         IF @ZoneX IS NOT NULL
         BEGIN
@@ -67,27 +73,102 @@ BEGIN
             -- UPDLOCK, hai giao dich cung tranh chap DUNG DONG Venue nay se xep hang
             -- tuan tu - ben nao chay xong truoc thi ben sau doc duoc gia tri MOI NHAT,
             -- khong con doc duoc gia tri cu da lac hau.
-            DECLARE @VW INT, @VH INT;
-            SELECT @VW = MapWidth, @VH = MapHeight FROM Venue WITH (UPDLOCK) WHERE VenueID = @TargetVenueID;
+            DECLARE @VW INT, @VH INT, @StageX INT, @StageY INT, @StageWidth INT, @StageHeight INT;
+            SELECT @VW = MapWidth, @VH = MapHeight,
+                   @StageX = StageX, @StageY = StageY,
+                   @StageWidth = StageWidth, @StageHeight = StageHeight
+            FROM Venue WITH (UPDLOCK)
+            WHERE VenueID = @TargetVenueID;
 
             IF @VW IS NULL OR @VH IS NULL
                 THROW 59814,
                       'sp_CreateZone: Chua cau hinh so do dia diem. Goi sp_ConfigureVenueMap truoc khi dat vi tri khu.', 1;
 
-            IF @ZoneX < 0 OR @ZoneY < 0 OR @ZoneX + @ZoneWidth > @VW OR @ZoneY + @ZoneHeight > @VH
+            -- Kiem tra hinh CHU NHAT DA XOAY, khong chi hop bao truoc khi xoay.
+            -- Cach cu chi kiem tra ZoneX+Width/ZoneY+Height, nen khu xoay 45 do
+            -- o sat bien van qua duoc va bi cat mat tren SVG. Bao quet cua hinh
+            -- xoay tinh tu nua chieu rong/cao va sin/cos cua goc xoay.
+            DECLARE @Radians FLOAT = CONVERT(FLOAT, ISNULL(@ZoneRotation, 0)) * PI() / 180.0,
+                    @HalfW FLOAT = CONVERT(FLOAT, @ZoneWidth) / 2.0,
+                    @HalfH FLOAT = CONVERT(FLOAT, @ZoneHeight) / 2.0,
+                    @CenterX FLOAT = CONVERT(FLOAT, @ZoneX) + CONVERT(FLOAT, @ZoneWidth) / 2.0,
+                    @CenterY FLOAT = CONVERT(FLOAT, @ZoneY) + CONVERT(FLOAT, @ZoneHeight) / 2.0;
+            DECLARE @Cos FLOAT = COS(@Radians),
+                    @Sin FLOAT = SIN(@Radians),
+                    @ExtentX FLOAT = ABS(@HalfW * COS(@Radians)) + ABS(@HalfH * SIN(@Radians)),
+                    @ExtentY FLOAT = ABS(@HalfW * SIN(@Radians)) + ABS(@HalfH * COS(@Radians));
+
+            IF @CenterX - @ExtentX < 0 OR @CenterY - @ExtentY < 0
+               OR @CenterX + @ExtentX > @VW OR @CenterY + @ExtentY > @VH
                 THROW 59815, 'sp_CreateZone: Khu nam ngoai mat phang cua dia diem.', 1;
+
+            -- Khong de khu ghe de len san khau. Kiem tra dung hinh chu nhat da
+            -- xoay bang Separating Axis Theorem, khong dung AABB de tranh tu choi
+            -- sai cac khu nghieng chi cham vao goc san khau.
+            IF @StageX IS NOT NULL
+            BEGIN
+                DECLARE @StageHalfW FLOAT = CONVERT(FLOAT, @StageWidth) / 2.0,
+                        @StageHalfH FLOAT = CONVERT(FLOAT, @StageHeight) / 2.0,
+                        @DeltaX FLOAT = @CenterX - (CONVERT(FLOAT, @StageX) + CONVERT(FLOAT, @StageWidth) / 2.0),
+                        @DeltaY FLOAT = @CenterY - (CONVERT(FLOAT, @StageY) + CONVERT(FLOAT, @StageHeight) / 2.0);
+
+                IF ABS(@DeltaX * @Cos + @DeltaY * @Sin) < @HalfW + @StageHalfW * ABS(@Cos) + @StageHalfH * ABS(@Sin)
+                   AND ABS(-@DeltaX * @Sin + @DeltaY * @Cos) < @HalfH + @StageHalfW * ABS(@Sin) + @StageHalfH * ABS(@Cos)
+                   AND ABS(@DeltaX) < @StageHalfW + @HalfW * ABS(@Cos) + @HalfH * ABS(@Sin)
+                   AND ABS(@DeltaY) < @StageHalfH + @HalfW * ABS(@Sin) + @HalfH * ABS(@Cos)
+                    THROW 59820, 'sp_CreateZone: Khu khong duoc chong len san khau.', 1;
+            END
+
+            -- Cac khu cung tang la cac vung ban ve phan biet, nen khong duoc de
+            -- chong len nhau. Tang khac co the dung cung hinh chieu (ban cong
+            -- nam tren khan dai tang tret), vi renderer cho nguoi mua chon tung
+            -- tang. Kiem tra SAT ben duoi dung cho hai hinh chu nhat da xoay;
+            -- cham canh van hop le vi tat ca phep so sanh deu dung <, khong dung <=.
+            -- Venue dang duoc UPDLOCK o tren nen tat ca lenh sua hinh hoc dung SP
+            -- nay se xep hang; khong can khoa them Zone va khong tao deadlock voi
+            -- mot giao dich dang doi den khoa Venue.
+            IF EXISTS (
+                SELECT 1
+                FROM Zone AS otherZone
+                CROSS APPLY (
+                    SELECT CONVERT(FLOAT, ISNULL(otherZone.ZoneRotation, 0)) * PI() / 180.0 AS OtherRadians,
+                           CONVERT(FLOAT, otherZone.ZoneX) + CONVERT(FLOAT, otherZone.ZoneWidth) / 2.0 AS OtherCenterX,
+                           CONVERT(FLOAT, otherZone.ZoneY) + CONVERT(FLOAT, otherZone.ZoneHeight) / 2.0 AS OtherCenterY,
+                           CONVERT(FLOAT, otherZone.ZoneWidth) / 2.0 AS OtherHalfW,
+                           CONVERT(FLOAT, otherZone.ZoneHeight) / 2.0 AS OtherHalfH
+                ) AS otherGeometry
+                CROSS APPLY (
+                    SELECT COS(otherGeometry.OtherRadians) AS OtherCos,
+                           SIN(otherGeometry.OtherRadians) AS OtherSin
+                ) AS otherAxis
+                CROSS APPLY (
+                    SELECT @CenterX - otherGeometry.OtherCenterX AS DeltaX,
+                           @CenterY - otherGeometry.OtherCenterY AS DeltaY
+                ) AS delta
+                WHERE otherZone.VenueID = @TargetVenueID
+                  AND otherZone.ZoneStatus = 'Active'
+                  AND ISNULL(otherZone.ZoneLevel, 1) = ISNULL(@ZoneLevel, 1)
+                  AND otherZone.ZoneX IS NOT NULL
+                  AND ABS(delta.DeltaX * @Cos + delta.DeltaY * @Sin)
+                        < @HalfW + otherGeometry.OtherHalfW * ABS(@Cos * otherAxis.OtherCos + @Sin * otherAxis.OtherSin)
+                                   + otherGeometry.OtherHalfH * ABS(-@Cos * otherAxis.OtherSin + @Sin * otherAxis.OtherCos)
+                  AND ABS(-delta.DeltaX * @Sin + delta.DeltaY * @Cos)
+                        < @HalfH + otherGeometry.OtherHalfW * ABS(-@Sin * otherAxis.OtherCos + @Cos * otherAxis.OtherSin)
+                                   + otherGeometry.OtherHalfH * ABS(@Sin * otherAxis.OtherSin + @Cos * otherAxis.OtherCos)
+                  AND ABS(delta.DeltaX * otherAxis.OtherCos + delta.DeltaY * otherAxis.OtherSin)
+                        < otherGeometry.OtherHalfW + @HalfW * ABS(@Cos * otherAxis.OtherCos + @Sin * otherAxis.OtherSin)
+                                                   + @HalfH * ABS(-@Sin * otherAxis.OtherCos + @Cos * otherAxis.OtherSin)
+                  AND ABS(-delta.DeltaX * otherAxis.OtherSin + delta.DeltaY * otherAxis.OtherCos)
+                        < otherGeometry.OtherHalfH + @HalfW * ABS(-@Cos * otherAxis.OtherSin + @Sin * otherAxis.OtherCos)
+                                                   + @HalfH * ABS(@Sin * otherAxis.OtherSin + @Cos * otherAxis.OtherCos)
+            )
+                THROW 59832, 'sp_CreateZone: Khu cung tang khong duoc chong len nhau.', 1;
         END
 
-        IF @ZoneRotation IS NOT NULL AND (@ZoneRotation <= -360 OR @ZoneRotation >= 360)
-            THROW 59816, 'sp_CreateZone: Goc xoay phai trong khoang -360 den 360 do.', 1;
-
-        -- Suc chua thuoc ve khu ve dung, va khu ve dung thi bat buoc phai co:
-        -- khong co so nay thi khong ban duoc gi, vi khu do khong co ghe de dem.
-        IF @ZoneType = 'GeneralAdmission' AND ISNULL(@ZoneCapacity, 0) <= 0
-            THROW 59817, 'sp_CreateZone: Khu ve dung phai khai bao suc chua lon hon 0.', 1;
-
-        IF @ZoneType <> 'GeneralAdmission' AND @ZoneCapacity IS NOT NULL
-            THROW 59818, 'sp_CreateZone: Chi khu ve dung moi co suc chua; khu co ghe thi suc chua do so ghe quyet dinh.', 1;
+        -- Suc chua cua khu co ghe la so Seat dang hoat dong; khong nhap mot
+        -- gia tri rieng de tranh lech giua suc chua va so ghe co the ban.
+        IF @ZoneCapacity IS NOT NULL
+            THROW 59818, 'sp_CreateZone: Suc chua Zone khong ap dung cho khu co ghe; so ghe quyet dinh suc chua.', 1;
 
         INSERT INTO Zone (VenueID, ZoneCode, ZoneName, ZoneType, ZoneLevel,
                           ZoneX, ZoneY, ZoneWidth, ZoneHeight, ZoneRotation, ZoneCapacity)
