@@ -46,9 +46,8 @@ export default function Concert() {
    * So do hinh hoc cua dia diem.
    *
    * Tach khoi /seats vi day la hai tai lieu khac ban chat: /seats la danh sach
-   * phang (dung cho gio hang, tinh tien), con /seatmap la tai liec hinh hoc long
-   * nhau (dia diem -> khu -> ghe) va con chua ca khu ve dung — loai khu KHONG co
-   * ghe nao nen khong the xuat hien trong mot danh sach ghe.
+   * phang (dung cho gio hang, tinh tien), con /seatmap la tai lieu hinh hoc long
+   * nhau (dia diem -> khu -> ghe) dung de dat cac khu va ghe vao dung vi tri.
    *
    * null = dia diem chua khai bao toa do. Khi do giao dien rot ve che do liet ke
    * theo khu, van dat ve duoc binh thuong.
