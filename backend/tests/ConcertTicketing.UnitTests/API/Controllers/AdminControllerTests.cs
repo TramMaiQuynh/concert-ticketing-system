@@ -60,6 +60,18 @@ public class AdminControllerTests
     }
 
     [Fact]
+    public async Task ListConcertArtists_ReturnsScopedRepositoryResult()
+    {
+        var expected = new[] { new ConcertArtistListItem(3, "Artist A", 1) };
+        _mockRepo.Setup(r => r.ListConcertArtistsAsync(5)).ReturnsAsync(expected);
+
+        var result = await _controller.ListConcertArtists(5);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeEquivalentTo(expected);
+        _mockRepo.Verify(r => r.ListConcertArtistsAsync(5), Times.Once);
+    }
+
+    [Fact]
     public async Task UpdateConcertStatus_Returns204()
     {
         var request = new UpdateConcertStatusRequest("Published");
@@ -129,6 +141,22 @@ public class AdminControllerTests
 
         var created = result.Should().BeOfType<CreatedResult>().Subject;
         created.Value.Should().BeEquivalentTo(new { Id = 30 });
+    }
+
+    [Fact]
+    public async Task CreateSeatsBatch_Returns204()
+    {
+        var request = new CreateSeatsBatchRequest(new List<CreateSeatRequest>
+        {
+            new("A1", "A1", "A", 1),
+            new("A2", "A2", "A", 2),
+        });
+        _mockRepo.Setup(r => r.CreateSeatsBatchAsync(7, 5, request)).Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateSeatsBatch(5, request);
+
+        result.Should().BeOfType<NoContentResult>();
+        _mockRepo.Verify(r => r.CreateSeatsBatchAsync(7, 5, request), Times.Once);
     }
 
     [Fact]
