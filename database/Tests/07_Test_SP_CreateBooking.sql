@@ -15,12 +15,11 @@ DECLARE @SQL NVARCHAR(MAX);
 -- ===== 51001: Concert khong OnSale =====
 SET @SQL = N'
     DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue);
-    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @cid_draft INT, @bid INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@uid,@aid,@vid,''Draft Concert'',''Draft'',
+    VALUES (@uid,@vid,''Draft Concert'',''Draft'',
         DATEADD(d,10,SYSDATETIME()),DATEADD(d,11,SYSDATETIME()),4,0,0,0);
     SET @cid_draft = SCOPE_IDENTITY();
     EXEC sp_CreateBooking
@@ -118,5 +117,4 @@ EXEC test.sp_RunTest @Suite,'CreateBooking_2Seats_HappyPath','SUCCESS',NULL,@SQL
 
 PRINT '== SP_CreateBooking Tests Done ==';
 GO
-
 
