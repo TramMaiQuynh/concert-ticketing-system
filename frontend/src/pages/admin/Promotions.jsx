@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/client';
-import { useCatalog } from '../../lib/localCatalog';
+import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useConcertOptions } from '../../lib/concertOptions';
 import { Field, Select, Check, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
 import { toApiDateTime } from '../../lib/format';
@@ -34,7 +34,7 @@ export default function Promotions() {
 
 function CreatePromotion() {
   const { options: concerts } = useConcertOptions();
-  const { items, remember } = useCatalog('promotion');
+  const { items } = useAdminCatalog('promotion');
   const act = useAction();
 
   const [concertId, setConcertId] = useState('');
@@ -53,6 +53,7 @@ function CreatePromotion() {
   return (
     <Panel
       title="Tạo khuyến mãi"
+      tone="create"
       subtitle="Khuyến mãi gắn với một concert cụ thể. Giá trị giảm được áp khi khách bấm áp mã ở trang thanh toán, và bị KHOÁ lại khi khách đã khởi tạo giao dịch."
     >
       <form
@@ -71,7 +72,6 @@ function CreatePromotion() {
               maxApplicableQuantity: num(f.maxApplicableQuantity),
               maxDiscountAmount: num(f.maxDiscountAmount),
             });
-            remember({ id: res.data.id, name: f.promotionName.trim() });
             return res.data.id;
           }, (id) => `Đã tạo khuyến mãi. ID = ${id}. Khuyến mãi sinh ra ở trạng thái Draft — `
                    + `phải chuyển sang Active ở khối dưới thì mới áp được.`);
@@ -150,7 +150,7 @@ function CreatePromotion() {
 /* ── Trạng thái khuyến mãi ───────────────────────────────────────────────── */
 
 function PromotionStatusSection() {
-  const { items } = useCatalog('promotion');
+  const { items } = useAdminCatalog('promotion');
   const act = useAction();
   const [id, setId] = useState('');
   const [status, setStatus] = useState(PromotionStatus.Active);
@@ -158,6 +158,7 @@ function PromotionStatusSection() {
   return (
     <Panel
       title="Trạng thái khuyến mãi"
+      tone="workflow"
       subtitle="Draft là bản nháp chưa áp được. Active là đang chạy. Disabled là tắt hẳn. Không có trạng thái 'hết hạn' — hết hạn suy ra từ khoảng thời gian hiệu lực."
     >
       <form
@@ -188,8 +189,8 @@ function PromotionStatusSection() {
 /* ── Tạo mã giảm giá ─────────────────────────────────────────────────────── */
 
 function CreateDiscountCode() {
-  const promotions = useCatalog('promotion');
-  const { items, remember } = useCatalog('discountCode');
+  const promotions = useAdminCatalog('promotion');
+  const { items } = useAdminCatalog('discountCode');
   const act = useAction();
 
   const [promotionId, setPromotionId] = useState('');
@@ -204,6 +205,7 @@ function CreateDiscountCode() {
   return (
     <Panel
       title="Tạo mã giảm giá"
+      tone="create"
       subtitle="Mã thuộc về một khuyến mãi. Giới hạn theo khách (BR36f) đếm số lần chính khách đó đã dùng mã, không phải tổng lượt dùng."
     >
       <form
@@ -217,7 +219,6 @@ function CreateDiscountCode() {
               globalUsageLimit: num(globalLimit),
               perCustomerUsageLimit: num(perCustomer),
             });
-            remember({ id: res.data.id, name: code.trim() });
             setCode('');
             return res.data.id;
           }, (id) => `Đã tạo mã giảm giá. ID = ${id}.`);
@@ -261,7 +262,7 @@ function CreateDiscountCode() {
 /* ── Trạng thái mã giảm giá ──────────────────────────────────────────────── */
 
 function DiscountCodeStatusSection() {
-  const { items } = useCatalog('discountCode');
+  const { items } = useAdminCatalog('discountCode');
   const act = useAction();
   const [id, setId] = useState('');
   const [status, setStatus] = useState(DiscountCodeStatus.Disabled);
@@ -269,6 +270,7 @@ function DiscountCodeStatusSection() {
   return (
     <Panel
       title="Trạng thái mã giảm giá"
+      tone="workflow"
       subtitle="Tắt một mã bị lộ mà không phải tắt cả chương trình khuyến mãi."
     >
       <form
