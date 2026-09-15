@@ -16,22 +16,20 @@ DECLARE @SQL NVARCHAR(MAX);
 -- CHK_Concert_Status: trang thai khong hop le
 SET @SQL = N'
     DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue);
-    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@uid,@aid,@vid,''Bad'',''INVALID_STATUS'',
+    VALUES (@uid,@vid,''Bad'',''INVALID_STATUS'',
         DATEADD(d,1,SYSDATETIME()),DATEADD(d,2,SYSDATETIME()),4,0,0,0);';
 EXEC test.sp_RunTest @Suite,'CHK_Concert_Status_Invalid','ERROR',NULL,@SQL;
 
 -- CHK_Concert_Dates: EndDatetime <= StartDatetime
 SET @SQL = N'
     DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue);
-    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@uid,@aid,@vid,''Bad Dates'',''Draft'',
+    VALUES (@uid,@vid,''Bad Dates'',''Draft'',
         DATEADD(d,2,SYSDATETIME()),DATEADD(d,1,SYSDATETIME()),4,0,0,0);';
 EXEC test.sp_RunTest @Suite,'CHK_Concert_Dates_Invalid','ERROR',NULL,@SQL;
 
@@ -127,11 +125,10 @@ EXEC test.sp_RunTest @Suite,'UIX_Allocation_1Active_1Released_OK','SUCCESS',NULL
 -- ===== CHK_Concert_PurchaseLimit: PurchaseLimit <= 0 -> ERROR =====
 SET @SQL = N'
     DECLARE @vid INT = (SELECT TOP 1 VenueID FROM Venue);
-    DECLARE @aid INT = (SELECT TOP 1 ArtistID FROM Artist);
     DECLARE @uid INT = (SELECT UserID FROM UserAccount WHERE Username=''test_org'');
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
         StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@uid,@aid,@vid,''PL0'',''Draft'',
+    VALUES (@uid,@vid,''PL0'',''Draft'',
         DATEADD(d,1,SYSDATETIME()),DATEADD(d,2,SYSDATETIME()),0,0,0,0);';
 EXEC test.sp_RunTest @Suite,'CHK_Concert_PurchaseLimit_Positive','ERROR',NULL,@SQL;
 
