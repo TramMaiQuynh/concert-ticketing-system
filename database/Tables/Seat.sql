@@ -10,7 +10,7 @@ CREATE TABLE Seat (
 
     -- ── VI TRI TRONG KHU (FR11a) ───────────────────────────────────────────
     --
-    -- SeatCode la DINH DANH (duy nhat trong dia diem), khong phai vi tri:
+    -- SeatCode la DINH DANH (duy nhat trong khu), khong phai vi tri:
     -- 'STD-023955-4' khong noi len ghe nam o dau. Hai cot duoi moi la vi tri.
     --
     -- Day cung la tang con thieu trong bo ba danh tinh ma moi he thong ban ve deu
@@ -36,7 +36,7 @@ CREATE TABLE Seat (
     CONSTRAINT PK_Seat PRIMARY KEY CLUSTERED (SeatID),
     CONSTRAINT FK_Seat_Zone FOREIGN KEY (ZoneID) REFERENCES Zone(ZoneID),
     CONSTRAINT FK_Seat_Venue FOREIGN KEY (VenueID) REFERENCES Venue(VenueID),
-    CONSTRAINT UQ_Seat_Venue_SeatCode UNIQUE (VenueID, SeatCode)
+    CONSTRAINT UQ_Seat_Zone_SeatCode UNIQUE (ZoneID, SeatCode)
 );
 GO
 
