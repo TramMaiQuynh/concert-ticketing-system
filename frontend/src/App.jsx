@@ -48,9 +48,9 @@ function Navbar() {
     <>
       <header className="nav">
         <div className="nav__inner">
-          <Link to="/" className="nav__brand" aria-label="TicketPro — trang chủ">
+          <Link to="/" className="nav__brand" aria-label="StagePass — trang chủ">
             <span className="nav__mark"><IconTicket size={15} /></span>
-            TicketPro
+            StagePass
           </Link>
 
           <nav className="nav__links" aria-label="Điều hướng chính">
