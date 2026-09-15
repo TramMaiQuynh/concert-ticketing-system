@@ -30,10 +30,10 @@ cd T:\coding\concert_ticketing_system
 Script làm tuần tự:
 
 1. Kiểm tra `sqlcmd`, `dotnet`, `npm`.
-2. Deploy database sạch (`deploy.ps1 -DropExisting $true`) — 28 bảng · 33 trigger · 3 function · 43 stored procedure · 12 view · RBAC.
+2. Deploy database sạch (`deploy.ps1 -DropExisting $true`) — 29 bảng · 33 trigger · 3 function · 44 stored procedure · 17 view · RBAC.
 3. **Sinh mật khẩu ngẫu nhiên** cho 5 SQL login → ghi `.deploy/db-credentials.json`.
 4. **Sinh JWT secret + Payment signature secret** (256-bit) → ghi `backend/.../appsettings.Local.json`.
-5. Ghi `frontend/.env` trỏ tới API.
+5. Ghi `frontend/.env` để Vite proxy `/api` tới API.
 6. Build backend và frontend.
 
 > **Không có bí mật nào trong repository.** `appsettings.json` để trống các trường bí mật;
@@ -163,16 +163,17 @@ Mật khẩu chung cho mọi tài khoản được tạo trong buổi demo: `Dem
 - Ghi lại ID hiển thị trong giao diện — dùng ở bước tạo Zone.
 
 **c. Tạo khu vực (Zone)**
-- Chọn địa điểm vừa tạo → nhập Mã khu vực (`A`) + Tên hiển thị → Lưu. Ghi lại ID.
+- Chọn địa điểm vừa tạo → nhập Mã khu vực (`A`) + Tên hiển thị → Lưu. Hạng vé xuất hiện trong danh mục để chọn.
 - Khu tạo ở trang này **luôn là khu có ghế** (`Seated`) — đó là mặc định của
   `sp_CreateZone`, và form ở đây cố ý không hỏi loại khu.
-- Muốn tạo **khu vé đứng** (`GeneralAdmission`, bán theo sức chứa và không có ghế đánh
-  số) thì dùng **Quản trị → Sơ đồ địa điểm** (§4.2) — ở đó mới có ô chọn loại khu và ô
-  sức chứa, vì khu đứng chỉ có ý nghĩa khi đã có mặt phẳng để đặt nó lên.
+- Bản hiện tại chỉ bán theo ghế đánh số. Vé đứng cần một kho capacity, giữ chỗ, hoàn vé
+  và thanh toán riêng; hệ thống không hiển thị lựa chọn đó để tránh tạo khu không thể bán.
 
 **d. Tạo ghế (khu có ghế)**
 - Tạo một ghế: **Mã ghế** (`A1`) + Hàng (`A`) + Số thứ tự trong hàng (`1`) → Lưu.
   Sau mỗi lần tạo, ô số thứ tự tự tăng để gõ tiếp `A2`, `A3`… nhanh hơn.
+- Mã ghế chỉ cần duy nhất trong **Zone** đã chọn. Vì vậy cùng một Venue có thể có ghế
+  `A1` ở Zone A và `A1` ở Zone B; trùng `A1` trong cùng Zone sẽ bị từ chối.
 - Tạo hàng loạt: **Tiền tố mã ghế** (`A`) + Hàng (`A`) + Từ (`1`) đến (`12`).
   Một lệnh tạo 12 ghế `A1`–`A12`, banner trả về dải ID — **cần dải này ở §4.3**.
 
@@ -181,8 +182,7 @@ Mật khẩu chung cho mọi tài khoản được tạo trong buổi demo: `Dem
 một khu có ghế → hệ thống từ chối (`sp_CreateSeat` lỗi 59825). Không phải luật hình
 thức: thiếu vị trí thì sơ đồ dồn mọi ghế về cùng một ô và chúng chồng khít lên nhau,
 người dùng chỉ thấy đúng một ghế còn những ghế kia biến mất không một thông báo nào.
-Luật đối xứng cũng đúng — gán vị trí cho ghế trong **khu vé đứng** bị từ chối (59823).
-Cả hai ràng buộc nằm ở stored procedure, không phải JavaScript — tắt JavaScript cũng
+Các ràng buộc này nằm ở stored procedure, không phải JavaScript — tắt JavaScript cũng
 không lách được.
 
 ---
@@ -194,15 +194,16 @@ không lách được.
 Giao diện chia ba bước theo đúng thứ tự phụ thuộc của database — bỏ qua thứ tự sẽ bị từ chối:
 
 **Bước 1 — Mặt phẳng + sân khấu** (`sp_ConfigureVenueMap`)
-- Nhấn *Dùng bố cục mẫu* → tự điền `1000×720`, sân khấu `360×56`.
-- Bản xem trước vẽ lại theo **từng ký tự gõ** — người sắp đặt khán phòng mà không thấy kết quả thì không làm được.
+- Chọn mẫu gần nhất: *Sân khấu phía trước*, *Sân khấu trung tâm* hoặc *Mặt bằng không sân khấu*.
+- Kích thước kỹ thuật chỉ dành cho trường hợp cần hiệu chỉnh; đây là hệ tọa độ nội bộ, không phải mét hay pixel.
 
-**Bước 2 — Các khu, toạ độ và góc xoay**
-- Mỗi khu có vị trí `(x, y)` và góc xoay để hướng về phía sân khấu.
-- Thử nhập khu **vượt ra ngoài mặt phẳng** → database từ chối kèm lý do cụ thể.
+**Bước 2 — Các khu trên canvas**
+- Nhập mã, tên và tầng; sau đó **vẽ trực tiếp** vùng khu trên mặt bằng, kéo để di chuyển, kéo tay nắm ở góc để đổi kích thước và dùng nút xoay khi cần.
+- Không cần đoán hoặc gõ `X/Y/Width/Height`: trình biên tập tự sinh các giá trị này, tự căn lưới và giữ khu trong mặt bằng.
+- Khu không được đè lên sân khấu hoặc khu khác cùng tầng. Hai tầng có thể dùng cùng hình chiếu, và màn hình bán vé cho khách chọn từng tầng.
 
 **Bước 3 — Ghế theo lưới hàng × cột**
-- Nhập số hàng, số cột, nhãn hàng bắt đầu → hệ thống tự sinh nhãn `A/B/C…` và số ghế `1/2/3…`.
+- Chọn khu, nhập số hàng, số cột, nhãn hàng bắt đầu → hệ thống tự sinh nhãn `A/B/C…` và số ghế `1/2/3…` trong **một giao dịch**. Nếu có một mã hoặc vị trí trùng, cả lưới được rollback.
 
 **Điểm đáng nói:** hình dáng khán phòng thuộc về *địa điểm*, không thuộc về *concert*. Một địa điểm cấu hình một lần, mọi concert tổ chức ở đó về sau dùng lại. Nếu để mỗi organizer tự vẽ, cùng một nhà hát sẽ có mười sơ đồ khác nhau và khách quen ghế C12 sẽ thấy mỗi lần một khác.
 
@@ -227,14 +228,14 @@ Giao diện chia ba bước theo đúng thứ tự phụ thuộc của database 
 > được mọi việc của Organizer.
 >
 > *Muốn trình diễn rõ sự tách vai hơn:* đăng ký thêm tài khoản `organizer` trên form
-> đăng ký, cấp cho nó vai trò Organizer, rồi làm §4.3 bằng tài khoản đó. Nhớ dùng
-> **cùng một trình duyệt** — khu quản trị nhớ ID đã tạo trong `localStorage`, và sổ tay
-> đó theo trình duyệt chứ không theo tài khoản, nên các ô chọn nghệ sĩ/địa điểm/ghế vẫn
-> còn nguyên sau khi đổi người đăng nhập.
+> đăng ký, cấp cho nó vai trò Organizer, rồi làm §4.3 bằng tài khoản đó. Có thể dùng
+> trình duyệt hoặc máy khác: danh mục đọc từ database. Organizer chỉ thấy concert,
+> hạng vé, khuyến mãi, mã giảm giá và hoàn tiền trong phạm vi mình sở hữu.
 
 **Quản trị → Concert → Tạo concert mới**
 
-1. Điền thông tin: nghệ sĩ, địa điểm, tên, thời gian diễn, cửa sổ bán vé, giới hạn
+1. Điền thông tin: **một hoặc nhiều nghệ sĩ** (chọn theo thứ tự hiển thị), địa điểm, tên,
+   thời gian diễn, cửa sổ bán vé, giới hạn
    vé/khách (`PurchaseLimit` — để `4`).
 
    > **Đặt *Mở bán từ* ở một mốc trong QUÁ KHỨ** (ví dụ 5 phút trước). Để ở tương lai
@@ -242,9 +243,9 @@ Giao diện chia ba bước theo đúng thứ tự phụ thuộc của database 
 
    Concert sinh ra ở trạng thái **Draft** và **không hiện ở trang chủ** — đúng như
    banner nói.
-2. **Tạo hạng vé**: tên hạng, giá gốc (`BasePrice`) → Lưu. Ghi lại ID.
+2. **Tạo hạng vé**: tên hạng, giá gốc (`BasePrice`) → Lưu. Hạng vé xuất hiện trong danh mục để chọn.
 3. **Đưa ghế vào kho**: chọn concert + hạng vé, rồi bấm *Chọn tất cả* trong danh sách
-   ghế của sổ tay (hoặc gõ dải ID từ §4.1d). Đây là bước biến ghế của **địa điểm**
+   ghế của địa điểm đã chọn (hoặc gõ dải ID từ §4.1d). Đây là bước biến ghế của **địa điểm**
    thành vé bán được: ghế không có giá, giá chỉ xuất hiện khi ghế được đưa vào một
    concert cụ thể.
 4. Thử **nhảy thẳng** từ `Draft` sang `OnSale` → hệ thống từ chối (**409**). Phải đi
@@ -376,7 +377,7 @@ bộ những gì vừa làm trong buổi demo đều nằm ở đây, kèm đún
 
 19. **Hai đường vào database, cố ý**: ứng dụng web luôn kết nối bằng `api_service`; các login theo vai trò (`app_admin`, `app_organizer`, `app_customer`, `app_checkinstaff`) phục vụ đường truy cập trực tiếp vào database. Các view `VW_Organizer*` tồn tại cho đường thứ hai đó (BR37/FR48/BO9/FR15) — chứng minh được: `app_organizer` bị `DENY` trên bảng `Booking` (lỗi 229) nhưng đọc qua view thì đúng, và chỉ thấy concert của chính mình.
 
-20. **Sổ tay cục bộ (`localStorage`)**: API quản trị gần như toàn bộ là endpoint ghi. Các đường đọc hiện có (`GET /admin/venues`, `GET /admin/venues/{id}/zones`, `GET /admin/artists`, cùng ba endpoint báo cáo ở §4.5b) đủ để dropdown chọn địa điểm/nghệ sĩ, màn *Sơ đồ địa điểm* và trang *Báo cáo* chạy bằng dữ liệu thật. Những thứ còn lại (**người dùng**, hạng vé, khuyến mãi, mã giảm giá, ghế) chưa có đường đọc — nên giao diện giữ một sổ tay cục bộ nhớ ID vừa tạo, và §4.5 phải làm việc với UserID. Sổ tay có nút dọn, và mọi ô chọn đều kèm ô nhập ID thủ công để không bao giờ bị kẹt. Đây là điểm đáng nói thẳng: **giao diện tốt nhất cũng không bù được một API thiếu đường đọc.**
+20. **Danh mục quản trị từ database**: Zone, Seat, hạng vé, khuyến mãi, mã giảm giá, hoàn tiền và concert (kể cả Draft) có API GET. UI tải đủ các trang và cập nhật sau thao tác ghi; đổi tài khoản sẽ xóa cache cũ. SQL lọc dữ liệu theo quyền sở hữu concert, còn địa điểm/khu/ghế là danh mục dùng chung. Xem [API và kiểm thử](docs/admin-catalog.md). Trang cấp vai trò vẫn nhập UserID.
 
 ---
 
@@ -461,7 +462,7 @@ Cửa sổ tranh chấp được nới rộng bằng `WAITFOR` nên kết quả 
 >>> Người khác bị giữ lại tới khi lượt xử lý xong; hai lần đọc giống hệt nhau.
 ```
 
-**Cơ chế:** `SELECT ... FROM EventSeat WITH (UPDLOCK)` — khoá cập nhật ngay lúc đọc, ngăn ghi đồng thời trong suốt transaction. Hệ thống dùng `UPDLOCK` ở 25/43 stored procedure để đổi lấy tính nhất quán mà không phải nâng mức cô lập toàn cục.
+**Cơ chế:** `SELECT ... FROM EventSeat WITH (UPDLOCK)` — khoá cập nhật ngay lúc đọc, ngăn ghi đồng thời trong suốt transaction. Hệ thống dùng `UPDLOCK` ở 30/44 stored procedure để đổi lấy tính nhất quán mà không phải nâng mức cô lập toàn cục.
 
 ---
 
@@ -518,7 +519,7 @@ Cửa sổ tranh chấp được nới rộng bằng `WAITFOR` nên kết quả 
 
 ---
 
-**Nói thẳng nếu hội đồng hỏi:** hệ thống **không** nâng mức cô lập toàn cục lên REPEATABLE READ / SERIALIZABLE. Hiện tượng 3 và 4 **vẫn xảy ra được** ở các truy vấn đọc trần không đặt khoá — đó là hành vi đúng của READ COMMITTED. Hệ thống chọn đặt khoá đúng điểm nóng (`UPDLOCK` ở 25/43 thủ tục, `HOLDLOCK` ở các chỗ đếm phạm vi, thêm `sp_getapplock` ở 4 thủ tục nặng) để đổi lấy thông lượng, thay vì khoá toàn cục.
+**Nói thẳng nếu hội đồng hỏi:** hệ thống **không** nâng mức cô lập toàn cục lên REPEATABLE READ / SERIALIZABLE. Hiện tượng 3 và 4 **vẫn xảy ra được** ở các truy vấn đọc trần không đặt khoá — đó là hành vi đúng của READ COMMITTED. Hệ thống chọn đặt khoá đúng điểm nóng (`UPDLOCK` ở 30/44 thủ tục, `HOLDLOCK` ở các chỗ đếm phạm vi, thêm `sp_getapplock` ở 4 thủ tục nặng) để đổi lấy thông lượng, thay vì khoá toàn cục.
 
 ---
 
@@ -531,17 +532,22 @@ dựng như sau. Toàn bộ đã được chạy thử end-to-end, kể cả mà
 **Mạng:** phát hotspot từ điện thoại, cả hai laptop nối vào đó. Không dùng WiFi trường —
 mạng tổ chức thường bật *client isolation*, khiến hai máy không thấy nhau.
 
+> **Chỉ frontend cần mở ra mạng, backend thì không.** Vite nhận `/api` trên cổng 5173
+> rồi chuyển tiếp sang backend **từ chính máy chủ**, nên backend vẫn nghe `localhost`
+> như bình thường. Hệ quả: chỉ mở đúng **một** cổng, không còn vướng CORS (trình duyệt
+> thấy cùng origin) lẫn `AllowedHosts` (proxy đặt lại `Host` thành `localhost:5295`).
+
 ### Chuẩn bị một lần trên laptop-server
 
 ```powershell
 # PowerShell chay quyen Administrator
-New-NetFirewallRule -DisplayName "ConcertTicketing Backend LAN"  -Direction Inbound -Protocol TCP -LocalPort 5295 -Action Allow -Profile Private
 New-NetFirewallRule -DisplayName "ConcertTicketing Frontend LAN" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private
 ```
 
 Khi Windows hỏi mạng hotspot là loại gì → chọn **Private**. Kiểm tra bằng
 `Get-NetConnectionProfile`; nếu ra `Public` thì
-`Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`.
+`Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`
+(cũng cần quyền Administrator).
 
 ### Mỗi lần chạy
 
@@ -549,43 +555,35 @@ Khi Windows hỏi mạng hotspot là loại gì → chọn **Private**. Kiểm t
 # 1. Lay IP cua laptop-server TRONG mang hotspot (doi moi lan noi lai)
 Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^127\.|^169\.254\.' } | Select IPAddress, InterfaceAlias
 
-# 2. Deploy + build, tro thang vao IP do
-.\scripts\setup-demo.ps1 -ApiUrl "http://<IP>:5295" -FrontendUrl "http://<IP>:5173"
+# 2. Deploy + build. CHI truyen -FrontendUrl; -ApiUrl giu mac dinh localhost.
+.\scripts\setup-demo.ps1 -FrontendUrl "http://<IP>:5173"
 
-# 3. Cua so [1] - backend, lang nghe moi giao dien mang
+# 3. Cua so [1] - backend, chay binh thuong (chi nghe localhost)
 cd backend\src\ConcertTicketing.API
-dotnet run --launch-profile lan
+dotnet run
 
-# 4. Cua so [2] - frontend
+# 4. Cua so [2] - frontend, PHAI la dev:lan
 cd frontend
 npm run dev:lan
 
-# 5. Cua so [3] - bootstrap admin (van goi qua localhost, binh thuong)
-.\scriptsootstrap-admin.ps1
+# 5. Cua so [3] - bootstrap admin
+.\scripts\bootstrap-admin.ps1
 ```
 
 **Cả hai máy** (kể cả laptop-server) mở `http://<IP>:5173`.
 
-> **Ba chỗ bắt buộc dùng đúng biến thể LAN**, nếu không máy kia không kết nối được:
-> `-ApiUrl`/`-FrontendUrl` khi gọi `setup-demo.ps1`, `--launch-profile lan` thay cho
-> `dotnet run`, và `npm run dev:lan` thay cho `npm run dev`. Profile mặc định chỉ lắng
-> nghe `127.0.0.1`. Bản thân `setup-demo.ps1` sẽ tự in lại ba lưu ý này khi phát hiện
-> địa chỉ không phải localhost.
-
-> **`AllowedHosts` — chỗ dễ sập nhất.** `appsettings.json` giới hạn
-> `"localhost;127.0.0.1"` để chống Host header injection. Hệ quả: mọi request đến qua IP
-> LAN bị trả **400 "Invalid Hostname"** *trước khi* chạm tới controller — CORS không liên
-> quan gì, và thông báo lỗi không gợi ý gì về nguyên nhân. `setup-demo.ps1` nay tự thêm
-> host của `-ApiUrl` vào danh sách, nên chỉ cần truyền đúng tham số là xong.
+> **Chỗ duy nhất bắt buộc đổi so với chạy một máy:** `npm run dev:lan` thay cho
+> `npm run dev`, vì lệnh mặc định chỉ lắng nghe `127.0.0.1`. Backend giữ nguyên
+> `dotnet run`. `setup-demo.ps1` tự in lại lưu ý này khi thấy `-FrontendUrl` không phải
+> localhost.
 
 ### Kiểm tra trước khi vào phòng — từ laptop teammate
 
 ```powershell
-Test-NetConnection -ComputerName <IP> -Port 5295
 Test-NetConnection -ComputerName <IP> -Port 5173
 ```
 
-Cả hai `TcpTestSucceeded : True` mới yên tâm.
+`TcpTestSucceeded : True` là đủ — cổng 5295 **không** cần và **không nên** mở.
 
 ### Diễn màn tranh chấp
 
@@ -605,11 +603,11 @@ trang thanh toán; người kia nhận thông báo *"ghế đã được ngườ
 ## 5. Lệnh chạy kiểm thử
 
 ```powershell
-# Database — 212 test (chạy TỪ thư mục Tests)
+# Database — 226 test (chạy TỪ thư mục Tests)
 cd database\Tests
 .\Run-All-Tests.ps1
 
-# Backend — 191 unit + 72 integration
+# Backend — 222 unit + 79 integration
 cd backend
 dotnet test
 ```
@@ -637,8 +635,7 @@ Nêu trước sẽ tốt hơn để hội đồng hỏi:
    `Program.cs` **từ chối khởi động** nếu bật chế độ mô phỏng ở môi trường Production.
 2. **Chưa kiểm thử tải và chưa phân tích deadlock đầy đủ.** Test đồng thời hiện chỉ vài kết
    nối. Với hệ bán vé, đây là rủi ro lớn nhất còn lại.
-3. **Chưa có đường migration.** `deploy.ps1` chỉ deploy sạch; thay đổi lược đồ sau khi
-   có dữ liệu thật sẽ mất dữ liệu.
+3. **Deploy hiện là deploy sạch.** `deploy.ps1` tạo lược đồ từ các file nguồn; dự án không giữ script migration tăng dần.
 4. **Một instance, không HA/backup** — phạm vi đã chốt tại §23.7 của đặc tả.
 5. **Múi giờ**: mọi mốc thời gian dùng `SYSDATETIME()` (giờ máy chủ). Đúng khi trình
    duyệt và SQL Server cùng múi giờ; phục vụ đa múi giờ thì phải chuyển database sang UTC.
@@ -659,8 +656,8 @@ Nêu trước sẽ tốt hơn để hội đồng hỏi:
 ## 7. Bản đồ thư mục
 
 ```
-database/     28 bảng, 33 trigger, 3 function, 43 SP, 12 view, RBAC, 212 test
-backend/      .NET 9 · Clean Architecture · Dapper · JWT · 263 test
+database/     29 bảng, 33 trigger, 3 function, 44 SP, 17 view, RBAC, 226 test
+backend/      .NET 9 · Clean Architecture · Dapper · JWT · 301 test
 frontend/     React 19 · Vite · React Router · khu quản trị 8 mục (Admin) / 6 (Organizer)
 scripts/      setup-demo.ps1  · bootstrap-admin.ps1  · demo-concurrency.ps1
               seed-demo.ps1   (tùy chọn — nạp nhanh dữ liệu sẵn, không dùng trong luồng bảo vệ chính)

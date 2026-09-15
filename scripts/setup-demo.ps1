@@ -9,7 +9,7 @@
          và ghi ra .deploy/db-credentials.json.
       3. Sinh JWT secret và Payment signature secret, ghi vào
          backend/.../appsettings.Local.json (nằm trong .gitignore).
-      4. Ghi frontend/.env trỏ tới API.
+      4. Ghi frontend/.env để Vite proxy /api tới API.
       5. Build backend và frontend.
 
     KHÔNG có bí mật nào nằm trong repository. Mỗi lần chạy sinh ra một bộ mới.
@@ -124,8 +124,8 @@ Write-Host "  Che do cong thanh toan: Simulator (Program.cs tu choi che do nay o
 
 # ── 4. Cấu hình frontend ────────────────────────────────────────────────────
 Write-Phase "4/5  CAU HINH FRONTEND"
-"VITE_API_BASE_URL=$ApiUrl/api`n" | Out-File -FilePath (Join-Path $FrontendDir ".env") -Encoding utf8 -NoNewline
-Write-Host "  Da ghi: $(Join-Path $FrontendDir '.env')  ->  $ApiUrl/api" -ForegroundColor Green
+"VITE_API_PROXY_TARGET=$ApiUrl`n" | Out-File -FilePath (Join-Path $FrontendDir ".env") -Encoding utf8 -NoNewline
+Write-Host "  Da ghi: $(Join-Path $FrontendDir '.env')  ->  proxy /api toi $ApiUrl" -ForegroundColor Green
 
 # ── 5. Build ────────────────────────────────────────────────────────────────
 Write-Phase "5/5  BUILD"
@@ -152,22 +152,29 @@ Write-Host "============================================================" -Foreg
 Write-Host "  CAI DAT HOAN TAT" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
-# Chay LAN = API duoc goi toi bang mot dia chi khong phai localhost. Khi do lenh chay
-# cung phai khac: profile mac dinh chi bind 127.0.0.1 nen may khac khong ket noi duoc.
-$isLan = $apiHost -notin @("localhost", "127.0.0.1")
+# Chay LAN = GIAO DIEN duoc mo bang mot dia chi khong phai localhost.
+#
+# Thu can mo ra mang la FRONTEND, khong phai API: Vite proxy /api sang backend tu
+# chinh may chu, nen backend chi can nghe localhost. Truoc day co nay suy tu $ApiUrl,
+# nen chay `-FrontendUrl http://<IP>:5173` (cau hinh don gian va dung nhat) lai in ra
+# huong dan `npm run dev` - lenh chi lang nghe localhost, va may kia khong vao duoc.
+$frontendHost = ([Uri]$FrontendUrl).Host
+$isLan = $frontendHost -notin @("localhost", "127.0.0.1")
 
 Write-Host "  Buoc tiep theo — mo HAI cua so terminal:"
 Write-Host ""
 if ($isLan) {
     Write-Host "    [1] Backend :  cd backend\src\ConcertTicketing.API" -ForegroundColor White
-    Write-Host "                   dotnet run --launch-profile lan" -ForegroundColor White
+    Write-Host "                   dotnet run" -ForegroundColor White
     Write-Host ""
     Write-Host "    [2] Frontend:  cd frontend" -ForegroundColor White
     Write-Host "                   npm run dev:lan" -ForegroundColor White
     Write-Host ""
-    Write-Host "  CHE DO LAN: dung dung hai lenh tren (khong phai 'dotnet run' / 'npm run dev')," -ForegroundColor Yellow
-    Write-Host "  vi profile mac dinh chi lang nghe 127.0.0.1 - may khac se khong ket noi duoc." -ForegroundColor Yellow
-    Write-Host "  Nho mo firewall cho cong 5295 va 5173 (PowerShell quyen Administrator)." -ForegroundColor Yellow
+    Write-Host "  CHE DO LAN: frontend phai dung 'npm run dev:lan' (khong phai 'npm run dev')," -ForegroundColor Yellow
+    Write-Host "  vi lenh mac dinh chi lang nghe 127.0.0.1 nen may khac khong vao duoc." -ForegroundColor Yellow
+    Write-Host "  Backend van chay 'dotnet run' binh thuong: Vite proxy /api sang no tu chinh" -ForegroundColor Yellow
+    Write-Host "  may nay, nen backend khong can mo ra mang." -ForegroundColor Yellow
+    Write-Host "  Chi can mo firewall cho DUNG cong 5173 (PowerShell quyen Administrator)." -ForegroundColor Yellow
     Write-Host ""
 } else {
     Write-Host "    [1] Backend :  cd backend\src\ConcertTicketing.API" -ForegroundColor White
