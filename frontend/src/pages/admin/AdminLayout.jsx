@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { NavLink, Navigate, Routes, Route } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { Role } from '../../domain/enums';
-import { clearAllCatalog } from '../../lib/localCatalog';
-import { Button, Card, EmptyState, ConfirmDialog } from '../../components/ui';
+import { invalidateCatalog } from '../../lib/adminCatalog';
+import { Button, Card, EmptyState } from '../../components/ui';
 import Catalog from './Catalog';
 import VenueMap from './VenueMap';
 import Concerts from './Concerts';
@@ -24,8 +23,7 @@ import Audit from './Audit';
  * [Authorize] ở controller có rộng hơn.
  */
 export default function AdminLayout() {
-  const { hasRole } = useAuth();
-  const [confirmClear, setConfirmClear] = useState(false);
+  const { hasRole, user } = useAuth();
   const isAdmin = hasRole(Role.Admin);
   const isOrganizer = hasRole(Role.Organizer);
 
@@ -94,22 +92,21 @@ export default function AdminLayout() {
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <div className="overline" style={{ marginBottom: 'var(--space-2)' }}>Sổ tay cục bộ</div>
+          <div className="overline" style={{ marginBottom: 'var(--space-2)' }}>Danh mục hệ thống</div>
           <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-3)' }}>
-            API quản trị không có endpoint đọc nào, nên các ID vừa tạo được nhớ tạm trong
-            trình duyệt này để những bước sau còn chọn được. Đổi máy là mất — nguồn sự
-            thật vẫn là database.
+            Danh mục được tải từ máy chủ. Dữ liệu theo concert chỉ hiển thị trong
+            phạm vi quản lý của tài khoản đang đăng nhập.
           </p>
           <Button
             size="sm" block
-            onClick={() => setConfirmClear(true)}
+            onClick={() => invalidateCatalog()}
           >
-            Dọn sổ tay
+            Tải lại danh mục
           </Button>
         </div>
       </aside>
 
-      <main style={{ minWidth: 0 }}>
+      <main key={user?.userId} style={{ minWidth: 0 }}>
         <Routes>
           <Route index element={<Navigate to="/admin/concerts" replace />} />
           <Route path="concerts" element={<Concerts />} />
@@ -130,17 +127,6 @@ export default function AdminLayout() {
         </Routes>
       </main>
 
-      <ConfirmDialog
-        open={confirmClear}
-        onClose={() => setConfirmClear(false)}
-        onConfirm={() => { clearAllCatalog(); setConfirmClear(false); }}
-        title="Dọn sổ tay cục bộ?"
-        confirmText="Xoá sổ tay"
-        danger
-      >
-        Xoá toàn bộ ID đã ghi nhớ trong trình duyệt này. Dữ liệu trong database KHÔNG
-        bị ảnh hưởng — chỉ mất danh sách gợi ý, và bạn vẫn nhập ID thủ công được.
-      </ConfirmDialog>
     </div>
   );
 }
