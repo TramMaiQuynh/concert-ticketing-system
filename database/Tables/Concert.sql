@@ -1,7 +1,6 @@
 CREATE TABLE Concert (
     ConcertID INT IDENTITY(1,1) NOT NULL,
     OrganizerUserID INT NULL,
-    ArtistID INT NULL,
     VenueID INT NULL,
     ConcertName NVARCHAR(255) NOT NULL,
     StartDatetime DATETIME2(7) NULL,
@@ -20,7 +19,6 @@ CREATE TABLE Concert (
     RefundPercentage DECIMAL(5,2) CONSTRAINT DF_Concert_RefundPct DEFAULT 100.00,
     CONSTRAINT PK_Concert PRIMARY KEY CLUSTERED (ConcertID),
     CONSTRAINT FK_Concert_Organizer FOREIGN KEY (OrganizerUserID) REFERENCES UserAccount(UserID),
-    CONSTRAINT FK_Concert_Artist FOREIGN KEY (ArtistID) REFERENCES Artist(ArtistID),
     CONSTRAINT FK_Concert_Venue FOREIGN KEY (VenueID) REFERENCES Venue(VenueID),
     CONSTRAINT CHK_Concert_Status CHECK (ConcertStatus IN ('Draft', 'Published', 'OnSale', 'SaleClosed', 'Completed', 'Cancelled')),
     CONSTRAINT CHK_Concert_Dates CHECK (EndDatetime IS NULL OR StartDatetime IS NULL OR EndDatetime > StartDatetime),
