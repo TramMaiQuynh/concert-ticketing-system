@@ -348,3 +348,35 @@ public class RefundRequestValidatorTests
         result.Errors.Should().Contain(e => e.PropertyName == "Reason");
     }
 }
+
+public class ZoneValidatorTests
+{
+    [Fact]
+    public void CreateZone_ReservedSeatingWithPositiveLevel_ShouldPass()
+    {
+        var result = new CreateZoneValidator().Validate(new CreateZoneRequest(
+            "VIP", "VIP", ZoneType: "Seated", ZoneLevel: 2));
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateZone_UnsupportedTypeOrCapacity_ShouldFailBeforeDatabase()
+    {
+        var result = new CreateZoneValidator().Validate(new CreateZoneRequest(
+            "GA", "Standing", ZoneType: "GeneralAdmission", ZoneCapacity: 100));
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "ZoneType");
+        result.Errors.Should().Contain(e => e.PropertyName == "ZoneCapacity");
+    }
+
+    [Fact]
+    public void UpdateZone_ZeroLevel_ShouldFailBeforeDatabase()
+    {
+        var result = new UpdateZoneValidator().Validate(new UpdateZoneRequest(ZoneLevel: 0));
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == "ZoneLevel");
+    }
+}
