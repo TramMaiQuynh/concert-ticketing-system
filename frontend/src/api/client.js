@@ -3,10 +3,11 @@ import axios from 'axios';
 /**
  * Client HTTP dùng chung.
  *
- * Base URL lấy từ biến môi trường Vite để bản build production không trỏ cứng vào
- * localhost. Mặc định giữ nguyên cổng 5295 của backend khi chạy dev.
+ * Mặc định dùng cùng origin. Vite proxy tiếp /api tới backend trong lúc phát triển,
+ * nhờ đó refresh cookie luôn thuộc cùng host với trang đang mở (localhost, 127.0.0.1
+ * hoặc địa chỉ LAN). Triển khai tách frontend/backend đặt VITE_API_BASE_URL tuyệt đối.
  */
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5295/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
