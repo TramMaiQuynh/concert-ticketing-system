@@ -23,7 +23,7 @@ AS
 SELECT
     c.ConcertID,
     c.ConcertName,
-    a.ArtistName,
+    artists.ArtistName,
     v.VenueName,
     c.ConcertStatus,
     c.StartDatetime,
@@ -43,8 +43,15 @@ SELECT
     st.ExpiredBookings
 
 FROM       Concert c
-LEFT JOIN  Artist  a ON a.ArtistID = c.ArtistID
 LEFT JOIN  Venue   v ON v.VenueID  = c.VenueID
+
+OUTER APPLY (
+    SELECT STRING_AGG(CAST(a.ArtistName AS NVARCHAR(MAX)), N', ')
+           WITHIN GROUP (ORDER BY ca.ArtistOrder) AS ArtistName
+    FROM ConcertArtist ca
+    JOIN Artist a ON a.ArtistID = ca.ArtistID
+    WHERE ca.ConcertID = c.ConcertID
+) artists
 
 CROSS APPLY (
     SELECT COUNT(*)                                                          AS TotalInventorySeats,
