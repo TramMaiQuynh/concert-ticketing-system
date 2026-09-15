@@ -59,8 +59,9 @@ export default function Audit() {
 
   return (
     <>
-      <Panel
-        title="Tra cứu nhật ký kiểm toán"
+    <Panel
+      title="Tra cứu nhật ký kiểm toán"
+      tone="workflow"
         subtitle="Mọi thay đổi nghiệp vụ đều để lại dấu vết không sửa được. Bỏ trống tất cả để xem các sự kiện gần nhất; điền Loại đối tượng và ID để lấy toàn bộ lịch sử của riêng đối tượng đó."
       >
         <form onSubmit={search}>
