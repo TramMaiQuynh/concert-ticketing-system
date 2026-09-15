@@ -736,7 +736,18 @@ SET @SQL = N'
     EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @ZoneLevel=0, @NewZoneID=@z OUTPUT;';
 EXEC test.sp_RunTest @Suite,'ZoneCreate_InvalidLevel_Fail59833','ERROR',59833,@SQL;
 
--- Tao luoi ghe la mot giao dich: thanh cong ghi du ca luoi va loi khong de lai nua luoi.
+-- Tao luoi ghe la mot giao dich.
+--
+-- LUU Y VE PHAM VI: sp_RunTest boc MOI test trong BEGIN TRAN/ROLLBACK, con cac SP
+-- nghiep vu deu dung `IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION` trong CATCH - lenh do
+-- huy CA transaction ngoai chu khong rieng phan viec cua SP. Vi vay trong khung nay
+-- KHONG test nao co the bat loi cua mot SP roi chay tiep de kiem tra trang thai con
+-- lai: @@TRANCOUNT tut ve 0 va SQL Server bao loi 266 ngay khi EXEC tra ve.
+--
+-- Hai test duoi day vi the chi khang dinh nhung gi kiem chung duoc o day. Khang dinh
+-- "loi khong de lai ghe ghi mot phan" nam o test tich hop
+-- AdminRepositoryTests.CreateSeatsBatch_* - noi loi goi KHONG nam trong transaction
+-- bao ngoai, tuc dung moi truong ma tinh chat nay co y nghia.
 SET @SQL = N'
     DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
     DECLARE @v INT, @z INT;
@@ -745,19 +756,20 @@ SET @SQL = N'
     EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
          @SeatsJson=N''[{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"A","seatColumnNumber":1},{"seatCode":"A2","seatLabel":"A2","seatRowLabel":"A","seatColumnNumber":2}]'';
     IF (SELECT COUNT(*) FROM Seat WHERE ZoneID=@z) <> 2
-        THROW 59999, ''Batch phai tao du hai ghe'', 1;
-    BEGIN TRY
-        EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
-             @SeatsJson=N''[{"seatCode":"B1","seatLabel":"B1","seatRowLabel":"B","seatColumnNumber":1},{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"B","seatColumnNumber":2}]'';
-        THROW 59999, ''Batch trung ma phai bi tu choi'', 1;
-    END TRY
-    BEGIN CATCH
-        IF ERROR_NUMBER() NOT IN (58124, 59999) THROW;
-        IF ERROR_NUMBER() = 59999 THROW;
-    END CATCH;
-    IF EXISTS (SELECT 1 FROM Seat WHERE ZoneID=@z AND SeatCode=''B1'')
-        THROW 59999, ''Batch loi khong duoc de lai ghe da ghi mot phan'', 1;';
-EXEC test.sp_RunTest @Suite,'CreateSeatsBatch_Atomic_OK','SUCCESS',NULL,@SQL;
+        THROW 59999, ''Batch phai tao du hai ghe'', 1;';
+EXEC test.sp_RunTest @Suite,'CreateSeatsBatch_CreatesWholeGrid_OK','SUCCESS',NULL,@SQL;
+
+SET @SQL = N'
+    DECLARE @adm INT=(SELECT UserID FROM UserAccount WHERE Username=''test_admin'');
+    DECLARE @v INT, @z INT;
+    EXEC sp_CreateVenue @ActorUserID=@adm, @VenueName=N''SG Batch Dup'', @Address=N''x'', @NewVenueID=@v OUTPUT;
+    EXEC sp_CreateZone @ActorUserID=@adm, @VenueID=@v, @ZoneCode=''Z1'', @ZoneName=N''x'', @NewZoneID=@z OUTPUT;
+    EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
+         @SeatsJson=N''[{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"A","seatColumnNumber":1}]'';
+    -- Lo hang thu hai chua mot ma ghe DA ton tai trong khu: phai bi tu choi nguyen lo.
+    EXEC sp_CreateSeatsBatch @ActorUserID=@adm, @ZoneID=@z,
+         @SeatsJson=N''[{"seatCode":"B1","seatLabel":"B1","seatRowLabel":"B","seatColumnNumber":1},{"seatCode":"A1","seatLabel":"A1","seatRowLabel":"B","seatColumnNumber":2}]'';';
+EXEC test.sp_RunTest @Suite,'CreateSeatsBatch_DuplicateCode_Fail58124','ERROR',58124,@SQL;
 
 -- PATCH Seat co the doi rieng cot va van giu hang hien tai.
 SET @SQL = N'
