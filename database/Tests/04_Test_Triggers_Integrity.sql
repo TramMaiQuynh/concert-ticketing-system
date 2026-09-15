@@ -43,7 +43,7 @@ SET @SQL = N'
 SET @bid = SCOPE_IDENTITY();
 UPDATE Booking SET BookingStatus=''Confirmed'', ConfirmedTimestamp=SYSDATETIME(), HoldStartDatetime=NULL, HoldExpiryDatetime=NULL WHERE BookingID = SCOPE_IDENTITY();
     DECLARE @cid2 INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 ArtistID FROM Artist),(SELECT TOP 1 VenueID FROM Venue),''DUMMY'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 VenueID FROM Venue),''DUMMY'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
     SET @cid2 = SCOPE_IDENTITY();
     UPDATE EventSeat SET InventoryStatus=''OnHold'' WHERE EventSeatID=@esid;
     INSERT INTO BookingEventSeatAllocation (BookingID,EventSeatID,AllocationStatus,PriceSnapshot) VALUES (@bid,@esid,''Active'',1000000);
@@ -67,7 +67,7 @@ UPDATE Booking SET BookingStatus=''Confirmed'', ConfirmedTimestamp=SYSDATETIME()
     UPDATE Ticket SET TicketStatus=''Used'', UsedTimestamp=SYSDATETIME() WHERE TicketID = SCOPE_IDENTITY();
     SET @tid = SCOPE_IDENTITY();
     DECLARE @cid2 INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 ArtistID FROM Artist),(SELECT TOP 1 VenueID FROM Venue),''DUMMY2'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused) VALUES (@uid,(SELECT TOP 1 VenueID FROM Venue),''DUMMY2'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
     SET @cid2 = SCOPE_IDENTITY();
     INSERT INTO CheckIn (TicketID,ConcertID,CheckInStaffUserID,CheckInTimestamp,ValidationResult)
     VALUES (@tid,@cid2,@staff,SYSDATETIME(),''SUCCESS'');';
@@ -173,8 +173,8 @@ SET @SQL = N'
     INSERT INTO TicketCategory (ConcertID,CategoryName,BasePrice,CategoryStatus) VALUES ((SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID),''GuardCat2'',100000,''Active'');
     -- Tao concert moi o venue moi
     DECLARE @cid2 INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES ((SELECT UserID FROM UserAccount WHERE Username=''test_org''),(SELECT TOP 1 ArtistID FROM Artist),@vid2,''Guard Concert'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
+    VALUES ((SELECT UserID FROM UserAccount WHERE Username=''test_org''),@vid2,''Guard Concert'',''Draft'',SYSDATETIME(),DATEADD(d,1,SYSDATETIME()),4,0,0,0);
     SET @cid2 = SCOPE_IDENTITY();
     DECLARE @cat3 INT;
     INSERT INTO TicketCategory (ConcertID,CategoryName,BasePrice,CategoryStatus) VALUES (@cid2,''GuardCat3'',100000,''Active'');
