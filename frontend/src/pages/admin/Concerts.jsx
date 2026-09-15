@@ -1,24 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import api from '../../api/client';
-import { useCatalog } from '../../lib/localCatalog';
+import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useConcertOptions, invalidateConcerts } from '../../lib/concertOptions';
 import { useVenues, useArtists } from '../../lib/adminCatalog';
-import { Field, Select, Check, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
+import { Field, Select, Check, Panel, Banner, IdPicker, MultiIdPicker, IdPill, useAction } from '../../components/form';
 import { toApiDateTime } from '../../lib/format';
 import {
   ConcertStatus, CONCERT_STATUS_LABEL, CategoryStatus, QueueStatus, WaitlistStatus,
   AccessPolicy, ADMIN_STATUS_LABEL, InventoryStatus,
 } from '../../domain/enums';
 
-/**
- * Vòng đời Concert.
- *
- * MỘT ĐIỀU PHẢI NẮM: concert luôn được tạo ở trạng thái Draft, và
- * `GET /concerts` lọc bỏ Draft (`ConcertStatus <> 'Draft'`). Nghĩa là concert vừa
- * tạo KHÔNG xuất hiện ở bất kỳ endpoint đọc nào cho tới khi chuyển sang Published.
- * Vì vậy ID trả về lúc tạo được lưu ngay vào sổ tay — nếu không, người dùng mất
- * dấu concert của chính mình và không thể cấu hình tiếp.
- */
+/** Concert quản trị gồm cả Draft, được máy chủ lọc theo quyền sở hữu. */
 export default function Concerts() {
   return (
     <>
@@ -42,11 +34,10 @@ function CreateConcert() {
   // "dựng một lần, các lần sau chỉ chọn".
   const artists = useArtists();
   const venues = useVenues();
-  const { remember } = useCatalog('concert');
   const act = useAction();
 
   const [f, setF] = useState({
-    artistId: '', venueId: '', concertName: '',
+    artistIds: [], venueId: '', concertName: '',
     startDatetime: '', endDatetime: '', saleStartDatetime: '', saleEndDatetime: '',
     purchaseLimit: '4', temporaryHoldDuration: '',
     fairAccessEnabled: false, waitlistEnabled: false, salesPaused: false,
@@ -61,7 +52,7 @@ function CreateConcert() {
     e.preventDefault();
     act.run(async () => {
       const res = await api.post('/admin/concerts', {
-        artistId: Number(f.artistId),
+        artistIds: f.artistIds.map(Number),
         venueId: Number(f.venueId),
         concertName: f.concertName.trim(),
         startDatetime: toApiDateTime(f.startDatetime),
@@ -78,22 +69,23 @@ function CreateConcert() {
         cancellationDeadlineHours: num(f.cancellationDeadlineHours),
         refundPercentage: num(f.refundPercentage),
       });
-      remember({ id: res.data.id, name: f.concertName.trim() });
       return res.data.id;
     }, (id) => `Đã tạo concert #${id} ở trạng thái Draft. Concert Draft KHÔNG hiện ở trang chủ — `
              + `hãy cấu hình hạng vé và ghế rồi chuyển sang Published ở khối bên dưới.`);
   };
 
-  const ready = f.artistId && f.venueId && f.concertName.trim() && f.startDatetime && f.endDatetime;
+  const ready = f.artistIds.length > 0 && f.venueId && f.concertName.trim() && f.startDatetime && f.endDatetime;
 
   return (
     <Panel
       title="Tạo concert"
+      tone="create"
       subtitle="Concert luôn sinh ra ở trạng thái Draft — không nhận trường trạng thái lúc tạo, mọi chuyển trạng thái phải đi qua máy trạng thái (BR49)."
     >
       <form onSubmit={submit}>
         <div className="field-grid">
-          <IdPicker label="Nghệ sĩ" items={artists.items} value={f.artistId} onChange={set('artistId')} />
+          <MultiIdPicker label="Nghệ sĩ biểu diễn" hint="Thứ tự này sẽ được hiển thị cùng concert."
+                         items={artists.items} values={f.artistIds} onChange={set('artistIds')} />
           <IdPicker label="Địa điểm" items={venues.items} value={f.venueId} onChange={set('venueId')} />
         </div>
 
@@ -181,8 +173,12 @@ function UpdateConcert() {
   const act = useAction();
 
   const [id, setId] = useState('');
+  const [artistLoadState, setArtistLoadState] = useState('idle');
+  const [artistListChanged, setArtistListChanged] = useState(false);
+  const [currentArtistItems, setCurrentArtistItems] = useState([]);
+  const artistRequest = useRef(0);
   const [f, setF] = useState({
-    concertName: '', artistId: '', venueId: '',
+    concertName: '', artistIds: [], venueId: '',
     startDatetime: '', endDatetime: '', saleStartDatetime: '', saleEndDatetime: '',
     purchaseLimit: '', temporaryHoldDuration: '',
     cancellationPolicy: '', refundPolicy: '',
@@ -193,10 +189,50 @@ function UpdateConcert() {
   const num = (v) => (String(v).trim() === '' ? null : Number(v));
   const tri = (v) => (v === '' ? null : v === 'true');
 
+  const selectConcert = async (value) => {
+    setId(value);
+    setArtistListChanged(false);
+    setCurrentArtistItems([]);
+    setF((current) => ({ ...current, artistIds: [] }));
+
+    const request = ++artistRequest.current;
+    if (!value) {
+      setArtistLoadState('idle');
+      return;
+    }
+
+    setArtistLoadState('loading');
+    try {
+      const response = await api.get(`/admin/concerts/${Number(value)}/artists`);
+      if (artistRequest.current !== request) return;
+      const selected = Array.isArray(response.data) ? response.data : [];
+      setCurrentArtistItems(selected.map((artist) => ({
+        id: artist.artistID,
+        name: artist.artistName,
+      })));
+      setF((current) => ({ ...current, artistIds: selected
+        .sort((a, b) => a.artistOrder - b.artistOrder)
+        .map((artist) => String(artist.artistID)) }));
+      setArtistLoadState('ready');
+    } catch {
+      if (artistRequest.current === request) setArtistLoadState('error');
+    }
+  };
+
+  const setArtists = (artistIds) => {
+    setArtistListChanged(true);
+    setF((current) => ({ ...current, artistIds }));
+  };
+  const artistItems = [
+    ...artists.items,
+    ...currentArtistItems.filter((current) => !artists.items.some((artist) => artist.id === current.id)),
+  ];
+
   return (
     <Panel
       title="Sửa concert"
-      subtitle="Mọi ô để trống nghĩa là GIỮ NGUYÊN — UpdateConcertRequest coi null là không đổi, nên không sợ vô tình xoá mất giá trị cũ."
+      tone="edit"
+      subtitle="Chọn concert để nạp danh sách nghệ sĩ hiện có. Các trường khác để trống sẽ được giữ nguyên."
     >
       <form
         onSubmit={(e) => {
@@ -204,7 +240,7 @@ function UpdateConcert() {
           act.run(async () => {
             await api.put(`/admin/concerts/${Number(id)}`, {
               concertName: f.concertName.trim() || null,
-              artistId: num(f.artistId),
+              artistIds: artistListChanged ? f.artistIds.map(Number) : null,
               venueId: num(f.venueId),
               startDatetime: toApiDateTime(f.startDatetime),
               endDatetime: toApiDateTime(f.endDatetime),
@@ -224,11 +260,20 @@ function UpdateConcert() {
           }, (cid) => `Đã cập nhật concert #${cid}.`);
         }}
       >
-        <IdPicker label="Concert cần sửa" items={options} value={id} onChange={setId} />
+        <IdPicker label="Concert cần sửa" items={options} value={id} onChange={selectConcert} />
 
         <div className="field-grid" style={{ marginTop: '16px' }}>
           <Field label="Tên mới"><input value={f.concertName} onChange={(e) => set('concertName')(e.target.value)} /></Field>
-          <IdPicker label="Đổi nghệ sĩ" items={artists.items} value={f.artistId} onChange={set('artistId')} />
+          <MultiIdPicker
+            label="Nghệ sĩ biểu diễn"
+            hint={artistLoadState === 'loading' ? 'Đang nạp danh sách hiện có…'
+              : artistLoadState === 'error' ? 'Không tải được danh sách hiện có. Hãy chọn lại concert.'
+              : 'Chỉ gửi thay đổi khi bạn thêm, bỏ hoặc đổi thứ tự nghệ sĩ.'}
+            items={artistItems}
+            values={f.artistIds}
+            onChange={setArtists}
+            disabled={!id || artistLoadState === 'loading' || artistLoadState === 'error'}
+          />
           <IdPicker label="Đổi địa điểm" items={venues.items} value={f.venueId} onChange={set('venueId')} />
         </div>
 
@@ -266,7 +311,7 @@ function UpdateConcert() {
           <Field label="Chính sách hoàn tiền"><textarea value={f.refundPolicy} onChange={(e) => set('refundPolicy')(e.target.value)} /></Field>
         </div>
 
-        <button className="btn-primary" style={{ marginTop: '20px' }} disabled={act.busy || !id}>
+        <button className="btn-primary" style={{ marginTop: '20px' }} disabled={act.busy || !id || artistLoadState === 'loading' || artistLoadState === 'error' || (artistListChanged && f.artistIds.length === 0)}>
           {act.busy ? 'Đang lưu…' : 'Lưu thay đổi'}
         </button>
         <Banner state={act.state} />
@@ -286,6 +331,7 @@ function ConcertStatusSection() {
   return (
     <Panel
       title="Chuyển trạng thái concert"
+      tone="workflow"
       subtitle="Máy trạng thái ở database quyết định phép chuyển nào hợp lệ; bước sai sẽ bị từ chối kèm lý do. Đường thường dùng: Draft → Published → OnSale → SaleClosed → Completed."
     >
       <form
@@ -346,7 +392,7 @@ function ConcertStatusSection() {
 
 function CategorySection() {
   const { options } = useConcertOptions();
-  const { items, remember } = useCatalog('category');
+  const { items } = useAdminCatalog('category');
   const act = useAction();
 
   const [concertId, setConcertId] = useState('');
@@ -356,9 +402,20 @@ function CategorySection() {
   const [price, setPrice] = useState('');
   const [status, setStatus] = useState('');
 
+  const concertCategories = items.filter((item) => item.raw.concertID === Number(concertId));
+  const selectCategory = (id) => {
+    setCategoryId(id);
+    const category = concertCategories.find((item) => String(item.id) === String(id))?.raw;
+    setName(category?.categoryName ?? '');
+    setDesc(category?.categoryDescription ?? '');
+    setPrice(category ? String(category.basePrice) : '');
+    setStatus(category?.categoryStatus ?? '');
+  };
+
   return (
     <Panel
       title="Hạng vé"
+      tone="inventory"
       subtitle="Một endpoint làm cả hai việc: bỏ trống ô ID hạng vé thì TẠO MỚI, điền vào thì CẬP NHẬT. Giá gốc ở đây là nguồn sự thật của giá vé và sẽ lan xuống các ghế trong kho (BR10a)."
     >
       <form
@@ -372,7 +429,6 @@ function CategorySection() {
               ticketCategoryId: categoryId ? Number(categoryId) : null,
               categoryStatus: status || null,
             });
-            remember({ id: res.data.id, name: `${name.trim()} (concert #${concertId})` });
             return res.data.id;
           }, (id) => (categoryId
             ? `Đã cập nhật hạng vé #${id}.`
@@ -380,9 +436,12 @@ function CategorySection() {
         }}
       >
         <div className="field-grid">
-          <IdPicker label="Concert" items={options} value={concertId} onChange={setConcertId} />
-          <Field label="ID hạng vé" hint="Bỏ trống = tạo mới. Điền = cập nhật hạng vé đó.">
-            <input type="number" min="1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} placeholder="Bỏ trống để tạo mới" />
+          <IdPicker label="Concert" items={options} value={concertId} onChange={(id) => { setConcertId(id); selectCategory(''); }} />
+          <Field label="Hạng vé" hint="Chọn hạng vé để sửa hoặc chọn tạo mới.">
+            <Select value={categoryId} onChange={selectCategory} allowEmpty
+                    emptyLabel="— Tạo hạng vé mới —"
+                    options={concertCategories.map((item) => String(item.id))}
+                    labels={Object.fromEntries(concertCategories.map((item) => [String(item.id), item.name]))} />
           </Field>
         </div>
         <div className="field-grid" style={{ marginTop: '16px' }}>
@@ -405,9 +464,9 @@ function CategorySection() {
         </button>
         <Banner state={act.state} />
       </form>
-      {items.length > 0 && (
+      {concertCategories.length > 0 && (
         <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {items.slice(0, 20).map((it) => <IdPill key={it.id}>#{it.id} · {it.name}</IdPill>)}
+          {concertCategories.map((it) => <IdPill key={it.id}>#{it.id} · {it.name}</IdPill>)}
         </div>
       )}
     </Panel>
@@ -418,13 +477,18 @@ function CategorySection() {
 
 function EventSeatSection() {
   const { options } = useConcertOptions();
-  const seats = useCatalog('seat');
-  const categories = useCatalog('category');
+  const seats = useAdminCatalog('seat');
+  const categories = useAdminCatalog('category');
   const act = useAction();
 
   const [concertId, setConcertId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [seatIds, setSeatIds] = useState('');
+  const venueId = options.find((item) => item.id === Number(concertId))?.raw.venueID;
+  const availableSeats = seats.items.filter((item) =>
+    item.raw.venueID === venueId && item.raw.seatStatus === 'Active');
+  const availableCategories = categories.items.filter((item) =>
+    item.raw.concertID === Number(concertId) && item.raw.categoryStatus === 'Active');
 
   const parsed = seatIds
     .split(/[,\s]+/)
@@ -436,6 +500,7 @@ function EventSeatSection() {
   return (
     <Panel
       title="Đưa ghế vào kho vé (EventSeat)"
+      tone="inventory"
       subtitle="Đây là bước biến ghế của địa điểm thành vé bán được: mỗi ghế gắn với một hạng vé và nhận giá từ hạng vé đó. Chưa làm bước này thì sơ đồ ghế của concert trống trơn."
     >
       <form
@@ -451,8 +516,8 @@ function EventSeatSection() {
         }}
       >
         <div className="field-grid">
-          <IdPicker label="Concert" items={options} value={concertId} onChange={setConcertId} />
-          <IdPicker label="Hạng vé" items={categories.items} value={categoryId} onChange={setCategoryId} />
+          <IdPicker label="Concert" items={options} value={concertId} onChange={(id) => { setConcertId(id); setCategoryId(''); setSeatIds(''); }} />
+          <IdPicker label="Hạng vé" items={availableCategories} value={categoryId} onChange={setCategoryId} />
         </div>
 
         <div style={{ marginTop: '16px' }}>
@@ -469,28 +534,25 @@ function EventSeatSection() {
           </Field>
         </div>
 
-        {seats.items.length > 0 && (
+        {availableSeats.length > 0 && (
           <div style={{ marginTop: '12px' }}>
             <div className="field-hint" style={{ marginBottom: '8px' }}>
-              Ghế đã tạo từ trình duyệt này — bấm để thêm vào danh sách:
+              Ghế của địa điểm đã chọn — bấm để thêm vào danh sách:
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               <button
                 type="button" className="btn-outline"
                 style={{ padding: '4px 12px', fontSize: '0.75rem' }}
-                onClick={() => setSeatIds(seats.items.map((s) => s.id).join(', '))}
+                onClick={() => setSeatIds(availableSeats.map((s) => s.id).join(', '))}
               >
-                Chọn tất cả ({seats.items.length})
+                Chọn tất cả ({availableSeats.length})
               </button>
-              {seats.items.slice(0, 30).map((s) => (
-                <button
-                  key={s.id} type="button" className="id-pill"
-                  style={{ cursor: 'pointer', border: '1px solid var(--border-focus)' }}
-                  onClick={() => setSeatIds((v) => (v.trim() ? `${v.trim()}, ${s.id}` : String(s.id)))}
-                >
-                  #{s.id} · {s.name}
-                </button>
-              ))}
+              <Field label="Chọn ghế" hint="Giữ Ctrl hoặc Shift để chọn nhiều ghế.">
+                <select multiple size={10} value={unique.map(String)}
+                  onChange={(event) => setSeatIds(Array.from(event.target.selectedOptions, (option) => option.value).join(', '))}>
+                  {availableSeats.map((seat) => <option key={seat.id} value={String(seat.id)}>#{seat.id} · {seat.name}</option>)}
+                </select>
+              </Field>
             </div>
           </div>
         )}
@@ -525,6 +587,7 @@ function QueueSection() {
   return (
     <Panel
       title="Cấu hình hàng đợi (Fair Access)"
+      tone="workflow"
       subtitle="Sức chứa là số khách được vào chọn ghế cùng lúc. Thời hạn lượt mua chính là booking_ttl: hết hạn thì lượt tự thu hồi và nhường cho người kế tiếp (BR47b)."
     >
       <div
@@ -599,6 +662,7 @@ function WaitlistSection() {
   return (
     <Panel
       title="Cấu hình danh sách chờ (Waitlist)"
+      tone="workflow"
       subtitle="Khi có ghế được trả lại, tiến trình nền cấp cơ hội mua cho người trong danh sách chờ theo chính sách này (BR43)."
     >
       <div
@@ -676,6 +740,7 @@ function SeatAvailabilitySection() {
   return (
     <Panel
       title="Khoá / mở một ghế"
+      tone="inventory"
       subtitle="Dùng cho ghế hỏng, ghế bị che tầm nhìn hoặc ghế giữ cho ban tổ chức. Chỉ tác động tới ghế đang trống — ghế đã bán hoặc đang được giữ sẽ bị từ chối."
     >
       <div className="field-grid">
