@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 13_Test_Regression_Fixes.sql
 -- Test hoi quy cho cac loi da duoc sua trong dot ra soat toan tang DB.
 -- Moi test o day tuong ung mot loi CO THAT da duoc tai hien trong san xuat-gia
@@ -162,9 +162,9 @@ SET @SQL = N'
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT, @bid INT, @pid INT;
 
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG Cancel Cascade'',''Draft'',
+    VALUES (@org,@ven,''REG Cancel Cascade'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0);
     SET @cid=SCOPE_IDENTITY();
 
@@ -198,9 +198,9 @@ SET @SQL = N'
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT, @bid INT, @pid INT, @rid INT;
 
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG Settle'',''Draft'',
+    VALUES (@org,@ven,''REG Settle'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0);
     SET @cid=SCOPE_IDENTITY();
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime)
@@ -229,9 +229,9 @@ SET @SQL = N'
     DECLARE @art INT=(SELECT TOP 1 ArtistID FROM Artist ORDER BY ArtistID);
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT, @bid INT, @pid INT, @rid INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG Idem'',''Draft'',
+    VALUES (@org,@ven,''REG Idem'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0);
     SET @cid=SCOPE_IDENTITY();
     INSERT INTO Booking (CustomerUserID,ConcertID,BookingStatus,SubtotalAmount,FinalAmount,HoldStartDatetime,HoldExpiryDatetime)
@@ -262,13 +262,14 @@ SET @SQL = N'
     DECLARE @src INT=(SELECT TOP 1 ConcertID FROM Concert ORDER BY ConcertID);
     DECLARE @cid INT, @cat INT, @newb INT;
 
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,SaleStartDatetime,SaleEndDatetime,
                          PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG FairAccess Gate'',''Draft'',
+    VALUES (@org,@ven,''REG FairAccess Gate'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),
             DATEADD(day,-1,SYSDATETIME()),DATEADD(day,29,SYSDATETIME()),4,1,0,0);
     SET @cid=SCOPE_IDENTITY();
+    INSERT INTO ConcertArtist (ConcertID,ArtistID,ArtistOrder) VALUES (@cid,@art,1);
     INSERT INTO TicketCategory (ConcertID,CategoryName,BasePrice,CategoryStatus)
     VALUES (@cid,''REG Cat'',1000000,''Active'');
     SET @cat=SCOPE_IDENTITY();
@@ -295,13 +296,14 @@ SET @SQL = N'
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT, @cat INT, @newb INT, @qeid INT;
 
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,SaleStartDatetime,SaleEndDatetime,
                          PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG FairAccess Exit'',''Draft'',
+    VALUES (@org,@ven,''REG FairAccess Exit'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),
             DATEADD(day,-1,SYSDATETIME()),DATEADD(day,29,SYSDATETIME()),4,1,0,0);
     SET @cid=SCOPE_IDENTITY();
+    INSERT INTO ConcertArtist (ConcertID,ArtistID,ArtistOrder) VALUES (@cid,@art,1);
     INSERT INTO TicketCategory (ConcertID,CategoryName,BasePrice,CategoryStatus)
     VALUES (@cid,''REG Cat'',1000000,''Active'');
     SET @cat=SCOPE_IDENTITY();
@@ -364,9 +366,9 @@ SET @SQL = N'
     DECLARE @art INT=(SELECT TOP 1 ArtistID FROM Artist ORDER BY ArtistID);
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG NoFair'',''Draft'',
+    VALUES (@org,@ven,''REG NoFair'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0);
     SET @cid=SCOPE_IDENTITY();
     EXEC sp_ConfigureQueue @ActorUserID=@adm, @ConcertID=@cid, @AdmissionCapacity=10;';
@@ -500,9 +502,9 @@ SET @SQL = N'
     DECLARE @art INT=(SELECT TOP 1 ArtistID FROM Artist ORDER BY ArtistID);
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
     DECLARE @cid INT, @cat INT;
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused)
-    VALUES (@org,@art,@ven,''REG CatStatus'',''Draft'',
+    VALUES (@org,@ven,''REG CatStatus'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0);
     SET @cid=SCOPE_IDENTITY();
     EXEC sp_ConfigureTicketCategory @ActorUserID=@adm, @ConcertID=@cid, @CategoryName=N''REG C'',
@@ -521,10 +523,10 @@ SET @SQL = N'
     DECLARE @org INT=(SELECT UserID FROM UserAccount WHERE Username=''test_org'');
     DECLARE @art INT=(SELECT TOP 1 ArtistID FROM Artist ORDER BY ArtistID);
     DECLARE @ven INT=(SELECT TOP 1 VenueID FROM Venue ORDER BY VenueID);
-    INSERT INTO Concert (OrganizerUserID,ArtistID,VenueID,ConcertName,ConcertStatus,
+    INSERT INTO Concert (OrganizerUserID,VenueID,ConcertName,ConcertStatus,
                          StartDatetime,EndDatetime,PurchaseLimit,FairAccessEnabled,WaitlistEnabled,SalesPaused,
                          RefundPercentage)
-    VALUES (@org,@art,@ven,''REG BadPct'',''Draft'',
+    VALUES (@org,@ven,''REG BadPct'',''Draft'',
             DATEADD(day,30,SYSDATETIME()),DATEADD(day,31,SYSDATETIME()),4,0,0,0, 250.00);';
 EXEC test.sp_RunTest @Suite,'CHK_Concert_RefundPercentage_Over100_Fail','ERROR',NULL,@SQL;
 
@@ -554,7 +556,10 @@ SET @SQL = N'
     DECLARE @st DATETIME2(7)=DATEADD(day,30,SYSDATETIME());
     DECLARE @en DATETIME2(7)=DATEADD(day,31,SYSDATETIME());
     DECLARE @cid INT;
-    EXEC sp_CreateConcert @OrganizerUserID=@org, @ArtistID=@art, @VenueID=@ven,
+    -- T-SQL KHONG cho truyen bieu thuc lam doi so EXEC (chi hang hoac bien),
+    -- nen chuoi JSON phai tinh san ra bien truoc khi goi.
+    DECLARE @artJson NVARCHAR(64) = N''['' + CAST(@art AS NVARCHAR(12)) + N'']'';
+    EXEC sp_CreateConcert @OrganizerUserID=@org, @ArtistIDs=@artJson, @VenueID=@ven,
          @ConcertName=N''REG Actor'', @StartDatetime=@st, @EndDatetime=@en,
          @SaleStartDatetime=NULL, @SaleEndDatetime=NULL, @PurchaseLimit=4,
          @TemporaryHoldDuration=900, @CancellationPolicy=N''c'', @RefundPolicy=N''r'',
