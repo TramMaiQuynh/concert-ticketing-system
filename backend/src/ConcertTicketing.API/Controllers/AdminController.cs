@@ -18,6 +18,51 @@ public class AdminController : ControllerBase
 {
     private readonly IAdminRepository _admin;
 
+    [HttpGet("concerts")]
+    [ProducesResponseType(typeof(IEnumerable<AdminConcertListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListConcerts([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListConcertsAsync(query));
+
+    /// <summary>
+    /// Artists assigned to a concert, in billed/display order. The repository
+    /// scopes this through VW_AdminConcerts, so an Organizer only receives
+    /// artists for a concert they own.
+    /// </summary>
+    [HttpGet("concerts/{concertId:int}/artists")]
+    [ProducesResponseType(typeof(IEnumerable<ConcertArtistListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListConcertArtists(int concertId)
+        => Ok(await _admin.ListConcertArtistsAsync(concertId));
+
+    [HttpGet("zones")]
+    [ProducesResponseType(typeof(IEnumerable<AdminZoneListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListZones([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListZonesAsync(query));
+
+    [HttpGet("seats")]
+    [ProducesResponseType(typeof(IEnumerable<AdminSeatListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListSeats([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListSeatsAsync(query));
+
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(IEnumerable<AdminCategoryListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListCategories([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListCategoriesAsync(query));
+
+    [HttpGet("promotions")]
+    [ProducesResponseType(typeof(IEnumerable<AdminPromotionListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListPromotions([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListPromotionsAsync(query));
+
+    [HttpGet("discount-codes")]
+    [ProducesResponseType(typeof(IEnumerable<AdminDiscountCodeListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListDiscountCodes([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListDiscountCodesAsync(query));
+
+    [HttpGet("refunds")]
+    [ProducesResponseType(typeof(IEnumerable<AdminRefundListItem>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListRefunds([FromQuery] AdminCatalogQuery query)
+        => Ok(await _admin.ListRefundsAsync(query));
+
     public AdminController(IAdminRepository admin)
     {
         _admin = admin;
@@ -163,6 +208,20 @@ public class AdminController : ControllerBase
         var actor = GetActorUserId();
         var id = await _admin.CreateSeatAsync(actor, zoneId, request);
         return Created($"/api/admin/seats/{id}", new IdResponse(id));
+    }
+
+    /// <summary>Tạo một lưới ghế theo giao dịch nguyên tử; không để lại sơ đồ dở khi một ô bị trùng.</summary>
+    [HttpPost("zones/{zoneId:int}/seats/batch")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateSeatsBatch(int zoneId, [FromBody] CreateSeatsBatchRequest request)
+    {
+        await _admin.CreateSeatsBatchAsync(GetActorUserId(), zoneId, request);
+        return NoContent();
     }
 
     // ── Ticket Category & EventSeat ──────────────────────────────────────────
@@ -352,6 +411,7 @@ public class AdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> UpdateZone(int zoneId, [FromBody] UpdateZoneRequest request)
     {
         await _admin.UpdateZoneAsync(GetActorUserId(), zoneId, request);
