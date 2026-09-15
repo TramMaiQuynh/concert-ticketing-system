@@ -109,6 +109,8 @@ public sealed partial class DbFixture
             WHERE pm.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
             DELETE csa FROM CheckinStaffAssignment csa
             WHERE csa.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
+            DELETE ca FROM ConcertArtist ca
+            WHERE ca.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
             DELETE c FROM Concert c
             WHERE c.ConcertID IN (SELECT ConcertID FROM @TestConcerts);
 
