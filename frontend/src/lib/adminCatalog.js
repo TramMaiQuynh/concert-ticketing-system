@@ -1,106 +1,72 @@
-import { useState, useEffect, useCallback } from 'react';
-import api from '../api/client';
+import { useSyncExternalStore } from 'react';
+import api, { onAuthChange, getAccessToken } from '../api/client';
+import { createCatalogStore, fetchCatalogPages } from './catalogStore';
 
-/**
- * DANH MỤC ĐỊA ĐIỂM VÀ NGHỆ SĨ — đọc từ máy chủ.
- *
- * Đây là thứ làm cho quyết định kiến trúc "Admin dựng sơ đồ địa điểm một lần,
- * các lần sau organizer chỉ việc chọn lại" trở thành một luồng dùng được thật.
- *
- * Trước đó ô chọn địa điểm đọc từ `localStorage` (lib/localCatalog.js) — sổ tay
- * chỉ chứa những gì CHÍNH trình duyệt đó vừa tạo. Hệ quả cụ thể: Admin dựng địa
- * điểm trên máy A, organizer mở máy B thì thấy danh sách RỖNG và phải được đọc
- * số hiệu địa điểm qua kênh khác. Vế "chỉ việc chọn" không tồn tại.
- *
- * Sổ tay cục bộ vẫn giữ nguyên vai trò cho những thực thể mà API KHÔNG có đường
- * đọc (khu, ghế, hạng vé, khuyến mãi, mã giảm giá).
- */
+const definitions = {
+  venue: ['venues', 'venueID', (v) => v.venueName + ' · ' + v.venueStatus + (v.hasSeatMap ? ' · có sơ đồ' : ' · CHƯA có sơ đồ')],
+  artist: ['artists', 'artistID', (a) => a.artistName + ' · ' + a.artistStatus],
+  concert: ['concerts', 'concertID', (c) => c.concertName + ' · ' + c.concertStatus],
+  zone: ['zones', 'zoneID', (z) => (z.zoneName || z.zoneCode) + ' · ' + z.venueName + ' · ' + z.zoneStatus],
+  seat: ['seats', 'seatID', (s) => s.seatCode + ' · ' + s.venueName + ' / ' + (s.zoneName || s.zoneID) + ' · ' + s.seatStatus],
+  category: ['categories', 'ticketCategoryID', (c) => c.categoryName + ' · ' + c.concertName + ' · ' + c.categoryStatus],
+  promotion: ['promotions', 'promotionID', (p) => p.promotionName + ' · ' + p.concertName + ' · ' + p.promotionStatus],
+  discountCode: ['discount-codes', 'discountCodeID', (d) => d.codeValue + ' · ' + d.promotionName + ' · ' + d.concertName + ' · ' + d.codeStatus],
+  refund: ['refunds', 'refundID', (r) => 'Booking #' + r.bookingID + ' · ' + r.concertName + ' · ' + r.refundAmount.toLocaleString('vi-VN') + ' ₫ · ' + r.refundStatus],
+};
+const stores = new Map();
 
-/* Bộ nhớ đệm cấp module: nhiều khối trên cùng một trang hỏi cùng một danh sách,
-   và mỗi khối tự gọi mạng thì chỉ riêng việc mở trang đã bắn ra vài request
-   giống hệt nhau. */
-const cache = { venues: null, artists: null };
-const inflight = { venues: null, artists: null };
-
-function load(kind, path) {
-  if (cache[kind]) return Promise.resolve(cache[kind]);
-  if (!inflight[kind]) {
-    inflight[kind] = api
-      .get(path)
-      .then((res) => {
-        cache[kind] = Array.isArray(res.data) ? res.data : [];
-        return cache[kind];
-      })
-      .catch(() => {
-        // Lỗi tải danh mục không được chặn thao tác: mọi ô chọn đều kèm đường
-        // nhập ID thủ công, nên người dùng vẫn đi tiếp được.
-        cache[kind] = [];
-        return cache[kind];
-      })
-      .finally(() => { inflight[kind] = null; });
+function getStore(kind, includeInactive = false) {
+  const key = kind + ':' + includeInactive;
+  if (!stores.has(key)) {
+    const [path, idField] = definitions[kind];
+    stores.set(key, createCatalogStore(async (signal) => {
+      if (!getAccessToken()) return [];
+      if (kind === 'venue' || kind === 'artist') {
+        const res = await api.get('/admin/' + path, {
+          signal, params: { includeInactive, includeRetired: includeInactive },
+        });
+        if (!Array.isArray(res.data)) throw new Error('Dữ liệu danh mục không hợp lệ.');
+        return res.data;
+      }
+      return fetchCatalogPages(async (params, pageSignal) => {
+        const res = await api.get('/admin/' + path, { params, signal: pageSignal });
+        return res.data;
+      }, idField, signal);
+    }));
   }
-  return inflight[kind];
+  return stores.get(key);
 }
 
-/** Buộc lấy lại ở lần hỏi kế tiếp — gọi sau khi vừa tạo địa điểm/nghệ sĩ mới. */
 export function invalidateCatalog(kind) {
-  if (kind) cache[kind] = null;
-  else { cache.venues = null; cache.artists = null; }
+  // Retain the plural names used by the venue map editor.
+  const normalized = kind === 'venues' ? 'venue' : kind === 'artists' ? 'artist' : kind;
+  return Promise.all([...stores].filter(([key]) => !normalized || key.startsWith(normalized + ':'))
+    .map(([, store]) => store.reload()));
 }
 
-/**
- * Danh sách địa điểm, đã chuyển sang dạng {id, name} mà IdPicker dùng.
- *
- * Nhãn cố tình kèm tình trạng sơ đồ. Địa điểm chưa khai báo toạ độ vẫn bán vé
- * bình thường, nhưng giao diện khách sẽ rơi về chế độ liệt kê theo khu thay vì
- * vẽ sơ đồ. Nói trước lúc chọn còn hơn để organizer phát hiện sau khi đã mở bán.
- */
-export function useVenues() {
-  const [raw, setRaw] = useState(cache.venues ?? []);
-  const [loading, setLoading] = useState(!cache.venues);
+// Discard all data and in-flight responses whenever the authenticated token changes.
+onAuthChange(() => { invalidateCatalog(); });
 
-  useEffect(() => {
-    let alive = true;
-    load('venues', '/admin/venues').then((list) => {
-      if (alive) { setRaw(list); setLoading(false); }
-    });
-    return () => { alive = false; };
-  }, []);
+// All catalogue mutations, including the map editor and refund workflow, refresh
+// mounted readers. Debouncing also handles sequential bulk seat creation.
+let refreshTimer;
+api.interceptors.response.use((response) => {
+  const { method, url = '' } = response.config;
+  if (method && !['get', 'head', 'options'].includes(method.toLowerCase())
+      && (url.startsWith('/admin/') || url.startsWith('/refunds/') || /\/bookings\/\d+\/refund$/.test(url))) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => { invalidateCatalog(); }, 100);
+  }
+  return response;
+});
 
-  const reload = useCallback(() => {
-    invalidateCatalog('venues');
-    load('venues', '/admin/venues').then(setRaw);
-  }, []);
-
-  const items = raw.map((v) => ({
-    id: v.venueID,
-    name: `${v.venueName}`
-      + ` · ${v.hasSeatMap ? 'có sơ đồ' : 'CHƯA có sơ đồ'}`
-      + (v.seatCount ? ` · ${v.seatCount} ghế` : ''),
-    raw: v,
-  }));
-
-  return { items, raw, loading, reload };
+export function useAdminCatalog(kind, { includeInactive = false } = {}) {
+  const store = getStore(kind, includeInactive);
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const [, idField, label] = definitions[kind];
+  const items = snapshot.raw.map((raw) => ({ id: raw[idField], name: label(raw), raw }));
+  return { ...snapshot, items, reload: store.reload };
 }
 
-export function useArtists() {
-  const [raw, setRaw] = useState(cache.artists ?? []);
-  const [loading, setLoading] = useState(!cache.artists);
-
-  useEffect(() => {
-    let alive = true;
-    load('artists', '/admin/artists').then((list) => {
-      if (alive) { setRaw(list); setLoading(false); }
-    });
-    return () => { alive = false; };
-  }, []);
-
-  const reload = useCallback(() => {
-    invalidateCatalog('artists');
-    load('artists', '/admin/artists').then(setRaw);
-  }, []);
-
-  const items = raw.map((a) => ({ id: a.artistID, name: a.artistName, raw: a }));
-
-  return { items, raw, loading, reload };
-}
+export const useVenues = (options) => useAdminCatalog('venue', options);
+export const useArtists = (options) => useAdminCatalog('artist', options);
