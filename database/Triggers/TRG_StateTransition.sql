@@ -84,13 +84,34 @@ BEGIN
         FROM   inserted i
         INNER HASH JOIN deleted  d ON d.ConcertID = i.ConcertID
         WHERE  d.ConcertStatus = 'Draft' AND i.ConcertStatus = 'Published'
-          AND  (i.OrganizerUserID IS NULL OR i.ArtistID IS NULL OR i.VenueID IS NULL
+          AND  (i.OrganizerUserID IS NULL OR i.VenueID IS NULL
                 OR i.StartDatetime IS NULL OR i.EndDatetime IS NULL
-                OR i.EndDatetime <= i.StartDatetime)
+                OR i.EndDatetime <= i.StartDatetime
+                OR NOT EXISTS (SELECT 1 FROM ConcertArtist ca WHERE ca.ConcertID = i.ConcertID))
     )
     BEGIN
         ROLLBACK TRANSACTION;
         THROW 50011, 'LI00/BR54 Violation: Concert chua du dieu kien de Published (thieu field hoac End <= Start).', 1;
+    END
+
+    -- Khi Venue co map, tat ca ghe da dua vao kho ve phai thuoc Zone co hinh hoc
+    -- day du. Day la lop phong thu cuoi cho du lieu cu/ghi truc tiep: renderer
+    -- SVG khong ve Zone khong toa do, nen khong duoc mo cong bo ma de ve an mat.
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN deleted d ON d.ConcertID = i.ConcertID
+        JOIN Venue v ON v.VenueID = i.VenueID
+        JOIN EventSeat es ON es.ConcertID = i.ConcertID
+        JOIN Seat s ON s.SeatID = es.SeatID
+        JOIN Zone z ON z.ZoneID = s.ZoneID
+        WHERE d.ConcertStatus = 'Draft' AND i.ConcertStatus = 'Published'
+          AND v.MapWidth IS NOT NULL
+          AND (z.ZoneX IS NULL OR z.ZoneY IS NULL OR z.ZoneWidth IS NULL OR z.ZoneHeight IS NULL)
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50023, 'BR54 Violation: Concert co Venue map khong the Published khi Zone cua EventSeat chua co vi tri.', 1;
     END
 END;
 GO
