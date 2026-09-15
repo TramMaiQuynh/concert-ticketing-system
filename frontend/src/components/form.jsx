@@ -28,8 +28,8 @@ export function Field({ label, hint, children, required }) {
 // trong khu quản trị mất tên khả dụng. Lớp bọc này vốn không thêm gì cả.
 export { UiSelect as Select };
 
-export function Check({ label, checked, onChange, hint }) {
-  return <Checkbox label={label} checked={checked} onChange={onChange} hint={hint} />;
+export function Check({ label, checked, onChange, hint, disabled = false }) {
+  return <Checkbox label={label} checked={checked} onChange={onChange} hint={hint} disabled={disabled} />;
 }
 
 /**
@@ -39,9 +39,9 @@ export function Check({ label, checked, onChange, hint }) {
  * tiếp: React bỏ qua prop không dùng, build vẫn xanh, và chỉ lộ ra khi có người
  * đi tìm cái nút không tồn tại.
  */
-export function Panel({ title, subtitle, aside, children, footer }) {
+export function Panel({ title, subtitle, aside, children, footer, tone }) {
   return (
-    <UiPanel title={title} subtitle={subtitle} aside={aside} footer={footer}>
+    <UiPanel title={title} subtitle={subtitle} aside={aside} footer={footer} tone={tone}>
       {children}
     </UiPanel>
   );
@@ -55,13 +55,7 @@ export function IdPill({ children }) {
   return <Pill>{children}</Pill>;
 }
 
-/**
- * Ô chọn từ sổ tay cục bộ, LUÔN kèm đường nhập ID thủ công.
- *
- * Sổ tay chỉ là bộ nhớ tạm của trình duyệt (xem lib/localCatalog.js). Nếu chỉ cho
- * chọn từ sổ tay thì người dùng mở trên máy khác sẽ bị kẹt hoàn toàn — nên ô nhập
- * số luôn hiện diện và luôn là thứ được gửi đi.
- */
+/** Chọn bản ghi từ danh mục máy chủ hoặc nhập ID đã biết. */
 export function IdPicker({ label, hint, items, value, onChange, placeholder = 'Nhập ID…' }) {
   return (
     <UiField label={label} hint={hint} required>
@@ -77,25 +71,71 @@ export function IdPicker({ label, hint, items, value, onChange, placeholder = 'N
           />
           {items.length > 0 && (
             <UiSelect
-              // Trước đây value bị gán cứng "": chọn xong, React vẫn ép <select> hiển
-              // thị lại đúng option rỗng ngay lượt render kế tiếp — giá trị THỰC SỰ có
-              // được ghi vào ô số bên cạnh (onChange chạy đúng), chỉ riêng dropdown
-              // không phản ánh lại lựa chọn, nên trông như bấm không ăn. Nay hiển thị
-              // đúng mục vừa chọn khi ID hiện tại khớp một mục trong sổ tay; nếu người
-              // dùng gõ tay một ID khác không có trong sổ tay thì mới trở lại rỗng —
-              // đúng bản chất "ID nào đang không đến từ sổ tay".
               value={items.some((it) => String(it.id) === String(value)) ? String(value) : ''}
               onChange={(v) => v && onChange(v)}
               options={items.map((it) => String(it.id))}
               labels={Object.fromEntries(items.map((it) => [String(it.id), `#${it.id} · ${it.name}`]))}
               allowEmpty
-              emptyLabel={`— chọn từ sổ tay (${items.length}) —`}
-              aria-label={`${label} — chọn từ sổ tay`}
+              emptyLabel={'Chọn từ danh sách (' + items.length + ')'}
+              aria-label={label + ': chọn từ danh sách'}
               className="grow"
             />
           )}
         </div>
       )}
+    </UiField>
+  );
+}
+
+/** Chọn nhiều bản ghi trong một yêu cầu, giữ thứ tự hiển thị đã chọn. */
+export function MultiIdPicker({ label, hint, items, values = [], onChange, disabled = false }) {
+  const selected = [...new Set(values.map(String))];
+  const remaining = items.filter((item) => !selected.includes(String(item.id)));
+  const labels = Object.fromEntries(items.map((item) => [String(item.id), '#' + item.id + ' · ' + item.name]));
+
+  const remove = (id) => onChange(selected.filter((value) => value !== String(id)));
+  const move = (index, direction) => {
+    const next = [...selected];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+
+  return (
+    <UiField label={label} hint={hint} required>
+      <div className="stack gap-2">
+        <UiSelect
+          value=""
+          onChange={(id) => id && onChange([...selected, id])}
+          options={remaining.map((item) => String(item.id))}
+          labels={labels}
+          allowEmpty
+          emptyLabel={'Chọn từ danh sách (' + items.length + ')'}
+          aria-label={label + ': chọn từ danh sách'}
+          disabled={disabled}
+        />
+        {selected.length > 0 ? (
+          <ol className="multi-picker__selected" aria-label={label + ' đã chọn'}>
+            {selected.map((id, index) => (
+              <li key={id} className="multi-picker__item">
+                <span className="multi-picker__name">{labels[id] ?? '#' + id}</span>
+                <span className="row gap-1">
+                  <button type="button" className="btn btn--secondary btn--sm multi-picker__move" onClick={() => move(index, -1)}
+                          disabled={disabled || index === 0} aria-label={'Đưa ' + (labels[id] ?? '#' + id) + ' lên trước'}>↑</button>
+                  <button type="button" className="btn btn--secondary btn--sm multi-picker__move" onClick={() => move(index, 1)}
+                          disabled={disabled || index === selected.length - 1} aria-label={'Đưa ' + (labels[id] ?? '#' + id) + ' xuống sau'}>↓</button>
+                  <button type="button" className="btn btn--danger-quiet btn--sm multi-picker__remove" onClick={() => remove(id)}
+                          disabled={disabled}
+                          aria-label={'Bỏ ' + (labels[id] ?? '#' + id)}>Bỏ</button>
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <span className="field__hint">Chưa chọn bản ghi nào.</span>
+        )}
+      </div>
     </UiField>
   );
 }
