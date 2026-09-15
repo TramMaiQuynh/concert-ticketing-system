@@ -610,6 +610,10 @@ cd database\Tests
 # Backend — 222 unit + 79 integration
 cd backend
 dotnet test
+
+# Frontend — 5 test cho catalogStore (runner co san cua Node, khong them phu thuoc)
+cd frontend
+npm test
 ```
 
 > ⚠️ **`Run-All-Tests.ps1` xoá toàn bộ dữ liệu nghiệp vụ trước khi chạy.**
