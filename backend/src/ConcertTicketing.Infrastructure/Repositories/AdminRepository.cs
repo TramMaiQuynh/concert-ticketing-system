@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using ConcertTicketing.Application.DTOs;
@@ -6,7 +7,7 @@ using ConcertTicketing.Application.Interfaces;
 
 namespace ConcertTicketing.Infrastructure.Repositories;
 
-public class AdminRepository : IAdminRepository
+public partial class AdminRepository : IAdminRepository
 {
     private readonly IDbConnectionFactory _factory;
 
@@ -202,7 +203,7 @@ public class AdminRepository : IAdminRepository
         using var conn = await _factory.OpenAsync();
         var p = new DynamicParameters();
         p.Add("@OrganizerUserID", actorUserId, DbType.Int32);
-        p.Add("@ArtistID", r.ArtistId, DbType.Int32);
+        p.Add("@ArtistIDs", JsonSerializer.Serialize(r.ArtistIds), DbType.String);
         p.Add("@VenueID", r.VenueId, DbType.Int32);
         p.Add("@ConcertName", r.ConcertName, DbType.String, size: 255);
         p.Add("@StartDatetime", r.StartDatetime, DbType.DateTime2);
@@ -237,7 +238,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ConcertID", concertId, DbType.Int32);
         p.Add("@ActorUserID", actorUserId, DbType.Int32);
         p.Add("@ConcertName", r.ConcertName, DbType.String, size: 255);
-        p.Add("@ArtistID", r.ArtistId, DbType.Int32);
+        p.Add("@ArtistIDs", r.ArtistIds is null ? null : JsonSerializer.Serialize(r.ArtistIds), DbType.String);
         p.Add("@VenueID", r.VenueId, DbType.Int32);
         p.Add("@StartDatetime", r.StartDatetime, DbType.DateTime2);
         p.Add("@EndDatetime", r.EndDatetime, DbType.DateTime2);
@@ -311,6 +312,23 @@ public class AdminRepository : IAdminRepository
         p.Add("@NewSeatID", dbType: DbType.Int32, direction: ParameterDirection.Output);
         await conn.ExecuteAsync("sp_CreateSeat", p, commandType: CommandType.StoredProcedure);
         return p.Get<int>("@NewSeatID");
+    }
+
+    public async Task CreateSeatsBatchAsync(int actorUserId, int zoneId, CreateSeatsBatchRequest r)
+    {
+        using var conn = await _factory.OpenAsync();
+        var seatsJson = JsonSerializer.Serialize(r.Seats.Select(s => new
+        {
+            seatCode = s.SeatCode,
+            seatLabel = s.SeatLabel,
+            seatRowLabel = s.SeatRowLabel,
+            seatColumnNumber = s.SeatColumnNumber,
+        }));
+        var p = new DynamicParameters();
+        p.Add("@ActorUserID", actorUserId, DbType.Int32);
+        p.Add("@ZoneID", zoneId, DbType.Int32);
+        p.Add("@SeatsJson", seatsJson, DbType.String);
+        await conn.ExecuteAsync("sp_CreateSeatsBatch", p, commandType: CommandType.StoredProcedure);
     }
 
     public async Task<int> ConfigureTicketCategoryAsync(int actorUserId, int concertId, ConfigureTicketCategoryRequest r)
@@ -483,6 +501,7 @@ public class AdminRepository : IAdminRepository
         p.Add("@ZoneHeight", r.ZoneHeight, DbType.Int32);
         p.Add("@ZoneRotation", r.ZoneRotation, DbType.Decimal);
         p.Add("@ZoneCapacity", r.ZoneCapacity, DbType.Int32);
+        p.Add("@ClearGeometry", r.ClearGeometry, DbType.Boolean);
         await conn.ExecuteAsync("sp_UpdateZone", p, commandType: CommandType.StoredProcedure);
     }
 
@@ -519,6 +538,8 @@ public class AdminRepository : IAdminRepository
         p.Add("@StageY", r.StageY, DbType.Int32);
         p.Add("@StageWidth", r.StageWidth, DbType.Int32);
         p.Add("@StageHeight", r.StageHeight, DbType.Int32);
+        p.Add("@ClearStage", r.ClearStage, DbType.Boolean);
+        p.Add("@ClearMap", r.ClearMap, DbType.Boolean);
         await conn.ExecuteAsync("sp_ConfigureVenueMap", p, commandType: CommandType.StoredProcedure);
     }
 
