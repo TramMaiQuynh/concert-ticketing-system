@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/client';
-import { useCatalog } from '../../lib/localCatalog';
+import { useAdminCatalog } from '../../lib/adminCatalog';
 import { useArtists, useVenues } from '../../lib/adminCatalog';
 import { Field, Select, Panel, Banner, IdPicker, IdPill, useAction } from '../../components/form';
 import {
@@ -36,7 +36,7 @@ function ArtistSection({ isAdmin }) {
   // trang này tự tạo nghệ sĩ xong lại KHÔNG hiện nó ra sau khi tải lại trang hay xoá
   // sổ tay — trong khi Concerts.jsx đã dùng đúng nguồn này để chọn nghệ sĩ khi tạo
   // concert. Cùng một dữ liệu, hai nguồn khác nhau là lỗi, không phải lựa chọn.
-  const artists = useArtists();
+  const artists = useArtists({ includeInactive: true });
   const items = artists.items;
   const create = useAction();
   const update = useAction();
@@ -82,7 +82,8 @@ function ArtistSection({ isAdmin }) {
     <>
       <Panel
         title="Nghệ sĩ"
-        subtitle="Concert bắt buộc trỏ tới một nghệ sĩ, nên đây thường là bước đầu tiên khi dựng dữ liệu."
+        tone="create"
+        subtitle="Concert có thể gắn nhiều nghệ sĩ. Tạo danh mục trước để chọn đầy đủ dàn nghệ sĩ khi lập concert."
       >
         <form onSubmit={submitCreate}>
           <div className="field-grid">
@@ -107,6 +108,7 @@ function ArtistSection({ isAdmin }) {
       {isAdmin && (
         <Panel
           title="Cập nhật nghệ sĩ"
+          tone="edit"
           subtitle="Bỏ trống ô nào thì trường đó giữ nguyên. Đặt trạng thái Retired để ngừng dùng nghệ sĩ trong concert mới (BR50e)."
         >
           <form onSubmit={submitUpdate}>
@@ -136,7 +138,7 @@ function ArtistSection({ isAdmin }) {
 
 function VenueSection({ isAdmin }) {
   // Đọc thật từ CSDL — cùng lý do như ArtistSection ở trên.
-  const venuesDb = useVenues();
+  const venuesDb = useVenues({ includeInactive: true });
   const items = venuesDb.items;
   const create = useAction();
   const update = useAction();
@@ -151,7 +153,7 @@ function VenueSection({ isAdmin }) {
 
   return (
     <>
-      <Panel title="Địa điểm" subtitle="Địa điểm chứa các khu vực (Zone), khu vực chứa ghế. Concert trỏ tới một địa điểm.">
+      <Panel tone="create" title="Địa điểm" subtitle="Địa điểm chứa các khu vực (Zone), khu vực chứa ghế. Concert trỏ tới một địa điểm.">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -189,6 +191,7 @@ function VenueSection({ isAdmin }) {
       {isAdmin && (
         <Panel
           title="Cập nhật địa điểm"
+          tone="edit"
           subtitle="Đổi địa điểm bị chặn nếu concert đã có ghế trong kho vé — trigger TRG_ConcertVenueChangeGuard sẽ từ chối."
         >
           <form
@@ -228,12 +231,8 @@ function VenueSection({ isAdmin }) {
 /* ── Khu vực ─────────────────────────────────────────────────────────────── */
 
 function ZoneSection({ isAdmin }) {
-  // Ô "Thuộc địa điểm" đọc CSDL — cùng lý do như ArtistSection/VenueSection.
-  // Bản thân Zone thì CHƯA có đường đọc phẳng (chỉ có GET theo từng địa điểm), nên
-  // danh mục Khu vực để sửa/chọn tiếp ở đây vẫn phải dùng sổ tay — xem ghi chú ở
-  // đầu file localCatalog.js.
   const venues = useVenues();
-  const { items, remember } = useCatalog('zone');
+  const { items } = useAdminCatalog('zone');
   const create = useAction();
   const update = useAction();
 
@@ -248,7 +247,7 @@ function ZoneSection({ isAdmin }) {
 
   return (
     <>
-      <Panel title="Khu vực (Zone)" subtitle="Mỗi khu vực thuộc về một địa điểm. Ghế được tạo bên trong khu vực.">
+      <Panel tone="create" title="Khu vực (Zone)" subtitle="Mỗi khu vực thuộc về một địa điểm. Ghế được tạo bên trong khu vực.">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -256,15 +255,6 @@ function ZoneSection({ isAdmin }) {
               const res = await api.post(`/admin/venues/${Number(venueId)}/zones`, {
                 zoneCode: code.trim(),
                 zoneName: name.trim() || null,
-              });
-              // Ghi kèm ĐỊA ĐIỂM vào nhãn: hai địa điểm khác nhau đều có thể có khu mã
-              // 'A', và khi đó danh sách chọn ở phần tạo ghế hiện hai dòng giống hệt
-              // nhau — người dùng không có cách nào biết mình đang đổ ghế vào khu nào.
-              const venueName = venues.items.find((v) => String(v.id) === String(venueId))?.name;
-              remember({
-                id: res.data.id,
-                name: `${code.trim()}${name.trim() ? ` — ${name.trim()}` : ''}`
-                    + ` · ${venueName ?? `địa điểm #${venueId}`}`,
               });
               setCode(''); setName('');
               return res.data.id;
@@ -287,7 +277,7 @@ function ZoneSection({ isAdmin }) {
       </Panel>
 
       {isAdmin && (
-        <Panel title="Cập nhật khu vực" subtitle="Trạng thái Retired để ngừng dùng khu vực.">
+        <Panel tone="edit" title="Cập nhật khu vực" subtitle="Trạng thái Retired để ngừng dùng khu vực.">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -324,12 +314,14 @@ function ZoneSection({ isAdmin }) {
 /* ── Ghế ─────────────────────────────────────────────────────────────────── */
 
 function SeatSection({ isAdmin }) {
-  const zones = useCatalog('zone');
-  const { items, remember } = useCatalog('seat');
+  const venues = useVenues();
+  const zones = useAdminCatalog('zone');
+  const { items } = useAdminCatalog('seat');
   const create = useAction();
   const bulk = useAction();
   const update = useAction();
 
+  const [venueId, setVenueId] = useState('');
   const [zoneId, setZoneId] = useState('');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
@@ -346,6 +338,12 @@ function SeatSection({ isAdmin }) {
   const [editId, setEditId] = useState('');
   const [editLabel, setEditLabel] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const venueZones = zones.items.filter((zone) => zone.raw.venueID === Number(venueId)
+    && zone.raw.zoneStatus === 'Active' && zone.raw.zoneType === 'Seated');
+  const chooseVenue = (id) => {
+    setVenueId(id);
+    setZoneId('');
+  };
 
   /**
    * Tạo hàng loạt: API chỉ có endpoint tạo MỘT ghế, nên phần lặp nằm ở đây.
@@ -358,10 +356,10 @@ function SeatSection({ isAdmin }) {
     const from = Number(bulkFrom);
     const to = Number(bulkTo);
     bulk.run(async () => {
-      const created = [];
+      const seats = [];
       for (let i = from; i <= to; i += 1) {
         const seatCode = `${bulkPrefix.trim()}${i}`;
-        const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
+        seats.push({
           seatCode,
           seatLabel: seatCode,
           // Cả loạt nằm trên CÙNG một hàng; số chạy của loạt chính là số thứ tự
@@ -369,11 +367,10 @@ function SeatSection({ isAdmin }) {
           seatRowLabel: bulkRow.trim(),
           seatColumnNumber: i,
         });
-        remember({ id: res.data.id, name: seatCode });
-        created.push(res.data.id);
       }
-      return created;
-    }, (ids) => `Đã tạo ${ids.length} ghế (ID ${ids[0]}–${ids[ids.length - 1]}).`);
+      await api.post(`/admin/zones/${Number(zoneId)}/seats/batch`, { seats });
+      return seats.length;
+    }, (count) => `Đã tạo trọn bộ ${count} ghế.`);
   };
 
   const rangeValid = Number(bulkTo) >= Number(bulkFrom) && Number(bulkTo) - Number(bulkFrom) < 200;
@@ -383,7 +380,7 @@ function SeatSection({ isAdmin }) {
 
   return (
     <>
-      <Panel title="Ghế" subtitle="Ghế là tài sản của địa điểm, chưa gắn giá. Giá chỉ xuất hiện khi ghế được đưa vào một concert (EventSeat).">
+      <Panel tone="create" title="Ghế" subtitle="Ghế là tài sản của địa điểm, chưa gắn giá. Giá chỉ xuất hiện khi ghế được đưa vào một concert (EventSeat).">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -391,11 +388,10 @@ function SeatSection({ isAdmin }) {
               const res = await api.post(`/admin/zones/${Number(zoneId)}/seats`, {
                 seatCode: code.trim(),
                 seatLabel: label.trim() || null,
-                // Bỏ trống cả hai = ghế không có vị trí, chỉ hợp lệ với khu vé đứng.
+                // Ghế có vị trí đầy đủ để luôn hiện đúng một ô trên sơ đồ.
                 seatRowLabel: row.trim() || null,
                 seatColumnNumber: col.trim() ? Number(col) : null,
               });
-              remember({ id: res.data.id, name: code.trim() });
               setCode(''); setLabel('');
               // Giữ nguyên hàng, tăng cột: tạo liên tiếp A1, A2, A3… không phải gõ lại.
               if (col.trim()) setCol(String(Number(col) + 1));
@@ -403,13 +399,17 @@ function SeatSection({ isAdmin }) {
             }, (id) => `Đã tạo ghế. ID = ${id}.`);
           }}
         >
-          <IdPicker label="Thuộc khu vực" items={zones.items} value={zoneId} onChange={setZoneId} />
+          <div className="field-grid">
+            <IdPicker label="Thuộc địa điểm" items={venues.items} value={venueId} onChange={chooseVenue} />
+            <IdPicker label="Thuộc khu vực" hint="Chỉ hiện khu vực của địa điểm đã chọn."
+                      items={venueZones} value={zoneId} onChange={setZoneId} />
+          </div>
           <div className="field-grid" style={{ marginTop: '16px' }}>
             <Field label="Mã ghế" required>
               <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={64} required />
             </Field>
             <Field label="Nhãn hiển thị"><input value={label} onChange={(e) => setLabel(e.target.value)} /></Field>
-            <Field label="Hàng" hint="Vị trí trên sơ đồ. Khu vé đứng: để trống cả hai ô.">
+            <Field label="Hàng" hint="Vị trí trên sơ đồ; đi cùng số thứ tự trong hàng.">
               <input value={row} onChange={(e) => setRow(e.target.value)} maxLength={8} />
             </Field>
             <Field label="Số thứ tự trong hàng">
@@ -432,16 +432,15 @@ function SeatSection({ isAdmin }) {
         <form onSubmit={submitBulk}>
           <h4 style={{ marginBottom: '6px', fontSize: '0.9375rem' }}>Tạo hàng loạt</h4>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', marginBottom: '16px' }}>
-            API chỉ tạo được từng ghế một, nên phần lặp do giao diện làm và gọi tuần tự.
-            Dựng một khu 12 ghế bằng tay là 12 lần điền form — đây là chỗ đáng tự động.
+            Toàn bộ lưới được gửi trong một giao dịch: nếu trùng mã hoặc trùng vị trí,
+            hệ thống không tạo dở bất kỳ ghế nào.
           </p>
 
-          {/* Cùng một biến zoneId với form bên trên, cố ý. Trước đây ô chọn khu chỉ có ở
-              form "Tạo một ghế", còn phần tạo hàng loạt dùng ké mà không hiện gì — nhìn
-              vào đây không biết ghế sẽ vào khu nào, và chưa chọn khu thì nút chỉ bị mờ
-              đi không kèm lý do. Hiện lại ngay tại chỗ đang thao tác; sửa ở một trong
-              hai nơi thì nơi kia đổi theo, nên không thể lệch nhau. */}
-          <IdPicker label="Thuộc khu vực" items={zones.items} value={zoneId} onChange={setZoneId} />
+          <div className="field-grid">
+            <IdPicker label="Thuộc địa điểm" items={venues.items} value={venueId} onChange={chooseVenue} />
+            <IdPicker label="Thuộc khu vực" hint="Chỉ hiện khu vực của địa điểm đã chọn."
+                      items={venueZones} value={zoneId} onChange={setZoneId} />
+          </div>
 
           <div className="field-grid" style={{ marginTop: '16px' }}>
             <Field label="Tiền tố mã ghế" hint="Ví dụ 'A' sẽ ra A1, A2, A3…" required>
@@ -462,7 +461,7 @@ function SeatSection({ isAdmin }) {
           </button>
           {!zoneId && (
             <div className="field-hint" style={{ color: 'var(--warning)' }}>
-              Chọn khu vực ở trên trước — ghế phải nằm trong một khu cụ thể.
+              Chọn địa điểm, rồi chọn khu vực — ghế phải nằm trong một khu cụ thể.
             </div>
           )}
           {!rangeValid && (
@@ -477,7 +476,7 @@ function SeatSection({ isAdmin }) {
       </Panel>
 
       {isAdmin && (
-        <Panel title="Cập nhật ghế" subtitle="Trạng thái Retired dành cho ghế đã tháo dỡ khỏi địa điểm (FR11).">
+        <Panel tone="edit" title="Cập nhật ghế" subtitle="Trạng thái Retired dành cho ghế đã tháo dỡ khỏi địa điểm (FR11).">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -515,7 +514,7 @@ function Recent({ items, label, caption }) {
   return (
     <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-        {caption ?? `${items.length} ${label} đã tạo từ trình duyệt này`}
+        {caption ?? `${items.length} ${label} trong hệ thống`}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
         {items.slice(0, 24).map((it) => (
